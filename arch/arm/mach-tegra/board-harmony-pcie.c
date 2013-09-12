@@ -4,6 +4,8 @@
  * Copyright (C) 2010 CompuLab, Ltd.
  * Mike Rapoport <mike@compulab.co.il>
  *
+ * Copyright (C) 2011-2012 NVIDIA Corporation.
+ *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -23,6 +25,8 @@
 #include <asm/mach-types.h>
 
 #include <mach/pinmux.h>
+#include <mach/pci.h>
+#include "devices.h"
 #include "board.h"
 
 #ifdef CONFIG_TEGRA_PCI
@@ -30,7 +34,14 @@
 /* GPIO 3 of the PMIC */
 #define EN_VDD_1V05_GPIO	(TEGRA_NR_GPIOS + 2)
 
-static int __init harmony_pcie_init(void)
+static struct tegra_pci_platform_data harmony_pci_platform_data = {
+	.port_status[0]	= 1,
+	.port_status[1]	= 1,
+	.use_dock_detect	= 0,
+	.gpio		= 0,
+};
+
+int __init harmony_pcie_init(void)
 {
 	struct regulator *regulator = NULL;
 	int err;
@@ -54,13 +65,11 @@ static int __init harmony_pcie_init(void)
 	tegra_pinmux_set_tristate(TEGRA_PINGROUP_SLXA, TEGRA_TRI_NORMAL);
 	tegra_pinmux_set_tristate(TEGRA_PINGROUP_SLXK, TEGRA_TRI_NORMAL);
 
-	err = tegra_pcie_init(true, true);
-	if (err)
-		goto err_pcie;
+	tegra_pci_device.dev.platform_data = &harmony_pci_platform_data;
+	platform_device_register(&tegra_pci_device);
 
 	return 0;
 
-err_pcie:
 	tegra_pinmux_set_tristate(TEGRA_PINGROUP_GPV, TEGRA_TRI_TRISTATE);
 	tegra_pinmux_set_tristate(TEGRA_PINGROUP_SLXA, TEGRA_TRI_TRISTATE);
 	tegra_pinmux_set_tristate(TEGRA_PINGROUP_SLXK, TEGRA_TRI_TRISTATE);
@@ -72,8 +81,5 @@ err_reg:
 
 	return err;
 }
-
-/* PCI should be initialized after I2C, mfd and regulators */
-subsys_initcall_sync(harmony_pcie_init);
 
 #endif

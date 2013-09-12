@@ -161,6 +161,27 @@ config INPUT_APMPOWER
 	  To compile this driver as a module, choose M here: the
 	  module will be called apm-power.
 
+config INPUT_KEYRESET
+	tristate "Reset key"
+	depends on INPUT
+	---help---
+	  Say Y here if you want to reboot when some keys are pressed;
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called keyreset.
+
+config INPUT_ASUSEC
+	bool "ASUS embedded controller interface"
+	depends on I2C
+
+config ASUSPEC
+	bool "ASUS embedded controller interface"
+	depends on INPUT_ASUSEC
+
+config ASUSDEC
+	bool "ASUS embedded controller interface"
+	depends on INPUT_ASUSEC
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"

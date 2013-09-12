@@ -1,6 +1,7 @@
 #
 # Makefile for the kernel serial device drivers.
 #
+GCOV_PROFILE_tegra_hsuart.o := y
 
 obj-$(CONFIG_SERIAL_CORE) += serial_core.o
 obj-$(CONFIG_SERIAL_21285) += 21285.o
@@ -43,6 +44,7 @@ obj-$(CONFIG_SERIAL_S3C2412) += s3c2412.o
 obj-$(CONFIG_SERIAL_S3C2440) += s3c2440.o
 obj-$(CONFIG_SERIAL_S3C6400) += s3c6400.o
 obj-$(CONFIG_SERIAL_S5PV210) += s5pv210.o
+obj-$(CONFIG_SERIAL_TEGRA) += tegra_hsuart.o
 obj-$(CONFIG_SERIAL_MAX3100) += max3100.o
 obj-$(CONFIG_SERIAL_MAX3107) += max3107.o
 obj-$(CONFIG_SERIAL_MAX3107_AAVA) += max3107-aava.o

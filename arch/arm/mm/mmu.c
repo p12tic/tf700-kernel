@@ -273,6 +273,18 @@ static struct mem_type mem_types[] = {
 		.prot_l1   = PMD_TYPE_TABLE,
 		.domain    = DOMAIN_KERNEL,
 	},
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+	[MT_DMA_COHERENT] = {
+		.prot_sect	= PMD_TYPE_SECT | PMD_SECT_AP_WRITE |
+				  PMD_SECT_S,
+		.domain		= DOMAIN_IO,
+	},
+	[MT_WC_COHERENT] = {
+		.prot_sect	= PMD_TYPE_SECT | PMD_SECT_AP_WRITE |
+				  PMD_SECT_S,
+		.domain		= DOMAIN_IO,
+	},
+#endif
 };
 
 const struct mem_type *get_mem_type(unsigned int type)
@@ -353,6 +365,9 @@ static void __init build_mem_type_table(void)
 			mem_types[MT_DEVICE_NONSHARED].prot_sect |= PMD_SECT_XN;
 			mem_types[MT_DEVICE_CACHED].prot_sect |= PMD_SECT_XN;
 			mem_types[MT_DEVICE_WC].prot_sect |= PMD_SECT_XN;
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+			mem_types[MT_DMA_COHERENT].prot_sect |= PMD_SECT_XN;
+#endif
 		}
 		if (cpu_arch >= CPU_ARCH_ARMv7 && (cr & CR_TRE)) {
 			/*
@@ -457,13 +472,30 @@ static void __init build_mem_type_table(void)
 			/* Non-cacheable Normal is XCB = 001 */
 			mem_types[MT_MEMORY_NONCACHED].prot_sect |=
 				PMD_SECT_BUFFERED;
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+			mem_types[MT_WC_COHERENT].prot_sect |=
+				PMD_SECT_BUFFERED;
+			mem_types[MT_DMA_COHERENT].prot_sect |=
+				PMD_SECT_BUFFERED;
+#endif
 		} else {
 			/* For both ARMv6 and non-TEX-remapping ARMv7 */
 			mem_types[MT_MEMORY_NONCACHED].prot_sect |=
 				PMD_SECT_TEX(1);
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+			mem_types[MT_WC_COHERENT].prot_sect |=
+				PMD_SECT_TEX(1);
+#ifdef CONFIG_ARM_DMA_MEM_BUFFERABLE
+			mem_types[MT_DMA_COHERENT].prot_sect |=
+				PMD_SECT_TEX(1);
+#endif
+#endif
 		}
 	} else {
 		mem_types[MT_MEMORY_NONCACHED].prot_sect |= PMD_SECT_BUFFERABLE;
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+		mem_types[MT_WC_COHERENT].prot_sect |= PMD_SECT_BUFFERED;
+#endif
 	}
 
 	for (i = 0; i < 16; i++) {
@@ -554,6 +586,8 @@ static void __init alloc_init_section(pud_t *pud, unsigned long addr,
 				      const struct mem_type *type)
 {
 	pmd_t *pmd = pmd_offset(pud, addr);
+	unsigned long pages_2m = 0, pages_4k = 0;
+	unsigned long stash_phys = phys;
 
 	/*
 	 * Try a section mapping - end, addr and phys must all be aligned
@@ -563,6 +597,8 @@ static void __init alloc_init_section(pud_t *pud, unsigned long addr,
 	 */
 	if (((addr | end | phys) & ~SECTION_MASK) == 0) {
 		pmd_t *p = pmd;
+
+		pages_2m = (end - addr) >> (PGDIR_SHIFT);
 
 		if (addr & SECTION_SIZE)
 			pmd++;
@@ -574,11 +610,17 @@ static void __init alloc_init_section(pud_t *pud, unsigned long addr,
 
 		flush_pmd_entry(p);
 	} else {
+		pages_4k = (end - addr) >> PAGE_SHIFT;
 		/*
 		 * No need to loop; pte's aren't interested in the
 		 * individual L1 entries.
 		 */
 		alloc_init_pte(pmd, addr, end, __phys_to_pfn(phys), type);
+	}
+
+	if ((stash_phys >= PHYS_OFFSET) && (stash_phys < lowmem_limit)) {
+		update_page_count(PG_LEVEL_2M, pages_2m);
+		update_page_count(PG_LEVEL_4K, pages_4k);
 	}
 }
 
@@ -757,7 +799,7 @@ static int __init early_vmalloc(char *arg)
 }
 early_param("vmalloc", early_vmalloc);
 
-static phys_addr_t lowmem_limit __initdata = 0;
+phys_addr_t lowmem_limit;
 
 void __init sanity_check_meminfo(void)
 {
@@ -900,7 +942,7 @@ void __init arm_mm_memblock_reserve(void)
 	 */
 	memblock_reserve(__pa(swapper_pg_dir), PTRS_PER_PGD * sizeof(pgd_t));
 
-#ifdef CONFIG_SA1111
+#if defined(CONFIG_SA1111) || defined(CONFIG_CPA)
 	/*
 	 * Because of the SA1111 DMA bug, we want to preserve our
 	 * precious DMA-able memory...
@@ -975,6 +1017,10 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 		map.type = MT_LOW_VECTORS;
 		create_mapping(&map);
 	}
+
+#ifdef CONFIG_NON_ALIASED_COHERENT_MEM
+	dma_coherent_mapping();
+#endif
 
 	/*
 	 * Ask the machine support to map in the statically mapped devices.

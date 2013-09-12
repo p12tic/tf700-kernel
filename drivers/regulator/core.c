@@ -31,6 +31,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/regulator.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
+#include <linux/uaccess.h>
 
 #include "dummy.h"
 
@@ -67,27 +70,10 @@ struct regulator_map {
 	struct regulator_dev *regulator;
 };
 
-/*
- * struct regulator
- *
- * One for each consumer device.
- */
-struct regulator {
-	struct device *dev;
-	struct list_head list;
-	int uA_load;
-	int min_uV;
-	int max_uV;
-	char *supply_name;
-	struct device_attribute dev_attr;
-	struct regulator_dev *rdev;
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs;
-#endif
-};
-
 static int _regulator_is_enabled(struct regulator_dev *rdev);
 static int _regulator_disable(struct regulator_dev *rdev);
+static int _regulator_enable(struct regulator_dev *rdev);
+static int _regulator_get_enable_time(struct regulator_dev *rdev);
 static int _regulator_get_voltage(struct regulator_dev *rdev);
 static int _regulator_get_current_limit(struct regulator_dev *rdev);
 static unsigned int _regulator_get_mode(struct regulator_dev *rdev);
@@ -355,7 +341,65 @@ static ssize_t regulator_state_show(struct device *dev,
 
 	return ret;
 }
-static DEVICE_ATTR(state, 0444, regulator_state_show, NULL);
+
+static ssize_t regulator_state_set(struct device *dev,
+		   struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct regulator_dev *rdev = dev_get_drvdata(dev);
+	int ret;
+	bool enabled;
+
+	if ((*buf == 'E') || (*buf == 'e'))
+		enabled = true;
+	else if ((*buf == 'D') || (*buf == 'd'))
+		enabled = false;
+	else
+		return -EINVAL;
+
+	if ((_regulator_is_enabled(rdev) && enabled) ||
+		(!_regulator_is_enabled(rdev) && !enabled))
+		return count;
+
+	mutex_lock(&rdev->mutex);
+	if (enabled) {
+		int delay = 0;
+		if (!rdev->desc->ops->enable) {
+			ret = -EINVAL;
+			goto end;
+		}
+		ret = _regulator_get_enable_time(rdev);
+		if (ret >= 0)
+			delay = ret;
+		ret = rdev->desc->ops->enable(rdev);
+		if (ret < 0) {
+			rdev_warn(rdev, "enable() failed: %d\n", ret);
+			goto end;
+		}
+		if (delay >= 1000) {
+			mdelay(delay / 1000);
+			udelay(delay % 1000);
+		} else if (delay) {
+			udelay(delay);
+		}
+	} else {
+		if (!rdev->desc->ops->disable) {
+			ret = -EINVAL;
+			goto end;
+		}
+		ret = rdev->desc->ops->disable(rdev);
+		if (ret < 0) {
+			rdev_warn(rdev, "disable() failed: %d\n", ret);
+			goto end;
+		}
+	}
+
+end:
+	mutex_unlock(&rdev->mutex);
+	if (ret < 0)
+		return ret;
+	return count;
+}
+static DEVICE_ATTR(state, 0644, regulator_state_show, regulator_state_set);
 
 static ssize_t regulator_status_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
@@ -1368,6 +1412,8 @@ static int _regulator_enable(struct regulator_dev *rdev)
 			}
 
 			trace_regulator_enable(rdev_get_name(rdev));
+			_notifier_call_chain(
+				rdev, REGULATOR_EVENT_PRE_ENABLE, NULL);
 
 			/* Allow the regulator to ramp; it would be useful
 			 * to extend this for bulk operations so that the
@@ -1385,6 +1431,8 @@ static int _regulator_enable(struct regulator_dev *rdev)
 				udelay(delay);
 			}
 
+			_notifier_call_chain(
+				rdev, REGULATOR_EVENT_POST_ENABLE, NULL);
 			trace_regulator_enable_complete(rdev_get_name(rdev));
 
 		} else if (ret < 0) {
@@ -1425,7 +1473,7 @@ int regulator_enable(struct regulator *regulator)
 	ret = _regulator_enable(rdev);
 	mutex_unlock(&rdev->mutex);
 
-	if (ret != 0)
+	if (ret != 0 && rdev->supply)
 		regulator_disable(rdev->supply);
 
 	return ret;
@@ -1676,6 +1724,10 @@ static int _regulator_do_set_voltage(struct regulator_dev *rdev,
 	min_uV += rdev->constraints->uV_offset;
 	max_uV += rdev->constraints->uV_offset;
 
+	if (_regulator_is_enabled(rdev))
+		_notifier_call_chain(rdev, REGULATOR_EVENT_OUT_PRECHANGE,
+				     NULL);
+
 	if (rdev->desc->ops->set_voltage) {
 		ret = rdev->desc->ops->set_voltage(rdev, min_uV, max_uV,
 						   &selector);
@@ -1741,6 +1793,10 @@ static int _regulator_do_set_voltage(struct regulator_dev *rdev,
 
 	if (ret == 0)
 		_notifier_call_chain(rdev, REGULATOR_EVENT_VOLTAGE_CHANGE,
+				     NULL);
+
+	if (_regulator_is_enabled(rdev))
+		_notifier_call_chain(rdev, REGULATOR_EVENT_OUT_POSTCHANGE,
 				     NULL);
 
 	trace_regulator_set_voltage_complete(rdev_get_name(rdev), selector);
@@ -2675,6 +2731,14 @@ struct regulator_dev *regulator_register(struct regulator_desc *regulator_desc,
 		ret = set_supply(rdev, r);
 		if (ret < 0)
 			goto scrub;
+
+		/* Enable supply if rail is enabled */
+		if (rdev->desc->ops->is_enabled &&
+				rdev->desc->ops->is_enabled(rdev)) {
+			ret = regulator_enable(rdev->supply);
+			if (ret < 0)
+				goto scrub;
+		}
 	}
 
 	/* add consumers devices */
@@ -2988,4 +3052,59 @@ unlock:
 
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int regulator_syncevent(struct file *file, const char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	struct regulator_dev *rdev;
+	char buffer[40];
+	int buf_size;
+
+	memset(buffer, 0, sizeof(buffer));
+	buf_size = min(count, (sizeof(buffer)-1));
+
+	if (copy_from_user(buffer, user_buf, buf_size))
+		return -EFAULT;
+
+	if (!strnicmp("all", buffer, 3)) {
+
+		mutex_lock(&regulator_list_mutex);
+
+		list_for_each_entry(rdev, &regulator_list, list) {
+			mutex_lock(&rdev->mutex);
+
+			if (_regulator_is_enabled(rdev))
+				trace_regulator_enable(rdev_get_name(rdev));
+			else
+				trace_regulator_disable(rdev_get_name(rdev));
+
+			trace_regulator_set_voltage(rdev_get_name(rdev),
+				_regulator_get_voltage(rdev),
+				_regulator_get_voltage(rdev));
+
+			mutex_unlock(&rdev->mutex);
+		}
+	}
+
+	mutex_unlock(&regulator_list_mutex);
+
+	return count;
+}
+
+static const struct file_operations regulator_syncevent_fops = {
+	.write		= regulator_syncevent,
+};
+
+static int __init regulator_init_debugfs(void)
+{
+	debugfs_create_file("syncevent_regulators", S_IWUSR, NULL, NULL,
+			&regulator_syncevent_fops);
+
+	return 0;
+}
+
+late_initcall(regulator_init_debugfs);
+#endif
+
 late_initcall(regulator_init_complete);

@@ -35,6 +35,7 @@
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
+#include <linux/serial_core.h>
 
 
 #define MAX_ST_DEVICES	3	/* Imagine 1 on each UART for now */
@@ -450,9 +451,7 @@ long st_kim_start(void *kim_data)
 
 	do {
 		/* platform specific enabling code here */
-		if (pdata->chip_enable)
-			pdata->chip_enable(kim_gdata);
-
+		wake_lock(&kim_gdata->core_data->st_wk_lock);
 		/* Configure BT nShutdown to HIGH state */
 		gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
 		mdelay(5);	/* FIXME: a proper toggle */
@@ -516,8 +515,6 @@ long st_kim_stop(void *kim_data)
 {
 	long err = 0;
 	struct kim_data_s	*kim_gdata = (struct kim_data_s *)kim_data;
-	struct ti_st_plat_data	*pdata =
-		kim_gdata->kim_pdev->dev.platform_data;
 
 	INIT_COMPLETION(kim_gdata->ldisc_installed);
 
@@ -546,8 +543,7 @@ long st_kim_stop(void *kim_data)
 	gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
 
 	/* platform specific disable */
-	if (pdata->chip_disable)
-		pdata->chip_disable(kim_gdata);
+	wake_unlock(&kim_gdata->core_data->st_wk_lock);
 	return err;
 }
 
@@ -706,6 +702,8 @@ static int kim_probe(struct platform_device *pdev)
 	/* refer to itself */
 	kim_gdata->core_data->kim_data = kim_gdata;
 
+	wake_lock_init(&kim_gdata->core_data->st_wk_lock, WAKE_LOCK_SUSPEND,
+				"st_wake_lock");
 	/* Claim the chip enable nShutdown gpio from the system */
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
 	status = gpio_request(kim_gdata->nshutdown, "kim");
@@ -771,32 +769,41 @@ static int kim_remove(struct platform_device *pdev)
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed");
 
+	wake_lock_destroy(&kim_gdata->core_data->st_wk_lock);
 	kim_gdata->kim_pdev = NULL;
 	st_core_exit(kim_gdata->core_data);
 
 	kfree(kim_gdata);
 	kim_gdata = NULL;
+
 	return 0;
 }
 
 int kim_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
+	struct kim_data_s *kim_gdata;
+	struct st_data_s *core_data;
+	struct uart_state *uart_state;
+	struct uart_port *uport;
 
-	if (pdata->suspend)
-		return pdata->suspend(pdev, state);
+	kim_gdata = dev_get_drvdata(&pdev->dev);
+	core_data = kim_gdata->core_data;
 
-	return -EOPNOTSUPP;
+	if (st_ll_getstate(core_data) != ST_LL_INVALID) {
+		uart_state = core_data->tty->driver_data;
+		uport = uart_state->uart_port;
+#ifdef CONFIG_BT_TIBLUESLEEP
+		pr_info(" Bluesleep Start");
+		bluesleep_start(uport);
+#endif
+	}
+
+	return 0;
 }
 
 int kim_resume(struct platform_device *pdev)
 {
-	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
-
-	if (pdata->resume)
-		return pdata->resume(pdev);
-
-	return -EOPNOTSUPP;
+	return 0;
 }
 
 /**********************************************************************/

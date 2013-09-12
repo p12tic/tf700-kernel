@@ -1,6 +1,7 @@
 #
 # Makefile for misc devices that really don't fit anywhere else.
 #
+GCOV_PROFILE_tegra-cryptodev.o := y
 
 obj-$(CONFIG_IBM_ASM)		+= ibmasm/
 obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
@@ -13,8 +14,8 @@ obj-$(CONFIG_ATMEL_TCLIB)	+= atmel_tclib.o
 obj-$(CONFIG_BMP085)		+= bmp085.o
 obj-$(CONFIG_ICS932S401)	+= ics932s401.o
 obj-$(CONFIG_LKDTM)		+= lkdtm.o
-obj-$(CONFIG_TIFM_CORE)       	+= tifm_core.o
-obj-$(CONFIG_TIFM_7XX1)       	+= tifm_7xx1.o
+obj-$(CONFIG_TIFM_CORE)		+= tifm_core.o
+obj-$(CONFIG_TIFM_7XX1)		+= tifm_7xx1.o
 obj-$(CONFIG_PHANTOM)		+= phantom.o
 obj-$(CONFIG_SENSORS_BH1780)	+= bh1780gli.o
 obj-$(CONFIG_SENSORS_BH1770)	+= bh1770glc.o
@@ -33,6 +34,7 @@ obj-$(CONFIG_SENSORS_TSL2550)	+= tsl2550.o
 obj-$(CONFIG_EP93XX_PWM)	+= ep93xx_pwm.o
 obj-$(CONFIG_DS1682)		+= ds1682.o
 obj-$(CONFIG_TI_DAC7512)	+= ti_dac7512.o
+obj-$(CONFIG_UID_STAT)		+= uid_stat.o
 obj-$(CONFIG_C2PORT)		+= c2port/
 obj-$(CONFIG_IWMC3200TOP)      += iwmc3200top/
 obj-$(CONFIG_HMC6352)		+= hmc6352.o
@@ -47,3 +49,18 @@ obj-$(CONFIG_AB8500_PWM)	+= ab8500-pwm.o
 obj-y				+= lis3lv02d/
 obj-y				+= carma/
 obj-$(CONFIG_USB_SWITCH_FSA9480) += fsa9480.o
+obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
+obj-$(CONFIG_APANIC)		+= apanic.o
+obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
+obj-$(CONFIG_SENSORS_NCT1008)	+= nct1008.o
+obj-$(CONFIG_BCM4329_RFKILL)	+= bcm4329_rfkill.o
+obj-y	+= inv_mpu/
+obj-y	+= inv_mpu6050/
+obj-y	+= kxt_9.o
+obj-$(CONFIG_TEGRA_CRYPTO_DEV)	+= tegra-cryptodev.o
+obj-$(CONFIG_TEGRA_BB_SUPPORT)	+= tegra-baseband/
+obj-$(CONFIG_TEGRA_CEC_SUPPORT)	+= tegra-cec/
+obj-$(CONFIG_MAX1749_VIBRATOR)	+= max1749.o
+obj-$(CONFIG_THERM_EST)		+= therm_est.o
+obj-$(CONFIG_KERNEL_RAMDUMP)    += ramdump.o
+obj-$(CONFIG_TEGRA_THROUGHPUT)	+= tegra-throughput.o

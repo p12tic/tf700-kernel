@@ -35,6 +35,8 @@
 #endif
 #include "sdhci-pltfm.h"
 
+#include "../debug_mmc.h"
+
 static struct sdhci_ops sdhci_pltfm_ops = {
 };
 
@@ -196,16 +198,46 @@ EXPORT_SYMBOL_GPL(sdhci_pltfm_unregister);
 int sdhci_pltfm_suspend(struct platform_device *dev, pm_message_t state)
 {
 	struct sdhci_host *host = platform_get_drvdata(dev);
+	int ret;
+	MMC_printk("%s: ++", mmc_hostname(host->mmc));
 
-	return sdhci_suspend_host(host, state);
+	ret = sdhci_suspend_host(host, state);
+	if (ret) {
+		dev_err(&dev->dev, "suspend failed, error = %d\n", ret);
+		return ret;
+	}
+
+	if (host->ops && host->ops->suspend)
+		ret = host->ops->suspend(host, state);
+	if (ret) {
+		dev_err(&dev->dev, "suspend hook failed, error = %d\n", ret);
+		sdhci_resume_host(host);
+	}
+
+	MMC_printk("%s: --", mmc_hostname(host->mmc));
+	return ret;
 }
 EXPORT_SYMBOL_GPL(sdhci_pltfm_suspend);
 
 int sdhci_pltfm_resume(struct platform_device *dev)
 {
 	struct sdhci_host *host = platform_get_drvdata(dev);
+	int ret = 0;
+	MMC_printk("%s: ++", mmc_hostname(host->mmc));
 
-	return sdhci_resume_host(host);
+	if (host->ops && host->ops->resume)
+		ret = host->ops->resume(host);
+	if (ret) {
+		dev_err(&dev->dev, "resume hook failed, error = %d\n", ret);
+		return ret;
+	}
+
+	ret = sdhci_resume_host(host);
+	if (ret)
+		dev_err(&dev->dev, "resume failed, error = %d\n", ret);
+
+	MMC_printk("%s: --", mmc_hostname(host->mmc));
+	return ret;
 }
 EXPORT_SYMBOL_GPL(sdhci_pltfm_resume);
 #endif	/* CONFIG_PM */

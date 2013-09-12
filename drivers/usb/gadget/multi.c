@@ -30,9 +30,9 @@
 #if defined USB_ETH_RNDIS
 #  undef USB_ETH_RNDIS
 #endif
-#ifdef CONFIG_USB_G_MULTI_RNDIS
-#  define USB_ETH_RNDIS y
-#endif
+//#ifdef CONFIG_USB_G_MULTI_RNDIS
+//#  define USB_ETH_RNDIS y
+//#endif
 
 
 #define DRIVER_DESC		"Multifunction Composite Gadget"

@@ -4,6 +4,8 @@
  * Copyright (C) 2010 Google, Inc.
  * Author: Colin Cross <ccross@android.com>
  *
+ * Copyright (C) 2010-2012 NVIDIA Corporation
+ *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -14,6 +16,9 @@
  * GNU General Public License for more details.
  *
  */
+
+/*#define DEBUG           1*/
+/*#define VERBOSE_DEBUG   1*/
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -27,19 +32,23 @@
 #include <linux/slab.h>
 #include <linux/i2c-tegra.h>
 #include <linux/of_i2c.h>
+#include <linux/spinlock.h>
 
 #include <asm/unaligned.h>
 
 #include <mach/clk.h>
+#include <mach/pinmux.h>
 
-#define TEGRA_I2C_TIMEOUT (msecs_to_jiffies(1000))
-#define BYTES_PER_FIFO_WORD 4
+#define TEGRA_I2C_TIMEOUT			(msecs_to_jiffies(1000))
+#define TEGRA_I2C_RETRIES			3
+#define BYTES_PER_FIFO_WORD			4
 
 #define I2C_CNFG				0x000
 #define I2C_CNFG_DEBOUNCE_CNT_SHIFT		12
 #define I2C_CNFG_PACKET_MODE_EN			(1<<10)
 #define I2C_CNFG_NEW_MASTER_FSM			(1<<11)
 #define I2C_STATUS				0x01C
+#define I2C_STATUS_BUSY				(1<<8)
 #define I2C_SL_CNFG				0x020
 #define I2C_SL_CNFG_NACK			(1<<1)
 #define I2C_SL_CNFG_NEWSL			(1<<2)
@@ -83,6 +92,7 @@
 #define I2C_ERR_NO_ACK				0x01
 #define I2C_ERR_ARBITRATION_LOST		0x02
 #define I2C_ERR_UNKNOWN_INTERRUPT		0x04
+#define I2C_ERR_UNEXPECTED_STATUS		0x08
 
 #define PACKET_HEADER0_HEADER_SIZE_SHIFT	28
 #define PACKET_HEADER0_PACKET_ID_SHIFT		16
@@ -96,8 +106,38 @@
 #define I2C_HEADER_10BIT_ADDR			(1<<18)
 #define I2C_HEADER_IE_ENABLE			(1<<17)
 #define I2C_HEADER_REPEAT_START			(1<<16)
+#define I2C_HEADER_CONTINUE_XFER		(1<<15)
 #define I2C_HEADER_MASTER_ADDR_SHIFT		12
 #define I2C_HEADER_SLAVE_ADDR_SHIFT		1
+
+#define SL_ADDR1(addr) (addr & 0xff)
+#define SL_ADDR2(addr) ((addr >> 8) & 0xff)
+
+/*
+ * msg_end_type: The bus control which need to be send at end of transfer.
+ * @MSG_END_STOP: Send stop pulse at end of transfer.
+ * @MSG_END_REPEAT_START: Send repeat start at end of transfer.
+ * @MSG_END_CONTINUE: The following on message is coming and so do not send
+ *		stop or repeat start.
+ */
+
+enum msg_end_type {
+	MSG_END_STOP,
+	MSG_END_REPEAT_START,
+	MSG_END_CONTINUE,
+};
+
+struct tegra_i2c_dev;
+
+struct tegra_i2c_bus {
+	struct tegra_i2c_dev *dev;
+	const struct tegra_pingroup_config *mux;
+	int mux_len;
+	unsigned long bus_clk_rate;
+	struct i2c_adapter adapter;
+	int scl_gpio;
+	int sda_gpio;
+};
 
 /**
  * struct tegra_i2c_dev	- per device i2c context
@@ -105,7 +145,6 @@
  * @adapter: core i2c layer adapter information
  * @clk: clock reference for i2c controller
  * @i2c_clk: clock reference for i2c bus
- * @iomem: memory resource for registers
  * @base: ioremapped registers cookie
  * @cont_id: i2c controller id, used for for packet header
  * @irq: irq number of transfer complete interrupt
@@ -120,10 +159,10 @@
  */
 struct tegra_i2c_dev {
 	struct device *dev;
-	struct i2c_adapter adapter;
-	struct clk *clk;
-	struct clk *i2c_clk;
-	struct resource *iomem;
+	struct clk *div_clk;
+	struct clk *fast_clk;
+	struct rt_mutex dev_lock;
+	spinlock_t fifo_lock;
 	void __iomem *base;
 	int cont_id;
 	int irq;
@@ -132,10 +171,25 @@ struct tegra_i2c_dev {
 	struct completion msg_complete;
 	int msg_err;
 	u8 *msg_buf;
+	u32 packet_header;
+	u32 payload_size;
+	u32 io_header;
 	size_t msg_buf_remaining;
 	int msg_read;
-	unsigned long bus_clk_rate;
+	struct i2c_msg *msgs;
+	int msg_add;
+	int msgs_num;
 	bool is_suspended;
+	int bus_count;
+	const struct tegra_pingroup_config *last_mux;
+	int last_mux_len;
+	unsigned long last_bus_clk_rate;
+	u16 slave_addr;
+	bool is_clkon_always;
+	bool is_high_speed_enable;
+	u16 hs_master_code;
+	int (*arb_recovery)(int scl_gpio, int sda_gpio);
+	struct tegra_i2c_bus busses[1];
 };
 
 static void dvc_writel(struct tegra_i2c_dev *i2c_dev, u32 val, unsigned long reg)
@@ -146,6 +200,20 @@ static void dvc_writel(struct tegra_i2c_dev *i2c_dev, u32 val, unsigned long reg
 static u32 dvc_readl(struct tegra_i2c_dev *i2c_dev, unsigned long reg)
 {
 	return readl(i2c_dev->base + reg);
+}
+
+static void dvc_i2c_mask_irq(struct tegra_i2c_dev *i2c_dev, u32 mask)
+{
+	u32 int_mask = dvc_readl(i2c_dev, DVC_CTRL_REG3);
+	int_mask &= ~mask;
+	dvc_writel(i2c_dev, int_mask, DVC_CTRL_REG3);
+}
+
+static void dvc_i2c_unmask_irq(struct tegra_i2c_dev *i2c_dev, u32 mask)
+{
+	u32 int_mask = dvc_readl(i2c_dev, DVC_CTRL_REG3);
+	int_mask |= mask;
+	dvc_writel(i2c_dev, int_mask, DVC_CTRL_REG3);
 }
 
 /*
@@ -164,6 +232,10 @@ static void i2c_writel(struct tegra_i2c_dev *i2c_dev, u32 val,
 	unsigned long reg)
 {
 	writel(val, i2c_dev->base + tegra_i2c_reg_addr(i2c_dev, reg));
+
+	/* Read back register to make sure that register writes completed */
+	if (reg != I2C_TX_FIFO)
+		readl(i2c_dev->base + tegra_i2c_reg_addr(i2c_dev, reg));
 }
 
 static u32 i2c_readl(struct tegra_i2c_dev *i2c_dev, unsigned long reg)
@@ -260,9 +332,19 @@ static int tegra_i2c_fill_tx_fifo(struct tegra_i2c_dev *i2c_dev)
 {
 	u32 val;
 	int tx_fifo_avail;
-	u8 *buf = i2c_dev->msg_buf;
-	size_t buf_remaining = i2c_dev->msg_buf_remaining;
+	u8 *buf;
+	size_t buf_remaining;
 	int words_to_transfer;
+	unsigned long flags;
+
+	spin_lock_irqsave(&i2c_dev->fifo_lock, flags);
+	if (!i2c_dev->msg_buf_remaining) {
+		spin_unlock_irqrestore(&i2c_dev->fifo_lock, flags);
+		return 0;
+	}
+
+	buf = i2c_dev->msg_buf;
+	buf_remaining = i2c_dev->msg_buf_remaining;
 
 	val = i2c_readl(i2c_dev, I2C_FIFO_STATUS);
 	tx_fifo_avail = (val & I2C_FIFO_STATUS_TX_MASK) >>
@@ -301,7 +383,12 @@ static int tegra_i2c_fill_tx_fifo(struct tegra_i2c_dev *i2c_dev)
 	 * boundary and fault.
 	 */
 	if (tx_fifo_avail > 0 && buf_remaining > 0) {
-		BUG_ON(buf_remaining > 3);
+		if (buf_remaining > 3) {
+			dev_err(i2c_dev->dev,
+				"Remaining buffer more than 3 %d\n",
+				buf_remaining);
+			BUG();
+		}
 		memcpy(&val, buf, buf_remaining);
 
 		/* Again update before writing to FIFO to make sure isr sees. */
@@ -311,6 +398,8 @@ static int tegra_i2c_fill_tx_fifo(struct tegra_i2c_dev *i2c_dev)
 
 		i2c_writel(i2c_dev, val, I2C_TX_FIFO);
 	}
+
+	spin_unlock_irqrestore(&i2c_dev->fifo_lock, flags);
 
 	return 0;
 }
@@ -327,7 +416,6 @@ static void tegra_dvc_init(struct tegra_i2c_dev *i2c_dev)
 	u32 val = 0;
 	val = dvc_readl(i2c_dev, DVC_CTRL_REG3);
 	val |= DVC_CTRL_REG3_SW_PROG;
-	val |= DVC_CTRL_REG3_I2C_DONE_INTR_EN;
 	dvc_writel(i2c_dev, val, DVC_CTRL_REG3);
 
 	val = dvc_readl(i2c_dev, DVC_CTRL_REG1);
@@ -335,16 +423,58 @@ static void tegra_dvc_init(struct tegra_i2c_dev *i2c_dev)
 	dvc_writel(i2c_dev, val, DVC_CTRL_REG1);
 }
 
+static void tegra_i2c_slave_init(struct tegra_i2c_dev *i2c_dev)
+{
+	u32 val = I2C_SL_CNFG_NEWSL | I2C_SL_CNFG_NACK;
+
+	i2c_writel(i2c_dev, val, I2C_SL_CNFG);
+
+	if (i2c_dev->slave_addr) {
+		u16 addr = i2c_dev->slave_addr;
+
+		i2c_writel(i2c_dev, SL_ADDR1(addr), I2C_SL_ADDR1);
+		i2c_writel(i2c_dev, SL_ADDR2(addr), I2C_SL_ADDR2);
+	}
+}
+
+static inline int tegra_i2c_clock_enable(struct tegra_i2c_dev *i2c_dev)
+{
+	int ret;
+	ret = clk_enable(i2c_dev->fast_clk);
+	if (ret < 0) {
+		dev_err(i2c_dev->dev,
+			"Error in enabling fast clock err %d\n", ret);
+		return ret;
+	}
+	ret = clk_enable(i2c_dev->div_clk);
+	if (ret < 0) {
+		dev_err(i2c_dev->dev,
+			"Error in enabling div clock err %d\n", ret);
+		clk_disable(i2c_dev->fast_clk);
+	}
+	return ret;
+}
+
+static inline void tegra_i2c_clock_disable(struct tegra_i2c_dev *i2c_dev)
+{
+	clk_disable(i2c_dev->div_clk);
+	clk_disable(i2c_dev->fast_clk);
+}
+
 static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 {
 	u32 val;
 	int err = 0;
 
-	clk_enable(i2c_dev->clk);
+	tegra_i2c_clock_enable(i2c_dev);
 
-	tegra_periph_reset_assert(i2c_dev->clk);
+	/* Interrupt generated before sending stop signal so
+	* wait for some time so that stop signal can be send proerly */
+	mdelay(1);
+
+	tegra_periph_reset_assert(i2c_dev->div_clk);
 	udelay(2);
-	tegra_periph_reset_deassert(i2c_dev->clk);
+	tegra_periph_reset_deassert(i2c_dev->div_clk);
 
 	if (i2c_dev->is_dvc)
 		tegra_dvc_init(i2c_dev);
@@ -353,7 +483,8 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 		(0x2 << I2C_CNFG_DEBOUNCE_CNT_SHIFT);
 	i2c_writel(i2c_dev, val, I2C_CNFG);
 	i2c_writel(i2c_dev, 0, I2C_INT_MASK);
-	clk_set_rate(i2c_dev->clk, i2c_dev->bus_clk_rate * 8);
+	clk_set_rate(i2c_dev->div_clk, i2c_dev->last_bus_clk_rate * 8);
+	i2c_writel(i2c_dev, 0x3, I2C_CLK_DIVISOR);
 
 	if (!i2c_dev->is_dvc) {
 		u32 sl_cfg = i2c_readl(i2c_dev, I2C_SL_CNFG);
@@ -368,10 +499,13 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 		0 << I2C_FIFO_CONTROL_RX_TRIG_SHIFT;
 	i2c_writel(i2c_dev, val, I2C_FIFO_CONTROL);
 
+	if (!i2c_dev->is_dvc)
+		tegra_i2c_slave_init(i2c_dev);
+
 	if (tegra_i2c_flush_fifos(i2c_dev))
 		err = -ETIMEDOUT;
 
-	clk_disable(i2c_dev->clk);
+	tegra_i2c_clock_disable(i2c_dev);
 
 	if (i2c_dev->irq_disabled) {
 		i2c_dev->irq_disabled = 0;
@@ -384,16 +518,16 @@ static int tegra_i2c_init(struct tegra_i2c_dev *i2c_dev)
 static irqreturn_t tegra_i2c_isr(int irq, void *dev_id)
 {
 	u32 status;
-	const u32 status_err = I2C_INT_NO_ACK | I2C_INT_ARBITRATION_LOST;
+	const u32 status_err = I2C_INT_NO_ACK | I2C_INT_ARBITRATION_LOST | I2C_INT_TX_FIFO_OVERFLOW;
 	struct tegra_i2c_dev *i2c_dev = dev_id;
+
+	tegra_i2c_clock_enable(i2c_dev);
 
 	status = i2c_readl(i2c_dev, I2C_INT_STATUS);
 
 	if (status == 0) {
-		dev_warn(i2c_dev->dev, "irq status 0 %08x %08x %08x\n",
-			 i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS),
-			 i2c_readl(i2c_dev, I2C_STATUS),
-			 i2c_readl(i2c_dev, I2C_CNFG));
+		dev_warn(i2c_dev->dev, "unknown interrupt Add 0x%02x\n",
+						i2c_dev->msg_add);
 		i2c_dev->msg_err |= I2C_ERR_UNKNOWN_INTERRUPT;
 
 		if (!i2c_dev->irq_disabled) {
@@ -401,16 +535,49 @@ static irqreturn_t tegra_i2c_isr(int irq, void *dev_id)
 			i2c_dev->irq_disabled = 1;
 		}
 
-		complete(&i2c_dev->msg_complete);
 		goto err;
 	}
 
 	if (unlikely(status & status_err)) {
-		if (status & I2C_INT_NO_ACK)
+		dev_warn(i2c_dev->dev, "I2c error status 0x%08x\n", status);
+		if (status & I2C_INT_NO_ACK) {
 			i2c_dev->msg_err |= I2C_ERR_NO_ACK;
-		if (status & I2C_INT_ARBITRATION_LOST)
+			dev_warn(i2c_dev->dev, "no acknowledge from address"
+					" 0x%x\n", i2c_dev->msg_add);
+			dev_warn(i2c_dev->dev, "Packet status 0x%08x\n",
+				i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS));
+		}
+
+		if (status & I2C_INT_ARBITRATION_LOST) {
 			i2c_dev->msg_err |= I2C_ERR_ARBITRATION_LOST;
-		complete(&i2c_dev->msg_complete);
+			dev_warn(i2c_dev->dev, "arbitration lost during "
+				" communicate to add 0x%x\n", i2c_dev->msg_add);
+			dev_warn(i2c_dev->dev, "Packet status 0x%08x\n",
+				i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS));
+		}
+
+		if (status & I2C_INT_TX_FIFO_OVERFLOW) {
+			i2c_dev->msg_err |= I2C_INT_TX_FIFO_OVERFLOW;
+			dev_warn(i2c_dev->dev, "Tx fifo overflow during "
+				" communicate to add 0x%x\n", i2c_dev->msg_add);
+			dev_warn(i2c_dev->dev, "Packet status 0x%08x\n",
+				i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS));
+		}
+		goto err;
+	}
+
+	if (unlikely((i2c_readl(i2c_dev, I2C_STATUS) & I2C_STATUS_BUSY)
+				&& (status == I2C_INT_TX_FIFO_DATA_REQ)
+				&& i2c_dev->msg_read
+				&& i2c_dev->msg_buf_remaining)) {
+		dev_warn(i2c_dev->dev, "unexpected status\n");
+		i2c_dev->msg_err |= I2C_ERR_UNEXPECTED_STATUS;
+
+		if (!i2c_dev->irq_disabled) {
+			disable_irq_nosync(i2c_dev->irq);
+			i2c_dev->irq_disabled = 1;
+		}
+
 		goto err;
 	}
 
@@ -428,70 +595,135 @@ static irqreturn_t tegra_i2c_isr(int irq, void *dev_id)
 			tegra_i2c_mask_irq(i2c_dev, I2C_INT_TX_FIFO_DATA_REQ);
 	}
 
+	i2c_writel(i2c_dev, status, I2C_INT_STATUS);
+
+	if (i2c_dev->is_dvc)
+		dvc_writel(i2c_dev, DVC_STATUS_I2C_DONE_INTR, DVC_STATUS);
+
+	/*
+	 * ensure that the writes above post prior to leaving the interrupt
+	 * handler. Otherwise, the interrupt can still be pending in the gic
+	 * when the gic unmasks the irq
+	 */
+	i2c_readl(i2c_dev, I2C_INT_STATUS);
+
 	if (status & I2C_INT_PACKET_XFER_COMPLETE) {
 		BUG_ON(i2c_dev->msg_buf_remaining);
 		complete(&i2c_dev->msg_complete);
 	}
 
-	i2c_writel(i2c_dev, status, I2C_INT_STATUS);
-	if (i2c_dev->is_dvc)
-		dvc_writel(i2c_dev, DVC_STATUS_I2C_DONE_INTR, DVC_STATUS);
+	tegra_i2c_clock_disable(i2c_dev);
 	return IRQ_HANDLED;
+
 err:
+	dev_dbg(i2c_dev->dev, "reg: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+		 i2c_readl(i2c_dev, I2C_CNFG), i2c_readl(i2c_dev, I2C_STATUS),
+		 i2c_readl(i2c_dev, I2C_INT_STATUS),
+		 i2c_readl(i2c_dev, I2C_PACKET_TRANSFER_STATUS));
+
+	dev_dbg(i2c_dev->dev, "packet: 0x%08x %u 0x%08x\n",
+		 i2c_dev->packet_header, i2c_dev->payload_size,
+		 i2c_dev->io_header);
+
+	if (i2c_dev->msgs) {
+		struct i2c_msg *msgs = i2c_dev->msgs;
+		int i;
+
+		for (i = 0; i < i2c_dev->msgs_num; i++)
+			dev_dbg(i2c_dev->dev,
+				 "msgs[%d] %c, addr=0x%04x, len=%d\n",
+				 i, (msgs[i].flags & I2C_M_RD) ? 'R' : 'W',
+				 msgs[i].addr, msgs[i].len);
+	}
+
 	/* An error occurred, mask all interrupts */
 	tegra_i2c_mask_irq(i2c_dev, I2C_INT_NO_ACK | I2C_INT_ARBITRATION_LOST |
 		I2C_INT_PACKET_XFER_COMPLETE | I2C_INT_TX_FIFO_DATA_REQ |
-		I2C_INT_RX_FIFO_DATA_REQ);
+		I2C_INT_RX_FIFO_DATA_REQ | I2C_INT_TX_FIFO_OVERFLOW);
+
 	i2c_writel(i2c_dev, status, I2C_INT_STATUS);
+
+	/* An error occured, mask dvc interrupt */
+	if (i2c_dev->is_dvc)
+		dvc_i2c_mask_irq(i2c_dev, DVC_CTRL_REG3_I2C_DONE_INTR_EN);
+
 	if (i2c_dev->is_dvc)
 		dvc_writel(i2c_dev, DVC_STATUS_I2C_DONE_INTR, DVC_STATUS);
+
+	/*
+	 * ensure that the writes above post prior to leaving the interrupt
+	 * handler. Otherwise, the interrupt can still be pending in the gic
+	 * when the gic unmasks the irq
+	 */
+	i2c_readl(i2c_dev, I2C_INT_STATUS);
+
+	tegra_i2c_clock_disable(i2c_dev);
+	complete(&i2c_dev->msg_complete);
 	return IRQ_HANDLED;
 }
 
-static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
-	struct i2c_msg *msg, int stop)
+static int tegra_i2c_xfer_msg(struct tegra_i2c_bus *i2c_bus,
+	struct i2c_msg *msg, enum msg_end_type end_state)
 {
-	u32 packet_header;
+	struct tegra_i2c_dev *i2c_dev = i2c_bus->dev;
 	u32 int_mask;
 	int ret;
-
-	tegra_i2c_flush_fifos(i2c_dev);
-	i2c_writel(i2c_dev, 0xFF, I2C_INT_STATUS);
+	int arb_stat;
 
 	if (msg->len == 0)
 		return -EINVAL;
+
+	tegra_i2c_flush_fifos(i2c_dev);
+
+	/* Toggle the direction flag if rev dir is selected */
+	if (msg->flags & I2C_M_REV_DIR_ADDR)
+		msg->flags ^= I2C_M_RD;
 
 	i2c_dev->msg_buf = msg->buf;
 	i2c_dev->msg_buf_remaining = msg->len;
 	i2c_dev->msg_err = I2C_ERR_NONE;
 	i2c_dev->msg_read = (msg->flags & I2C_M_RD);
 	INIT_COMPLETION(i2c_dev->msg_complete);
+	i2c_dev->msg_add = msg->addr;
 
-	packet_header = (0 << PACKET_HEADER0_HEADER_SIZE_SHIFT) |
+	i2c_dev->packet_header = (0 << PACKET_HEADER0_HEADER_SIZE_SHIFT) |
 			PACKET_HEADER0_PROTOCOL_I2C |
 			(i2c_dev->cont_id << PACKET_HEADER0_CONT_ID_SHIFT) |
 			(1 << PACKET_HEADER0_PACKET_ID_SHIFT);
-	i2c_writel(i2c_dev, packet_header, I2C_TX_FIFO);
+	i2c_writel(i2c_dev, i2c_dev->packet_header, I2C_TX_FIFO);
 
-	packet_header = msg->len - 1;
-	i2c_writel(i2c_dev, packet_header, I2C_TX_FIFO);
+	i2c_dev->payload_size = msg->len - 1;
+	i2c_writel(i2c_dev, i2c_dev->payload_size, I2C_TX_FIFO);
 
-	packet_header = msg->addr << I2C_HEADER_SLAVE_ADDR_SHIFT;
-	packet_header |= I2C_HEADER_IE_ENABLE;
-	if (!stop)
-		packet_header |= I2C_HEADER_REPEAT_START;
-	if (msg->flags & I2C_M_TEN)
-		packet_header |= I2C_HEADER_10BIT_ADDR;
+	i2c_dev->io_header = I2C_HEADER_IE_ENABLE;
+	if (end_state == MSG_END_CONTINUE)
+		i2c_dev->io_header |= I2C_HEADER_CONTINUE_XFER;
+	else if (end_state == MSG_END_REPEAT_START)
+		i2c_dev->io_header |= I2C_HEADER_REPEAT_START;
+
+	if (msg->flags & I2C_M_TEN) {
+		i2c_dev->io_header |= msg->addr;
+		i2c_dev->io_header |= I2C_HEADER_10BIT_ADDR;
+	} else {
+		i2c_dev->io_header |= (msg->addr << I2C_HEADER_SLAVE_ADDR_SHIFT);
+	}
 	if (msg->flags & I2C_M_IGNORE_NAK)
-		packet_header |= I2C_HEADER_CONT_ON_NAK;
+		i2c_dev->io_header |= I2C_HEADER_CONT_ON_NAK;
 	if (msg->flags & I2C_M_RD)
-		packet_header |= I2C_HEADER_READ;
-	i2c_writel(i2c_dev, packet_header, I2C_TX_FIFO);
+		i2c_dev->io_header |= I2C_HEADER_READ;
+	if (i2c_dev->is_high_speed_enable) {
+		i2c_dev->io_header |= I2C_HEADER_HIGHSPEED_MODE;
+		i2c_dev->io_header |= ((i2c_dev->hs_master_code & 0x7) <<  I2C_HEADER_MASTER_ADDR_SHIFT);
+	}
+	i2c_writel(i2c_dev, i2c_dev->io_header, I2C_TX_FIFO);
 
 	if (!(msg->flags & I2C_M_RD))
 		tegra_i2c_fill_tx_fifo(i2c_dev);
 
-	int_mask = I2C_INT_NO_ACK | I2C_INT_ARBITRATION_LOST;
+	if (i2c_dev->is_dvc)
+		dvc_i2c_unmask_irq(i2c_dev, DVC_CTRL_REG3_I2C_DONE_INTR_EN);
+
+	int_mask = I2C_INT_NO_ACK | I2C_INT_ARBITRATION_LOST | I2C_INT_TX_FIFO_OVERFLOW;
 	if (msg->flags & I2C_M_RD)
 		int_mask |= I2C_INT_RX_FIFO_DATA_REQ;
 	else if (i2c_dev->msg_buf_remaining)
@@ -500,11 +732,21 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 	dev_dbg(i2c_dev->dev, "unmasked irq: %02x\n",
 		i2c_readl(i2c_dev, I2C_INT_MASK));
 
-	ret = wait_for_completion_timeout(&i2c_dev->msg_complete, TEGRA_I2C_TIMEOUT);
+	ret = wait_for_completion_timeout(&i2c_dev->msg_complete,
+					TEGRA_I2C_TIMEOUT);
 	tegra_i2c_mask_irq(i2c_dev, int_mask);
 
+	if (i2c_dev->is_dvc)
+		dvc_i2c_mask_irq(i2c_dev, DVC_CTRL_REG3_I2C_DONE_INTR_EN);
+
+	/* Restore the message flag */
+	if (msg->flags & I2C_M_REV_DIR_ADDR)
+		msg->flags ^= I2C_M_RD;
+
 	if (WARN_ON(ret == 0)) {
-		dev_err(i2c_dev->dev, "i2c transfer timed out\n");
+		dev_err(i2c_dev->dev,
+			"i2c transfer timed out, addr 0x%04x, data 0x%02x\n",
+			msg->addr, msg->buf[0]);
 
 		tegra_i2c_init(i2c_dev);
 		return -ETIMEDOUT;
@@ -516,12 +758,25 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 	if (likely(i2c_dev->msg_err == I2C_ERR_NONE))
 		return 0;
 
+	/* Arbitration Lost occurs, Start recovery */
+	if (i2c_dev->msg_err == I2C_ERR_ARBITRATION_LOST) {
+		if (i2c_dev->arb_recovery) {
+			arb_stat = i2c_dev->arb_recovery(i2c_bus->scl_gpio, i2c_bus->sda_gpio);
+			if (!arb_stat)
+				return -EAGAIN;
+		}
+	}
+
 	tegra_i2c_init(i2c_dev);
+
 	if (i2c_dev->msg_err == I2C_ERR_NO_ACK) {
 		if (msg->flags & I2C_M_IGNORE_NAK)
 			return 0;
 		return -EREMOTEIO;
 	}
+
+	if (i2c_dev->msg_err & I2C_ERR_UNEXPECTED_STATUS)
+		return -EAGAIN;
 
 	return -EIO;
 }
@@ -529,27 +784,64 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 static int tegra_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	int num)
 {
-	struct tegra_i2c_dev *i2c_dev = i2c_get_adapdata(adap);
+	struct tegra_i2c_bus *i2c_bus = i2c_get_adapdata(adap);
+	struct tegra_i2c_dev *i2c_dev = i2c_bus->dev;
 	int i;
 	int ret = 0;
 
-	if (i2c_dev->is_suspended)
-		return -EBUSY;
+	rt_mutex_lock(&i2c_dev->dev_lock);
 
-	clk_enable(i2c_dev->clk);
+	if (i2c_dev->is_suspended) {
+		rt_mutex_unlock(&i2c_dev->dev_lock);
+		return -EBUSY;
+	}
+
+	if (i2c_dev->last_mux != i2c_bus->mux) {
+		tegra_pinmux_set_safe_pinmux_table(i2c_dev->last_mux,
+			i2c_dev->last_mux_len);
+		tegra_pinmux_config_pinmux_table(i2c_bus->mux,
+			i2c_bus->mux_len);
+		i2c_dev->last_mux = i2c_bus->mux;
+		i2c_dev->last_mux_len = i2c_bus->mux_len;
+	}
+
+	if (i2c_dev->last_bus_clk_rate != i2c_bus->bus_clk_rate) {
+		clk_set_rate(i2c_dev->div_clk, i2c_bus->bus_clk_rate * 8);
+		i2c_dev->last_bus_clk_rate = i2c_bus->bus_clk_rate;
+	}
+
+	i2c_dev->msgs = msgs;
+	i2c_dev->msgs_num = num;
+
+	tegra_i2c_clock_enable(i2c_dev);
+
 	for (i = 0; i < num; i++) {
-		int stop = (i == (num - 1)) ? 1  : 0;
-		ret = tegra_i2c_xfer_msg(i2c_dev, &msgs[i], stop);
+		enum msg_end_type end_type = MSG_END_STOP;
+		if (i < (num - 1)) {
+			if (msgs[i + 1].flags & I2C_M_NOSTART)
+				end_type = MSG_END_CONTINUE;
+			else
+				end_type = MSG_END_REPEAT_START;
+		}
+		ret = tegra_i2c_xfer_msg(i2c_bus, &msgs[i], end_type);
 		if (ret)
 			break;
 	}
-	clk_disable(i2c_dev->clk);
+
+	tegra_i2c_clock_disable(i2c_dev);
+
+	rt_mutex_unlock(&i2c_dev->dev_lock);
+
+	i2c_dev->msgs = NULL;
+	i2c_dev->msgs_num = 0;
+
 	return ret ?: i;
 }
 
 static u32 tegra_i2c_func(struct i2c_adapter *adap)
 {
-	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL | I2C_FUNC_10BIT_ADDR |
+			I2C_FUNC_PROTOCOL_MANGLING;
 }
 
 static const struct i2c_algorithm tegra_i2c_algo = {
@@ -557,184 +849,231 @@ static const struct i2c_algorithm tegra_i2c_algo = {
 	.functionality	= tegra_i2c_func,
 };
 
-static int tegra_i2c_probe(struct platform_device *pdev)
+static int __devinit tegra_i2c_probe(struct platform_device *pdev)
 {
 	struct tegra_i2c_dev *i2c_dev;
-	struct tegra_i2c_platform_data *pdata = pdev->dev.platform_data;
+	struct tegra_i2c_platform_data *plat = pdev->dev.platform_data;
 	struct resource *res;
-	struct resource *iomem;
-	struct clk *clk;
-	struct clk *i2c_clk;
+	struct clk *div_clk;
+	struct clk *fast_clk = NULL;
 	const unsigned int *prop;
 	void *base;
 	int irq;
+	int nbus;
+	int i = 0;
 	int ret = 0;
+
+	if (!plat) {
+		dev_err(&pdev->dev, "no platform data?\n");
+		return -ENODEV;
+	}
+
+	if (plat->bus_count <= 0 || plat->adapter_nr < 0) {
+		dev_err(&pdev->dev, "invalid platform data?\n");
+		return -ENODEV;
+	}
+
+	WARN_ON(plat->bus_count > TEGRA_I2C_MAX_BUS);
+	nbus = min(TEGRA_I2C_MAX_BUS, plat->bus_count);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		dev_err(&pdev->dev, "no mem resource\n");
 		return -EINVAL;
 	}
-	iomem = request_mem_region(res->start, resource_size(res), pdev->name);
-	if (!iomem) {
-		dev_err(&pdev->dev, "I2C region already claimed\n");
-		return -EBUSY;
-	}
 
-	base = ioremap(iomem->start, resource_size(iomem));
+	base = devm_request_and_ioremap(&pdev->dev, res);
 	if (!base) {
-		dev_err(&pdev->dev, "Cannot ioremap I2C region\n");
-		return -ENOMEM;
+		dev_err(&pdev->dev, "Cannot request/ioremap I2C registers\n");
+		return -EADDRNOTAVAIL;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
 		dev_err(&pdev->dev, "no irq resource\n");
-		ret = -EINVAL;
-		goto err_iounmap;
+		return -EINVAL;
 	}
 	irq = res->start;
 
-	clk = clk_get(&pdev->dev, NULL);
-	if (IS_ERR(clk)) {
+	div_clk = devm_clk_get(&pdev->dev, "i2c-div");
+	if (IS_ERR(div_clk)) {
 		dev_err(&pdev->dev, "missing controller clock");
-		ret = PTR_ERR(clk);
-		goto err_release_region;
+		return PTR_ERR(div_clk);
 	}
 
-	i2c_clk = clk_get(&pdev->dev, "i2c");
-	if (IS_ERR(i2c_clk)) {
-		dev_err(&pdev->dev, "missing bus clock");
-		ret = PTR_ERR(i2c_clk);
-		goto err_clk_put;
+	fast_clk = devm_clk_get(&pdev->dev, "i2c-fast");
+	if (IS_ERR(fast_clk)) {
+		dev_err(&pdev->dev, "missing controller fast clock");
+		return PTR_ERR(fast_clk);
 	}
 
-	i2c_dev = kzalloc(sizeof(struct tegra_i2c_dev), GFP_KERNEL);
+	i2c_dev = devm_kzalloc(&pdev->dev, sizeof(struct tegra_i2c_dev) +
+			  (nbus-1) * sizeof(struct tegra_i2c_bus), GFP_KERNEL);
 	if (!i2c_dev) {
-		ret = -ENOMEM;
-		goto err_i2c_clk_put;
+		dev_err(&pdev->dev, "Could not allocate struct tegra_i2c_dev");
+		return -ENOMEM;
 	}
 
 	i2c_dev->base = base;
-	i2c_dev->clk = clk;
-	i2c_dev->i2c_clk = i2c_clk;
-	i2c_dev->iomem = iomem;
-	i2c_dev->adapter.algo = &tegra_i2c_algo;
+	i2c_dev->div_clk = div_clk;
+	i2c_dev->fast_clk = fast_clk;
 	i2c_dev->irq = irq;
 	i2c_dev->cont_id = pdev->id;
 	i2c_dev->dev = &pdev->dev;
+	i2c_dev->is_clkon_always = plat->is_clkon_always;
 
-	i2c_dev->bus_clk_rate = 100000; /* default clock rate */
-	if (pdata) {
-		i2c_dev->bus_clk_rate = pdata->bus_clk_rate;
+	i2c_dev->last_bus_clk_rate = 100000; /* default clock rate */
+	if (plat) {
+		i2c_dev->last_bus_clk_rate = plat->bus_clk_rate[0];
 
 	} else if (i2c_dev->dev->of_node) {    /* if there is a device tree node ... */
+		/* TODO: DAN: this doesn't work for DT */
 		prop = of_get_property(i2c_dev->dev->of_node,
 				"clock-frequency", NULL);
 		if (prop)
-			i2c_dev->bus_clk_rate = be32_to_cpup(prop);
+			i2c_dev->last_bus_clk_rate = be32_to_cpup(prop);
 	}
 
-	if (pdev->id == 3)
-		i2c_dev->is_dvc = 1;
+	i2c_dev->is_high_speed_enable = plat->is_high_speed_enable;
+	i2c_dev->last_bus_clk_rate = plat->bus_clk_rate[0] ?: 100000;
+	i2c_dev->msgs = NULL;
+	i2c_dev->msgs_num = 0;
+	rt_mutex_init(&i2c_dev->dev_lock);
+	spin_lock_init(&i2c_dev->fifo_lock);
+
+	i2c_dev->slave_addr = plat->slave_addr;
+	i2c_dev->hs_master_code = plat->hs_master_code;
+	i2c_dev->is_dvc = plat->is_dvc;
+	i2c_dev->arb_recovery = plat->arb_recovery;
 	init_completion(&i2c_dev->msg_complete);
 
 	platform_set_drvdata(pdev, i2c_dev);
 
+	if (i2c_dev->is_clkon_always)
+		tegra_i2c_clock_enable(i2c_dev);
+
 	ret = tegra_i2c_init(i2c_dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize i2c controller");
-		goto err_free;
+		return ret;
 	}
 
-	ret = request_irq(i2c_dev->irq, tegra_i2c_isr, 0, pdev->name, i2c_dev);
+	ret = devm_request_irq(&pdev->dev, i2c_dev->irq,
+			tegra_i2c_isr, 0, pdev->name, i2c_dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request irq %i\n", i2c_dev->irq);
-		goto err_free;
+		return ret;
 	}
 
-	clk_enable(i2c_dev->i2c_clk);
 
-	i2c_set_adapdata(&i2c_dev->adapter, i2c_dev);
-	i2c_dev->adapter.owner = THIS_MODULE;
-	i2c_dev->adapter.class = I2C_CLASS_HWMON;
-	strlcpy(i2c_dev->adapter.name, "Tegra I2C adapter",
-		sizeof(i2c_dev->adapter.name));
-	i2c_dev->adapter.algo = &tegra_i2c_algo;
-	i2c_dev->adapter.dev.parent = &pdev->dev;
-	i2c_dev->adapter.nr = pdev->id;
-	i2c_dev->adapter.dev.of_node = pdev->dev.of_node;
+	for (i = 0; i < nbus; i++) {
+		struct tegra_i2c_bus *i2c_bus = &i2c_dev->busses[i];
 
-	ret = i2c_add_numbered_adapter(&i2c_dev->adapter);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to add I2C adapter\n");
-		goto err_free_irq;
+		i2c_bus->dev = i2c_dev;
+		i2c_bus->mux = plat->bus_mux[i];
+		i2c_bus->mux_len = plat->bus_mux_len[i];
+		i2c_bus->bus_clk_rate = plat->bus_clk_rate[i] ?: 100000;
+
+		i2c_bus->scl_gpio = plat->scl_gpio[i];
+		i2c_bus->sda_gpio = plat->sda_gpio[i];
+
+		i2c_bus->adapter.dev.of_node = pdev->dev.of_node;
+		i2c_bus->adapter.algo = &tegra_i2c_algo;
+		i2c_set_adapdata(&i2c_bus->adapter, i2c_bus);
+		i2c_bus->adapter.owner = THIS_MODULE;
+		i2c_bus->adapter.class = I2C_CLASS_HWMON;
+		strlcpy(i2c_bus->adapter.name, "Tegra I2C adapter",
+			sizeof(i2c_bus->adapter.name));
+		i2c_bus->adapter.dev.parent = &pdev->dev;
+		i2c_bus->adapter.nr = plat->adapter_nr + i;
+
+		if (plat->retries)
+			i2c_bus->adapter.retries = plat->retries;
+		else
+			i2c_bus->adapter.retries = TEGRA_I2C_RETRIES;
+
+		if (plat->timeout)
+			i2c_bus->adapter.timeout = plat->timeout;
+
+		ret = i2c_add_numbered_adapter(&i2c_bus->adapter);
+		if (ret) {
+			dev_err(&pdev->dev, "Failed to add I2C adapter\n");
+			goto err_del_bus;
+		}
+		of_i2c_register_devices(&i2c_bus->adapter);
+
+		i2c_dev->bus_count++;
 	}
-
-	of_i2c_register_devices(&i2c_dev->adapter);
 
 	return 0;
-err_free_irq:
-	free_irq(i2c_dev->irq, i2c_dev);
-err_free:
-	kfree(i2c_dev);
-err_i2c_clk_put:
-	clk_put(i2c_clk);
-err_clk_put:
-	clk_put(clk);
-err_release_region:
-	release_mem_region(iomem->start, resource_size(iomem));
-err_iounmap:
-	iounmap(base);
+
+err_del_bus:
+	while (i2c_dev->bus_count--)
+		i2c_del_adapter(&i2c_dev->busses[i2c_dev->bus_count].adapter);
 	return ret;
 }
 
-static int tegra_i2c_remove(struct platform_device *pdev)
+static int __devexit tegra_i2c_remove(struct platform_device *pdev)
 {
 	struct tegra_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
-	i2c_del_adapter(&i2c_dev->adapter);
-	free_irq(i2c_dev->irq, i2c_dev);
-	clk_put(i2c_dev->i2c_clk);
-	clk_put(i2c_dev->clk);
-	release_mem_region(i2c_dev->iomem->start,
-		resource_size(i2c_dev->iomem));
-	iounmap(i2c_dev->base);
-	kfree(i2c_dev);
+
+	while (i2c_dev->bus_count--)
+		i2c_del_adapter(&i2c_dev->busses[i2c_dev->bus_count].adapter);
+
+	if (i2c_dev->is_clkon_always)
+		tegra_i2c_clock_disable(i2c_dev);
 	return 0;
 }
 
 #ifdef CONFIG_PM
-static int tegra_i2c_suspend(struct platform_device *pdev, pm_message_t state)
+static int tegra_i2c_suspend_noirq(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
 
-	i2c_lock_adapter(&i2c_dev->adapter);
+	rt_mutex_lock(&i2c_dev->dev_lock);
+
 	i2c_dev->is_suspended = true;
-	i2c_unlock_adapter(&i2c_dev->adapter);
+	if (i2c_dev->is_clkon_always)
+		tegra_i2c_clock_disable(i2c_dev);
+
+	rt_mutex_unlock(&i2c_dev->dev_lock);
 
 	return 0;
 }
 
-static int tegra_i2c_resume(struct platform_device *pdev)
+static int tegra_i2c_resume_noirq(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_i2c_dev *i2c_dev = platform_get_drvdata(pdev);
 	int ret;
 
-	i2c_lock_adapter(&i2c_dev->adapter);
+	rt_mutex_lock(&i2c_dev->dev_lock);
+
+	if (i2c_dev->is_clkon_always)
+		tegra_i2c_clock_enable(i2c_dev);
 
 	ret = tegra_i2c_init(i2c_dev);
 
 	if (ret) {
-		i2c_unlock_adapter(&i2c_dev->adapter);
+		rt_mutex_unlock(&i2c_dev->dev_lock);
 		return ret;
 	}
 
 	i2c_dev->is_suspended = false;
 
-	i2c_unlock_adapter(&i2c_dev->adapter);
+	rt_mutex_unlock(&i2c_dev->dev_lock);
 
 	return 0;
 }
+
+static const struct dev_pm_ops tegra_i2c_pm = {
+	.suspend_noirq = tegra_i2c_suspend_noirq,
+	.resume_noirq = tegra_i2c_resume_noirq,
+};
+#define TEGRA_I2C_PM	(&tegra_i2c_pm)
+#else
+#define TEGRA_I2C_PM	NULL
 #endif
 
 #if defined(CONFIG_OF)
@@ -744,21 +1083,16 @@ static const struct of_device_id tegra_i2c_of_match[] __devinitconst = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, tegra_i2c_of_match);
-#else
-#define tegra_i2c_of_match NULL
 #endif
 
 static struct platform_driver tegra_i2c_driver = {
 	.probe   = tegra_i2c_probe,
-	.remove  = tegra_i2c_remove,
-#ifdef CONFIG_PM
-	.suspend = tegra_i2c_suspend,
-	.resume  = tegra_i2c_resume,
-#endif
+	.remove  = __devexit_p(tegra_i2c_remove),
 	.driver  = {
 		.name  = "tegra-i2c",
 		.owner = THIS_MODULE,
-		.of_match_table = tegra_i2c_of_match,
+		.of_match_table = of_match_ptr(tegra_i2c_of_match),
+		.pm    = TEGRA_I2C_PM,
 	},
 };
 

@@ -94,6 +94,8 @@ source "drivers/memstick/Kconfig"
 
 source "drivers/leds/Kconfig"
 
+source "drivers/switch/Kconfig"
+
 source "drivers/accessibility/Kconfig"
 
 source "drivers/infiniband/Kconfig"
@@ -129,5 +131,7 @@ source "drivers/clocksource/Kconfig"
 source "drivers/iommu/Kconfig"
 
 source "drivers/virt/Kconfig"
+
+source "drivers/ril/Kconfig"
 
 endmenu

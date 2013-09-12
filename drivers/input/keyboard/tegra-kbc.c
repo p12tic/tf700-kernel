@@ -48,6 +48,7 @@
 #define KBC_DEBOUNCE_CNT_SHIFT(cnt)	(cnt << 4)
 #define KBC_CONTROL_FIFO_CNT_INT_EN	(1 << 3)
 #define KBC_CONTROL_KBC_EN		(1 << 0)
+#define KBC_CONTROL_KP_INT_EN		(1<<1)
 
 /* KBC Interrupt Register */
 #define KBC_INT_0	0x4
@@ -55,6 +56,7 @@
 
 #define KBC_ROW_CFG0_0	0x8
 #define KBC_COL_CFG0_0	0x18
+#define KBC_TO_CNT_0	0x24
 #define KBC_INIT_DLY_0	0x28
 #define KBC_RPT_DLY_0	0x2c
 #define KBC_KP_ENT0_0	0x30
@@ -62,11 +64,15 @@
 #define KBC_ROW0_MASK_0	0x38
 
 #define KBC_ROW_SHIFT	3
+#define DEFAULT_SCAN_COUNT 2
+#define DEFAULT_INIT_DLY   5
 
 struct tegra_kbc {
 	void __iomem *mmio;
 	struct input_dev *idev;
 	unsigned int irq;
+	unsigned int wake_enable_rows;
+	unsigned int wake_enable_cols;
 	spinlock_t lock;
 	unsigned int repoll_dly;
 	unsigned long cp_dly_jiffies;
@@ -78,6 +84,9 @@ struct tegra_kbc {
 	unsigned int num_pressed_keys;
 	struct timer_list timer;
 	struct clk *clk;
+	int is_open;
+	unsigned long scan_timeout_count;
+	unsigned long one_scan_time;
 };
 
 static const u32 tegra_kbc_default_keymap[] = {
@@ -417,11 +426,21 @@ static void tegra_kbc_setup_wakekeys(struct tegra_kbc *kbc, bool filter)
 	int i;
 	unsigned int rst_val;
 
-	/* Either mask all keys or none. */
-	rst_val = (filter && !pdata->wakeup) ? ~0 : 0;
+	BUG_ON(pdata->wake_cnt > KBC_MAX_KEY);
+	rst_val = (filter && pdata->wake_cnt) ? ~0 : 0;
 
 	for (i = 0; i < KBC_MAX_ROW; i++)
 		writel(rst_val, kbc->mmio + KBC_ROW0_MASK_0 + i * 4);
+
+	if (filter) {
+		for (i = 0; i < pdata->wake_cnt; i++) {
+			u32 val, addr;
+			addr = pdata->wake_cfg[i].row * 4 + KBC_ROW0_MASK_0;
+			val = readl(kbc->mmio + addr);
+			val &= ~(1 << pdata->wake_cfg[i].col);
+			writel(val, kbc->mmio + addr);
+		}
+	}
 }
 
 static void tegra_kbc_config_pins(struct tegra_kbc *kbc)
@@ -442,11 +461,14 @@ static void tegra_kbc_config_pins(struct tegra_kbc *kbc)
 		row_cfg &= ~r_mask;
 		col_cfg &= ~c_mask;
 
-		if (pdata->pin_cfg[i].is_row)
-			row_cfg |= ((pdata->pin_cfg[i].num << 1) | 1) << r_shft;
-		else
-			col_cfg |= ((pdata->pin_cfg[i].num << 1) | 1) << c_shft;
-
+		if (pdata->pin_cfg[i].en) {
+			if (pdata->pin_cfg[i].is_row)
+				row_cfg |= ((pdata->pin_cfg[i].num << 1) | 1)
+						<< r_shft;
+			else
+				col_cfg |= ((pdata->pin_cfg[i].num << 1) | 1)
+						<< c_shft;
+		}
 		writel(row_cfg, kbc->mmio + r_offs);
 		writel(col_cfg, kbc->mmio + c_offs);
 	}
@@ -460,6 +482,7 @@ static int tegra_kbc_start(struct tegra_kbc *kbc)
 	u32 val = 0;
 
 	clk_enable(kbc->clk);
+	kbc->is_open = 1;
 
 	/* Reset the KBC controller to clear all previous status.*/
 	tegra_periph_reset_assert(kbc->clk);
@@ -478,7 +501,11 @@ static int tegra_kbc_start(struct tegra_kbc *kbc)
 	val |= KBC_FIFO_TH_CNT_SHIFT(1); /* set fifo interrupt threshold to 1 */
 	val |= KBC_CONTROL_FIFO_CNT_INT_EN;  /* interrupt on FIFO threshold */
 	val |= KBC_CONTROL_KBC_EN;     /* enable */
+	val |= KBC_CONTROL_KP_INT_EN;
 	writel(val, kbc->mmio + KBC_CONTROL_0);
+
+	writel(DEFAULT_INIT_DLY, kbc->mmio + KBC_INIT_DLY_0);
+	writel(kbc->scan_timeout_count, kbc->mmio + KBC_TO_CNT_0);
 
 	/*
 	 * Compute the delay(ns) from interrupt mode to continuous polling
@@ -526,6 +553,7 @@ static void tegra_kbc_stop(struct tegra_kbc *kbc)
 	del_timer_sync(&kbc->timer);
 
 	clk_disable(kbc->clk);
+	kbc->is_open = 0;
 }
 
 static int tegra_kbc_open(struct input_dev *dev)
@@ -583,9 +611,13 @@ static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 	struct resource *res;
 	int irq;
 	int err;
+	int i;
 	int num_rows = 0;
 	unsigned int debounce_cnt;
 	unsigned int scan_time_rows;
+	unsigned long scan_tc;
+
+	dev_dbg(&pdev->dev, "KBC: tegra_kbc_probe\n");
 
 	if (!pdata)
 		return -EINVAL;
@@ -639,6 +671,14 @@ static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 		goto err_iounmap;
 	}
 
+	kbc->is_open = 0;
+	kbc->wake_enable_rows = 0;
+	kbc->wake_enable_cols = 0;
+	for (i = 0; i < pdata->wake_cnt; i++) {
+		kbc->wake_enable_rows |= (1 << pdata->wake_cfg[i].row);
+		kbc->wake_enable_cols |= (1 << pdata->wake_cfg[i].col);
+	}
+
 	/*
 	 * The time delay between two consecutive reads of the FIFO is
 	 * the sum of the repeat time and the time taken for scanning
@@ -650,6 +690,17 @@ static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 	kbc->repoll_dly = KBC_ROW_SCAN_DLY + scan_time_rows + pdata->repeat_cnt;
 	kbc->repoll_dly = DIV_ROUND_UP(kbc->repoll_dly, KBC_CYCLE_MS);
 
+	if (pdata->scan_count)
+		scan_tc = DEFAULT_INIT_DLY + (scan_time_rows +
+				pdata->repeat_cnt) * pdata->scan_count;
+	else
+		scan_tc = DEFAULT_INIT_DLY + (scan_time_rows +
+				pdata->repeat_cnt) * DEFAULT_SCAN_COUNT;
+
+	kbc->one_scan_time = scan_time_rows + pdata->repeat_cnt;
+	/* Bit 19:0 is for scan timeout count */
+	kbc->scan_timeout_count = scan_tc & 0xFFFFF;
+
 	input_dev->name = pdev->name;
 	input_dev->id.bustype = BUS_HOST;
 	input_dev->dev.parent = &pdev->dev;
@@ -658,7 +709,10 @@ static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 
 	input_set_drvdata(input_dev, kbc);
 
-	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_REP);
+	input_dev->evbit[0] = BIT_MASK(EV_KEY);
+	if (!pdata->disable_ev_rep)
+		input_dev->evbit[0] |= BIT_MASK(EV_REP);
+
 	input_set_capability(input_dev, EV_MSC, MSC_SCAN);
 
 	input_dev->keycode = kbc->keycode;
@@ -733,8 +787,31 @@ static int tegra_kbc_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_kbc *kbc = platform_get_drvdata(pdev);
+	int timeout;
+	unsigned long int_st;
+
+	dev_dbg(&pdev->dev, "KBC: tegra_kbc_suspend\n");
+
+	if (!kbc->is_open)
+		return 0;
 
 	if (device_may_wakeup(&pdev->dev)) {
+		timeout = DIV_ROUND_UP((kbc->scan_timeout_count +
+				kbc->one_scan_time), 32);
+		timeout = DIV_ROUND_UP(timeout, 10);
+		while (timeout--) {
+			int_st = readl(kbc->mmio + KBC_INT_0);
+			if (int_st & 0x8) {
+				msleep(10);
+				continue;
+			}
+			break;
+		}
+		int_st = readl(kbc->mmio + KBC_INT_0);
+		if (int_st & 0x8)
+			dev_err(&pdev->dev, "KBC: Controller is not in "
+				"wakeupmode\n");
+
 		tegra_kbc_setup_wakekeys(kbc, true);
 		enable_irq_wake(kbc->irq);
 		/* Forcefully clear the interrupt status */
@@ -755,6 +832,9 @@ static int tegra_kbc_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct tegra_kbc *kbc = platform_get_drvdata(pdev);
 	int err = 0;
+
+	if (!kbc->is_open)
+		return tegra_kbc_start(kbc);
 
 	if (device_may_wakeup(&pdev->dev)) {
 		disable_irq_wake(kbc->irq);

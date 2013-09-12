@@ -41,28 +41,28 @@ static inline int irq_to_tps65910_irq(struct tps65910 *tps65910,
 static irqreturn_t tps65910_irq(int irq, void *irq_data)
 {
 	struct tps65910 *tps65910 = irq_data;
+	unsigned int reg;
 	u32 irq_sts;
 	u32 irq_mask;
-	u8 reg;
 	int i;
 
-	tps65910->read(tps65910, TPS65910_INT_STS, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_STS, &reg);
 	irq_sts = reg;
-	tps65910->read(tps65910, TPS65910_INT_STS2, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_STS2, &reg);
 	irq_sts |= reg << 8;
 	switch (tps65910_chip_id(tps65910)) {
 	case TPS65911:
-		tps65910->read(tps65910, TPS65910_INT_STS3, 1, &reg);
+		tps65910_reg_read(tps65910, TPS65910_INT_STS3, &reg);
 		irq_sts |= reg << 16;
 	}
 
-	tps65910->read(tps65910, TPS65910_INT_MSK, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_MSK, &reg);
 	irq_mask = reg;
-	tps65910->read(tps65910, TPS65910_INT_MSK2, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_MSK2, &reg);
 	irq_mask |= reg << 8;
 	switch (tps65910_chip_id(tps65910)) {
 	case TPS65911:
-		tps65910->read(tps65910, TPS65910_INT_MSK3, 1, &reg);
+		tps65910_reg_read(tps65910, TPS65910_INT_MSK3, &reg);
 		irq_mask |= reg << 16;
 	}
 
@@ -82,13 +82,13 @@ static irqreturn_t tps65910_irq(int irq, void *irq_data)
 	/* Write the STS register back to clear IRQs we handled */
 	reg = irq_sts & 0xFF;
 	irq_sts >>= 8;
-	tps65910->write(tps65910, TPS65910_INT_STS, 1, &reg);
+	tps65910_reg_write(tps65910, TPS65910_INT_STS, reg);
 	reg = irq_sts & 0xFF;
-	tps65910->write(tps65910, TPS65910_INT_STS2, 1, &reg);
+	tps65910_reg_write(tps65910, TPS65910_INT_STS2, reg);
 	switch (tps65910_chip_id(tps65910)) {
 	case TPS65911:
 		reg = irq_sts >> 8;
-		tps65910->write(tps65910, TPS65910_INT_STS3, 1, &reg);
+		tps65910_reg_write(tps65910, TPS65910_INT_STS3, reg);
 	}
 
 	return IRQ_HANDLED;
@@ -105,27 +105,27 @@ static void tps65910_irq_sync_unlock(struct irq_data *data)
 {
 	struct tps65910 *tps65910 = irq_data_get_irq_chip_data(data);
 	u32 reg_mask;
-	u8 reg;
+	unsigned int reg;
 
-	tps65910->read(tps65910, TPS65910_INT_MSK, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_MSK, &reg);
 	reg_mask = reg;
-	tps65910->read(tps65910, TPS65910_INT_MSK2, 1, &reg);
+	tps65910_reg_read(tps65910, TPS65910_INT_MSK2, &reg);
 	reg_mask |= reg << 8;
 	switch (tps65910_chip_id(tps65910)) {
 	case TPS65911:
-		tps65910->read(tps65910, TPS65910_INT_MSK3, 1, &reg);
+		tps65910_reg_read(tps65910, TPS65910_INT_MSK3, &reg);
 		reg_mask |= reg << 16;
 	}
 
 	if (tps65910->irq_mask != reg_mask) {
 		reg = tps65910->irq_mask & 0xFF;
-		tps65910->write(tps65910, TPS65910_INT_MSK, 1, &reg);
+		tps65910_reg_write(tps65910, TPS65910_INT_MSK, reg);
 		reg = tps65910->irq_mask >> 8 & 0xFF;
-		tps65910->write(tps65910, TPS65910_INT_MSK2, 1, &reg);
+		tps65910_reg_write(tps65910, TPS65910_INT_MSK2, reg);
 		switch (tps65910_chip_id(tps65910)) {
 		case TPS65911:
 			reg = tps65910->irq_mask >> 16;
-			tps65910->write(tps65910, TPS65910_INT_MSK3, 1, &reg);
+			tps65910_reg_write(tps65910, TPS65910_INT_MSK3, reg);
 		}
 	}
 	mutex_unlock(&tps65910->irq_lock);
@@ -145,12 +145,23 @@ static void tps65910_irq_disable(struct irq_data *data)
 	tps65910->irq_mask |= ( 1 << irq_to_tps65910_irq(tps65910, data->irq));
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int tps65910_irq_set_wake(struct irq_data *data, unsigned int enable)
+{
+	struct tps65910 *tps65910 = irq_data_get_irq_chip_data(data);
+	return irq_set_irq_wake(tps65910->chip_irq, enable);
+}
+#else
+#define tps65910_irq_set_wake NULL
+#endif
+
 static struct irq_chip tps65910_irq_chip = {
 	.name = "tps65910",
 	.irq_bus_lock = tps65910_irq_lock,
 	.irq_bus_sync_unlock = tps65910_irq_sync_unlock,
 	.irq_disable = tps65910_irq_disable,
 	.irq_enable = tps65910_irq_enable,
+	.irq_set_wake = tps65910_irq_set_wake,
 };
 
 int tps65910_irq_init(struct tps65910 *tps65910, int irq,
@@ -215,6 +226,7 @@ int tps65910_irq_init(struct tps65910 *tps65910, int irq,
 
 int tps65910_irq_exit(struct tps65910 *tps65910)
 {
-	free_irq(tps65910->chip_irq, tps65910);
+	if (tps65910->chip_irq)
+		free_irq(tps65910->chip_irq, tps65910);
 	return 0;
 }
