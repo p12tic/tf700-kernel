@@ -258,7 +258,7 @@ ENDPROC(cpu_v7_set_pte_ext)
 
 .globl	cpu_v7_suspend_size
 .equ	cpu_v7_suspend_size, (4 * 10) + cpu_v7_debug_suspend_size
-#ifdef CONFIG_PM_SLEEP
+#ifdef CONFIG_ARM_CPU_SUSPEND
 ENTRY(cpu_v7_do_suspend)
 	stmfd	sp!, {r0, r3 - r11, lr}
 	mrc	p15, 0, r3, c15, c0, 1	@ diag
