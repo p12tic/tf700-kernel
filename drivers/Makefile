@@ -136,3 +136,4 @@ obj-$(CONFIG_VIRT_DRIVERS)	+= virt/
 
 # ASUS customized RIL drivers
 obj-$(CONFIG_RIL)			+= ril/
+obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/

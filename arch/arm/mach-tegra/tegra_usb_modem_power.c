@@ -31,7 +31,7 @@
 #include <linux/suspend.h>
 #include <linux/slab.h>
 #include <linux/wakelock.h>
-#include <linux/pm_qos_params.h>
+#include <linux/pm_qos.h>
 #include <mach/tegra_usb_modem_power.h>
 
 #define BOOST_CPU_FREQ_MIN	1200000
@@ -54,7 +54,7 @@ struct tegra_usb_modem {
 	struct usb_interface *intf;	/* first modem usb interface */
 	struct workqueue_struct *wq;	/* modem workqueue */
 	struct delayed_work recovery_work;	/* modem recovery work */
-	struct pm_qos_request_list cpu_boost_req; /* min CPU freq request */
+	struct pm_qos_request cpu_boost_req; /* min CPU freq request */
 	struct work_struct cpu_boost_work;	/* CPU freq boost work */
 	struct delayed_work cpu_unboost_work;	/* CPU freq unboost work */
 	const struct tegra_modem_operations *ops;	/* modem operations */

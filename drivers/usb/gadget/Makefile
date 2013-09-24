@@ -74,9 +74,5 @@ obj-$(CONFIG_USB_G_MULTI)	+= g_multi.o
 obj-$(CONFIG_USB_G_NOKIA)	+= g_nokia.o
 obj-$(CONFIG_USB_G_WEBCAM)	+= g_webcam.o
 obj-$(CONFIG_USB_G_NCM)		+= g_ncm.o
-<<<<<<< HEAD
 obj-$(CONFIG_USB_G_ANDROID)	+= g_android.o
-||||||| merged common ancestors
-=======
 obj-$(CONFIG_USB_G_ACM_MS)	+= g_acm_ms.o
->>>>>>> 1be025d3cb40cd295123af2c394f7229ef9b30ca

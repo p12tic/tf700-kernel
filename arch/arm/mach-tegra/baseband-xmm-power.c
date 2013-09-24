@@ -31,7 +31,7 @@
 #include <linux/usb.h>
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
-#include <linux/pm_qos_params.h>
+#include <linux/pm_qos.h>
 #include <mach/usb_phy.h>
 #include <linux/regulator/consumer.h>
 #include "board.h"
@@ -108,7 +108,7 @@ static DEFINE_MUTEX(xmm_onoff_mutex);
 static bool system_suspending;
 static struct regulator *enterprise_hsic_reg;
 static bool _hsic_reg_status;
-static struct pm_qos_request_list boost_cpu_freq_req;
+static struct pm_qos_request boost_cpu_freq_req;
 static struct delayed_work pm_qos_work;
 static struct regulator *reg_cardhu_hsic;    /* LDO6 */
 static int waiting_falling_flag = 0;

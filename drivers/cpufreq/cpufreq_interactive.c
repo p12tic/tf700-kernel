@@ -30,7 +30,7 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <asm/cputime.h>
-#include <linux/pm_qos_params.h>
+#include <linux/pm_qos.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpufreq_interactive.h>
@@ -69,8 +69,8 @@ static spinlock_t down_cpumask_lock;
 static struct mutex set_speed_lock;
 
 struct cpufreq_interactive_core_lock {
-	struct pm_qos_request_list qos_min_req;
-	struct pm_qos_request_list qos_max_req;
+	struct pm_qos_request qos_min_req;
+	struct pm_qos_request qos_max_req;
 	struct task_struct *lock_task;
 	struct work_struct unlock_work;
 	struct timer_list unlock_timer;

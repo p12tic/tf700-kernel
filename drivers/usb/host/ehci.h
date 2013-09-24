@@ -152,7 +152,6 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		controller_remote_wakeup:1;
 	unsigned		broken_hostpc_phcd:1;
 #endif
-	unsigned		frame_index_bug:1; /* MosChip (AKA NetMos) */
 
 	/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
