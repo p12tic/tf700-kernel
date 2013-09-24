@@ -20,6 +20,7 @@
 #include <linux/gpio.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <mach/gpio-tegra.h>
 
 #include "board.h"
 

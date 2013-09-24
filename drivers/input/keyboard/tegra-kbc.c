@@ -397,9 +397,10 @@ static void tegra_kbc_keypress_timer(unsigned long data)
 static irqreturn_t tegra_kbc_isr(int irq, void *args)
 {
 	struct tegra_kbc *kbc = args;
-	u32 val, ctl;
+	u32 val;
+	unsigned long flags;
 
-	spin_lock_irqsave(&kbc->lock, false);
+	spin_lock_irqsave(&kbc->lock, flags);
 
 	/*
 	 * Quickly bail out & reenable interrupts if the fifo threshold
@@ -419,7 +420,7 @@ static irqreturn_t tegra_kbc_isr(int irq, void *args)
 		tegra_kbc_set_fifo_interrupt(kbc, true);
 	}
 
-	spin_unlock_irqrestore(&kbc->lock, false);
+	spin_unlock_irqrestore(&kbc->lock, flags);
 
 
 	return IRQ_HANDLED;

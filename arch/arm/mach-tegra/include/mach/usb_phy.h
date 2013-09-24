@@ -38,7 +38,7 @@ void tegra_usb_phy_close(struct tegra_usb_phy *phy);
  * Handles interrupts specific to the phy interface
  * Note: udc or ehci driver will handle the controller interrupts
  */
-int tegra_usb_phy_irq(struct tegra_usb_phy *phy);
+irqreturn_t tegra_usb_phy_irq(struct tegra_usb_phy *phy);
 
 /**
  * Initializes the phy specific functions after phy is power on
