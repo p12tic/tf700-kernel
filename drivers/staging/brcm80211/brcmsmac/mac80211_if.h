@@ -19,27 +19,24 @@
 
 #include <linux/timer.h>
 #include <linux/interrupt.h>
-#include <linux/workqueue.h>
-
-#include "ucode_loader.h"
-/*
- * Starting index for 5G rates in the
- * legacy rate table.
- */
-#define BRCMS_LEGACY_5G_RATE_OFFSET	4
 
 /* softmac ioctl definitions */
 #define BRCMS_SET_SHORTSLOT_OVERRIDE		146
 
+
+/* BMAC Note: High-only driver is no longer working in softirq context as it needs to block and
+ * sleep so perimeter lock has to be a semaphore instead of spinlock. This requires timers to be
+ * submitted to workqueue instead of being on kernel timer
+ */
 struct brcms_timer {
-	struct delayed_work dly_wrk;
+	struct timer_list timer;
 	struct brcms_info *wl;
-	void (*fn) (void *);	/* function called upon expiration */
-	void *arg;		/* fixed argument provided to called function */
+	void (*fn) (void *);
+	void *arg;		/* argument to fn */
 	uint ms;
 	bool periodic;
-	bool set;		/* indicates if timer is active */
-	struct brcms_timer *next;	/* for freeing on unload */
+	bool set;
+	struct brcms_timer *next;
 #ifdef BCMDBG
 	char *name;		/* Description of the timer */
 #endif
@@ -60,7 +57,7 @@ struct brcms_firmware {
 
 struct brcms_info {
 	struct brcms_pub *pub;		/* pointer to public wlc state */
-	struct brcms_c_info *wlc;	/* pointer to private common data */
+	void *wlc;		/* pointer to private common os-independent data */
 	u32 magic;
 
 	int irq;
@@ -68,8 +65,9 @@ struct brcms_info {
 	spinlock_t lock;	/* per-device perimeter lock */
 	spinlock_t isr_lock;	/* per-device ISR synchronization lock */
 
-	/* regsva for unmap in brcms_free() */
-	void __iomem *regsva;	/* opaque chip registers virtual address */
+	/* bus type and regsva for unmap in brcms_free() */
+	uint bcm_bustype;	/* bus type */
+	void *regsva;		/* opaque chip registers virtual address */
 
 	/* timer related fields */
 	atomic_t callbacks;	/* # outstanding callback functions */
@@ -77,9 +75,11 @@ struct brcms_info {
 
 	struct tasklet_struct tasklet;	/* dpc tasklet */
 	bool resched;		/* dpc needs to be and is rescheduled */
+#ifdef LINUXSTA_PS
+	u32 pci_psstate[16];	/* pci ps-state save/restore */
+#endif
 	struct brcms_firmware fw;
 	struct wiphy *wiphy;
-	struct brcms_ucode ucode;
 };
 
 /* misc callbacks */
@@ -92,17 +92,17 @@ extern int brcms_up(struct brcms_info *wl);
 extern void brcms_down(struct brcms_info *wl);
 extern void brcms_txflowcontrol(struct brcms_info *wl, struct brcms_if *wlif,
 				bool state, int prio);
+extern bool wl_alloc_dma_resources(struct brcms_info *wl, uint dmaddrwidth);
 extern bool brcms_rfkill_set_hw_state(struct brcms_info *wl);
 
 /* timer functions */
 extern struct brcms_timer *brcms_init_timer(struct brcms_info *wl,
 				      void (*fn) (void *arg), void *arg,
 				      const char *name);
-extern void brcms_free_timer(struct brcms_timer *timer);
-extern void brcms_add_timer(struct brcms_timer *timer, uint ms, int periodic);
-extern bool brcms_del_timer(struct brcms_timer *timer);
+extern void brcms_free_timer(struct brcms_info *wl, struct brcms_timer *timer);
+extern void brcms_add_timer(struct brcms_info *wl, struct brcms_timer *timer,
+			    uint ms, int periodic);
+extern bool brcms_del_timer(struct brcms_info *wl, struct brcms_timer *timer);
 extern void brcms_msleep(struct brcms_info *wl, uint ms);
-extern void brcms_dpc(unsigned long data);
-extern void brcms_timer(struct brcms_timer *t);
 
 #endif				/* _BRCM_MAC80211_IF_H_ */

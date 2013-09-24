@@ -19,7 +19,7 @@
 
 #include "defs.h"		/* for PAD macro */
 
-struct chipcregs {
+typedef volatile struct {
 	u32 chipid;		/* 0x0 */
 	u32 capabilities;
 	u32 corecontrol;	/* corerev >= 1 */
@@ -214,7 +214,7 @@ struct chipcregs {
 	u32 pmu_xtalfreq;	/* 0x66C, pmurev >= 10 */
 	u32 PAD[100];
 	u16 sromotp[768];
-};
+} chipcregs_t;
 
 /* chipid */
 #define	CID_ID_MASK		0x0000ffff	/* Chip Id mask */
@@ -231,8 +231,7 @@ struct chipcregs {
 #define	CC_CAP_UARTS_MASK	0x00000003	/* Number of UARTs */
 #define CC_CAP_MIPSEB		0x00000004	/* MIPS is in big-endian mode */
 #define CC_CAP_UCLKSEL		0x00000018	/* UARTs clock select */
-/* UARTs are driven by internal divided clock */
-#define CC_CAP_UINTCLK		0x00000008
+#define CC_CAP_UINTCLK		0x00000008	/* UARTs are driven by internal divided clock */
 #define CC_CAP_UARTGPIO		0x00000020	/* UARTs own GPIOs 15:12 */
 #define CC_CAP_EXTBUS_MASK	0x000000c0	/* External bus mask */
 #define CC_CAP_EXTBUS_NONE	0x00000000	/* No ExtBus present */
@@ -249,12 +248,10 @@ struct chipcregs {
 #define CC_CAP_BKPLN64		0x08000000	/* 64-bit backplane */
 #define	CC_CAP_PMU		0x10000000	/* PMU Present, rev >= 20 */
 #define	CC_CAP_SROM		0x40000000	/* Srom Present, rev >= 32 */
-/* Nand flash present, rev >= 35 */
-#define	CC_CAP_NFLASH		0x80000000
+#define	CC_CAP_NFLASH		0x80000000	/* Nand flash present, rev >= 35 */
 
 #define	CC_CAP2_SECI		0x00000001	/* SECI Present, rev >= 36 */
-/* GSIO (spi/i2c) present, rev >= 37 */
-#define	CC_CAP2_GSIO		0x00000002
+#define	CC_CAP2_GSIO		0x00000002	/* GSIO (spi/i2c) present, rev >= 37 */
 
 /* pmucapabilities */
 #define PCAP_REV_MASK	0x000000ff

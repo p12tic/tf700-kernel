@@ -14,21 +14,6 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef	_BRCM_SROM_H_
-#define	_BRCM_SROM_H_
-
-#include "types.h"
-
-/* Prototypes */
-extern int srom_var_init(struct si_pub *sih, uint bus, void *curmap,
-			 char **vars, uint *count);
-
-extern int srom_read(struct si_pub *sih, uint bus, void *curmap,
-		     uint byteoff, uint nbytes, u16 *buf, bool check_crc);
-
-/* parse standard PCMCIA cis, normally used by SB/PCMCIA/SDIO/SPI/OTP
- *   and extract from it into name=value pairs
- */
-extern int srom_parsecis(u8 **pcis, uint ciscnt,
-			 char **vars, uint *count);
-#endif				/* _BRCM_SROM_H_ */
+extern struct brcms_c_info *brcms_c_attach_malloc(uint unit, uint *err,
+						  uint devid);
+extern void brcms_c_detach_mfree(struct brcms_c_info *wlc);
