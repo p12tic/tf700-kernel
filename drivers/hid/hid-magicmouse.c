@@ -407,6 +407,13 @@ static int magicmouse_setup_input(struct hid_device *hdev, struct hid_input *hi)
 			__set_bit(REL_HWHEEL, input->relbit);
 		}
 	} else { /* USB_DEVICE_ID_APPLE_MAGICTRACKPAD */
+		/* input->keybit is initialized with incorrect button info
+		 * for Magic Trackpad. There really is only one physical
+		 * button (BTN_LEFT == BTN_MOUSE). Make sure we don't
+		 * advertise buttons that don't exist...
+		 */
+		__clear_bit(BTN_RIGHT, input->keybit);
+		__clear_bit(BTN_MIDDLE, input->keybit);
 		__set_bit(BTN_MOUSE, input->keybit);
 		__set_bit(BTN_TOOL_FINGER, input->keybit);
 		__set_bit(BTN_TOOL_DOUBLETAP, input->keybit);
