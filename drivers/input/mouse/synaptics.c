@@ -168,8 +168,8 @@ static int synaptics_capability(struct psmouse *psmouse)
 
 	if (SYN_EXT_CAP_REQUESTS(priv->capabilities) >= 1) {
 		if (synaptics_send_cmd(psmouse, SYN_QUE_EXT_CAPAB, cap)) {
-			printk(KERN_ERR "Synaptics claims to have extended capabilities,"
-			       " but I'm not able to read them.\n");
+			psmouse_warn(psmouse,
+				     "device claims to have extended capabilities, but I'm not able to read them.\n");
 		} else {
 			priv->ext_cap = (cap[0] << 16) | (cap[1] << 8) | cap[2];
 
@@ -184,8 +184,8 @@ static int synaptics_capability(struct psmouse *psmouse)
 
 	if (SYN_EXT_CAP_REQUESTS(priv->capabilities) >= 4) {
 		if (synaptics_send_cmd(psmouse, SYN_QUE_EXT_CAPAB_0C, cap)) {
-			printk(KERN_ERR "Synaptics claims to have extended capability 0x0c,"
-			       " but I'm not able to read it.\n");
+			psmouse_warn(psmouse,
+				     "device claims to have extended capability 0x0c, but I'm not able to read it.\n");
 		} else {
 			priv->ext_cap_0c = (cap[0] << 16) | (cap[1] << 8) | cap[2];
 		}
@@ -233,8 +233,8 @@ static int synaptics_resolution(struct psmouse *psmouse)
 	if (SYN_EXT_CAP_REQUESTS(priv->capabilities) >= 5 &&
 	    SYN_CAP_MAX_DIMENSIONS(priv->ext_cap_0c)) {
 		if (synaptics_send_cmd(psmouse, SYN_QUE_EXT_MAX_COORDS, resp)) {
-			printk(KERN_ERR "Synaptics claims to have max coordinates"
-			       " query, but I'm not able to read it.\n");
+			psmouse_warn(psmouse,
+				     "device claims to have max coordinates query, but I'm not able to read it.\n");
 		} else {
 			priv->x_max = (resp[0] << 5) | ((resp[1] & 0x0f) << 1);
 			priv->y_max = (resp[2] << 5) | ((resp[1] & 0xf0) >> 3);
@@ -244,8 +244,8 @@ static int synaptics_resolution(struct psmouse *psmouse)
 	if (SYN_EXT_CAP_REQUESTS(priv->capabilities) >= 7 &&
 	    SYN_CAP_MIN_DIMENSIONS(priv->ext_cap_0c)) {
 		if (synaptics_send_cmd(psmouse, SYN_QUE_EXT_MIN_COORDS, resp)) {
-			printk(KERN_ERR "Synaptics claims to have min coordinates"
-			       " query, but I'm not able to read it.\n");
+			psmouse_warn(psmouse,
+				     "device claims to have min coordinates query, but I'm not able to read it.\n");
 		} else {
 			priv->x_min = (resp[0] << 5) | ((resp[1] & 0x0f) << 1);
 			priv->y_min = (resp[2] << 5) | ((resp[1] & 0xf0) >> 3);
@@ -389,7 +389,8 @@ static void synaptics_pt_activate(struct psmouse *psmouse)
 			priv->mode &= ~SYN_BIT_FOUR_BYTE_CLIENT;
 
 		if (synaptics_mode_cmd(psmouse, priv->mode))
-			printk(KERN_INFO "synaptics: failed to switch guest protocol\n");
+			psmouse_warn(psmouse,
+				     "failed to switch guest protocol\n");
 	}
 }
 
@@ -399,7 +400,8 @@ static void synaptics_pt_create(struct psmouse *psmouse)
 
 	serio = kzalloc(sizeof(struct serio), GFP_KERNEL);
 	if (!serio) {
-		printk(KERN_ERR "synaptics: not enough memory to allocate pass-through port\n");
+		psmouse_err(psmouse,
+			    "not enough memory for pass-through port\n");
 		return;
 	}
 
@@ -413,7 +415,8 @@ static void synaptics_pt_create(struct psmouse *psmouse)
 
 	psmouse->pt_activate = synaptics_pt_activate;
 
-	printk(KERN_INFO "serio: %s port at %s\n", serio->name, psmouse->phys);
+	psmouse_info(psmouse, "serio: %s port at %s\n",
+		     serio->name, psmouse->phys);
 	serio_register_port(serio);
 }
 
@@ -1050,13 +1053,15 @@ static void synaptics_process_packet(struct psmouse *psmouse)
 	input_sync(dev);
 }
 
-static int synaptics_validate_byte(unsigned char packet[], int idx, unsigned char pkt_type)
+static int synaptics_validate_byte(struct psmouse *psmouse,
+				   int idx, unsigned char pkt_type)
 {
 	static const unsigned char newabs_mask[]	= { 0xC8, 0x00, 0x00, 0xC8, 0x00 };
 	static const unsigned char newabs_rel_mask[]	= { 0xC0, 0x00, 0x00, 0xC0, 0x00 };
 	static const unsigned char newabs_rslt[]	= { 0x80, 0x00, 0x00, 0xC0, 0x00 };
 	static const unsigned char oldabs_mask[]	= { 0xC0, 0x60, 0x00, 0xC0, 0x60 };
 	static const unsigned char oldabs_rslt[]	= { 0xC0, 0x00, 0x00, 0x80, 0x00 };
+	const char *packet = psmouse->packet;
 
 	if (idx < 0 || idx > 4)
 		return 0;
@@ -1074,7 +1079,7 @@ static int synaptics_validate_byte(unsigned char packet[], int idx, unsigned cha
 		return (packet[idx] & oldabs_mask[idx]) == oldabs_rslt[idx];
 
 	default:
-		printk(KERN_ERR "synaptics: unknown packet type %d\n", pkt_type);
+		psmouse_err(psmouse, "unknown packet type %d\n", pkt_type);
 		return 0;
 	}
 }
@@ -1084,8 +1089,8 @@ static unsigned char synaptics_detect_pkt_type(struct psmouse *psmouse)
 	int i;
 
 	for (i = 0; i < 5; i++)
-		if (!synaptics_validate_byte(psmouse->packet, i, SYN_NEWABS_STRICT)) {
-			printk(KERN_INFO "synaptics: using relaxed packet validation\n");
+		if (!synaptics_validate_byte(psmouse, i, SYN_NEWABS_STRICT)) {
+			psmouse_info(psmouse, "using relaxed packet validation\n");
 			return SYN_NEWABS_RELAXED;
 		}
 
@@ -1110,7 +1115,7 @@ static psmouse_ret_t synaptics_process_byte(struct psmouse *psmouse)
 		return PSMOUSE_FULL_PACKET;
 	}
 
-	return synaptics_validate_byte(psmouse->packet, psmouse->pktcnt - 1, priv->pkt_type) ?
+	return synaptics_validate_byte(psmouse, psmouse->pktcnt - 1, priv->pkt_type) ?
 		PSMOUSE_GOOD_DATA : PSMOUSE_BAD_DATA;
 }
 
@@ -1233,21 +1238,21 @@ static int synaptics_reconnect(struct psmouse *psmouse)
 		return -1;
 
 	if (retry > 1)
-		printk(KERN_DEBUG "Synaptics reconnected after %d tries\n",
-			retry);
+		psmouse_dbg(psmouse, "reconnected after %d tries\n", retry);
 
 	if (synaptics_query_hardware(psmouse)) {
-		printk(KERN_ERR "Unable to query Synaptics hardware.\n");
+		psmouse_err(psmouse, "Unable to query device.\n");
 		return -1;
 	}
 
 	if (synaptics_set_absolute_mode(psmouse)) {
-		printk(KERN_ERR "Unable to initialize Synaptics hardware.\n");
+		psmouse_err(psmouse, "Unable to initialize device.\n");
 		return -1;
 	}
 
 	if (synaptics_set_advanced_gesture_mode(psmouse)) {
-		printk(KERN_ERR "Advanced gesture mode reconnect failed.\n");
+		psmouse_err(psmouse,
+			    "Advanced gesture mode reconnect failed.\n");
 		return -1;
 	}
 
@@ -1255,12 +1260,12 @@ static int synaptics_reconnect(struct psmouse *psmouse)
 	    old_priv.model_id != priv->model_id ||
 	    old_priv.capabilities != priv->capabilities ||
 	    old_priv.ext_cap != priv->ext_cap) {
-		printk(KERN_ERR "Synaptics hardware appears to be different: "
-			"id(%ld-%ld), model(%ld-%ld), caps(%lx-%lx), ext(%lx-%lx).\n",
-			old_priv.identity, priv->identity,
-			old_priv.model_id, priv->model_id,
-			old_priv.capabilities, priv->capabilities,
-			old_priv.ext_cap, priv->ext_cap);
+		psmouse_err(psmouse,
+			    "hardware appears to be different: id(%ld-%ld), model(%ld-%ld), caps(%lx-%lx), ext(%lx-%lx).\n",
+			    old_priv.identity, priv->identity,
+			    old_priv.model_id, priv->model_id,
+			    old_priv.capabilities, priv->capabilities,
+			    old_priv.ext_cap, priv->ext_cap);
 		return -1;
 	}
 
@@ -1341,7 +1346,8 @@ int synaptics_init(struct psmouse *psmouse)
 	 * just fine.
 	 */
 	if (broken_olpc_ec) {
-		printk(KERN_INFO "synaptics: OLPC XO detected, not enabling Synaptics protocol.\n");
+		psmouse_info(psmouse,
+			     "OLPC XO detected, not enabling Synaptics protocol.\n");
 		return -ENODEV;
 	}
 
@@ -1352,26 +1358,28 @@ int synaptics_init(struct psmouse *psmouse)
 	psmouse_reset(psmouse);
 
 	if (synaptics_query_hardware(psmouse)) {
-		printk(KERN_ERR "Unable to query Synaptics hardware.\n");
+		psmouse_err(psmouse, "Unable to query device.\n");
 		goto init_fail;
 	}
 
 	if (synaptics_set_absolute_mode(psmouse)) {
-		printk(KERN_ERR "Unable to initialize Synaptics hardware.\n");
+		psmouse_err(psmouse, "Unable to initialize device.\n");
 		goto init_fail;
 	}
 
 	if (synaptics_set_advanced_gesture_mode(psmouse)) {
-		printk(KERN_ERR "Advanced gesture mode init failed.\n");
+		psmouse_err(psmouse, "Advanced gesture mode init failed.\n");
 		goto init_fail;
 	}
 
 	priv->pkt_type = SYN_MODEL_NEWABS(priv->model_id) ? SYN_NEWABS : SYN_OLDABS;
 
-	printk(KERN_INFO "Synaptics Touchpad, model: %ld, fw: %ld.%ld, id: %#lx, caps: %#lx/%#lx/%#lx\n",
-		SYN_ID_MODEL(priv->identity),
-		SYN_ID_MAJOR(priv->identity), SYN_ID_MINOR(priv->identity),
-		priv->model_id, priv->capabilities, priv->ext_cap, priv->ext_cap_0c);
+	psmouse_info(psmouse,
+		     "Touchpad model: %ld, fw: %ld.%ld, id: %#lx, caps: %#lx/%#lx/%#lx\n",
+		     SYN_ID_MODEL(priv->identity),
+		     SYN_ID_MAJOR(priv->identity), SYN_ID_MINOR(priv->identity),
+		     priv->model_id,
+		     priv->capabilities, priv->ext_cap, priv->ext_cap_0c);
 
 	set_input_params(psmouse->dev, priv);
 
@@ -1403,8 +1411,9 @@ int synaptics_init(struct psmouse *psmouse)
 	 * the same rate as a standard PS/2 mouse).
 	 */
 	if (psmouse->rate >= 80 && impaired_toshiba_kbc) {
-		printk(KERN_INFO "synaptics: Toshiba %s detected, limiting rate to 40pps.\n",
-			dmi_get_system_info(DMI_PRODUCT_NAME));
+		psmouse_info(psmouse,
+			     "Toshiba %s detected, limiting rate to 40pps.\n",
+			     dmi_get_system_info(DMI_PRODUCT_NAME));
 		psmouse->rate = 40;
 	}
 
