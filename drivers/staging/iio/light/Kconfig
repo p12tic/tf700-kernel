@@ -1,7 +1,7 @@
 #
 # Light sensors
 #
-comment "Light sensors"
+menu "Light sensors"
 
 config SENSORS_ISL29018
 	tristate "ISL 29018 light and proximity sensor"
@@ -49,3 +49,5 @@ config SENSORS_LTR558
 	help
 	  If you say yes here you get support for ambient light sensing and
 	  proximity ir sensing from Lite On Technology LTR558.
+
+endmenu
