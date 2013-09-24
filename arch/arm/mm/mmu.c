@@ -211,7 +211,7 @@ static struct mem_type mem_types[] = {
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE | PMD_SECT_WB,
 		.domain		= DOMAIN_IO,
-	},	
+	},
 	[MT_DEVICE_WC] = {	/* ioremap_wc */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_WC,
 		.prot_l1	= PMD_TYPE_TABLE,
@@ -285,6 +285,14 @@ static struct mem_type mem_types[] = {
 		.domain		= DOMAIN_IO,
 	},
 #endif
+	[MT_MEMORY_SO] = {
+		.prot_pte  = L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY |
+				L_PTE_MT_UNCACHED,
+		.prot_l1   = PMD_TYPE_TABLE,
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE | PMD_SECT_S |
+				PMD_SECT_UNCACHED | PMD_SECT_XN,
+		.domain    = DOMAIN_KERNEL,
+	},
 };
 
 const struct mem_type *get_mem_type(unsigned int type)
