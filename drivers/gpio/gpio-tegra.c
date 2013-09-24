@@ -31,6 +31,7 @@
 
 #include <asm/mach/irq.h>
 
+#include <mach/gpio-tegra.h>
 #include <mach/iomap.h>
 #include <mach/legacy_irq.h>
 #include <mach/pinmux.h>

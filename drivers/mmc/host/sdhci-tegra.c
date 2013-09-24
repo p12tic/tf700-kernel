@@ -27,7 +27,9 @@
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
 
-#include <mach/gpio.h>
+#include <asm/gpio.h>
+
+#include <mach/gpio-tegra.h>
 #include <mach/sdhci.h>
 #include <mach/io_dpd.h>
 

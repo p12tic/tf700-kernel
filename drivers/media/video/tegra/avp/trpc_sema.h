@@ -20,6 +20,10 @@
 
 #include <linux/types.h>
 #include <linux/fs.h>
+#include <mach/gpio-tegra.h>
+
+#define TRIMSLICE_GPIO_SD4_CD	TEGRA_GPIO_PP1	/* mmc4 cd */
+#define TRIMSLICE_GPIO_SD4_WP	TEGRA_GPIO_PP2	/* mmc4 wp */
 
 struct tegra_sema_info;
 

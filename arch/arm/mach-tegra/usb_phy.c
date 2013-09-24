@@ -31,6 +31,12 @@
 #include <linux/regulator/consumer.h>
 #include <linux/platform_data/tegra_usb.h>
 #include "tegra_usb_phy.h"
+
+#include <linux/usb/otg.h>
+#include <linux/usb/ulpi.h>
+#include <asm/mach-types.h>
+#include <mach/gpio-tegra.h>
+#include <mach/usb_phy.h>
 #include <mach/iomap.h>
 #include "fuse.h"
 

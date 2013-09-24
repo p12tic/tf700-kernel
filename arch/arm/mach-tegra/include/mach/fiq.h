@@ -18,8 +18,15 @@
 #ifndef __ASM_ARCH_TEGRA_FIQ_H
 #define __ASM_ARCH_TEGRA_FIQ_H
 
+#include <mach/gpio-tegra.h>
+
 /* enable/disable an interrupt that is an FIQ (safe from FIQ context?) */
 void tegra_fiq_enable(int n);
 void tegra_fiq_disable(int n);
+
+#define TEGRA_GPIO_SD1_CD		TEGRA_GPIO_PV5
+#define TEGRA_GPIO_SD1_WP		TEGRA_GPIO_PH1
+#define TEGRA_GPIO_SD1_POWER		TEGRA_GPIO_PT3
+#define TEGRA_ULPI_RST			TEGRA_GPIO_PV0
 
 #endif
