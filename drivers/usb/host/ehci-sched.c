@@ -500,7 +500,6 @@ static int enable_periodic (struct ehci_hcd *ehci)
 	cmd = ehci_readl(ehci, &ehci->regs->command) | CMD_PSE;
 	ehci_writel(ehci, cmd, &ehci->regs->command);
 	/* posted write ... PSS happens later */
-	ehci_to_hcd(ehci)->state = HC_STATE_RUNNING;
 
 	/* make sure ehci_work scans these */
 	ehci->next_uframe = ehci_read_frame_index(ehci)
@@ -698,7 +697,7 @@ static void intr_deschedule (struct ehci_hcd *ehci, struct ehci_qh *qh)
 
 	/* reschedule QH iff another request is queued */
 	if (!list_empty(&qh->qtd_list) &&
-			HC_IS_RUNNING(ehci_to_hcd(ehci)->state)) {
+			ehci->rh_state == EHCI_RH_RUNNING) {
 		rc = qh_schedule(ehci, qh);
 
 		/* An error here likely indicates handshake failure
@@ -1476,36 +1475,30 @@ iso_stream_schedule (
 	 * jump until after the queue is primed.
 	 */
 	else {
-		int done = 0;
 		start = SCHEDULE_SLOP + (now & ~0x07);
 
 		/* NOTE:  assumes URB_ISO_ASAP, to limit complexity/bugs */
 
-		/* find a uframe slot with enough bandwidth.
-		 * Early uframes are more precious because full-speed
-		 * iso IN transfers can't use late uframes,
-		 * and therefore they should be allocated last.
-		 */
-		next = start;
-		start += period;
-		do {
-			start--;
+		/* find a uframe slot with enough bandwidth */
+		next = start + period;
+		for (; start < next; start++) {
+
 			/* check schedule: enough space? */
 			if (stream->highspeed) {
 				if (itd_slot_ok(ehci, mod, start,
 						stream->usecs, period))
-					done = 1;
+					break;
 			} else {
 				if ((start % 8) >= 6)
 					continue;
 				if (sitd_slot_ok(ehci, mod, stream,
 						start, sched, period))
-					done = 1;
+					break;
 			}
-		} while (start > next && !done);
+		}
 
 		/* no room in the schedule */
-		if (!done) {
+		if (start == next) {
 			ehci_dbg(ehci, "iso resched full %p (now %d max %d)\n",
 				urb, now, now + mod);
 			status = -ENOSPC;
@@ -2302,7 +2295,7 @@ scan_periodic (struct ehci_hcd *ehci)
 	 * Touches as few pages as possible:  cache-friendly.
 	 */
 	now_uframe = ehci->next_uframe;
-	if (HC_IS_RUNNING(ehci_to_hcd(ehci)->state)) {
+	if (ehci->rh_state == EHCI_RH_RUNNING) {
 		clock = ehci_read_frame_index(ehci);
 		clock_frame = (clock >> 3) & (ehci->periodic_size - 1);
 	} else  {
@@ -2337,7 +2330,7 @@ restart:
 			union ehci_shadow	temp;
 			int			live;
 
-			live = HC_IS_RUNNING (ehci_to_hcd(ehci)->state);
+			live = (ehci->rh_state == EHCI_RH_RUNNING);
 			switch (hc32_to_cpu(ehci, type)) {
 			case Q_TYPE_QH:
 				/* handle any completions */
@@ -2462,7 +2455,7 @@ restart:
 		 * We can't advance our scan without collecting the ISO
 		 * transfers that are still pending in this frame.
 		 */
-		if (incomplete && HC_IS_RUNNING(ehci_to_hcd(ehci)->state)) {
+		if (incomplete && ehci->rh_state == EHCI_RH_RUNNING) {
 			ehci->next_uframe = now_uframe;
 			break;
 		}
@@ -2478,7 +2471,7 @@ restart:
 		if (now_uframe == clock) {
 			unsigned	now;
 
-			if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state)
+			if (ehci->rh_state != EHCI_RH_RUNNING
 					|| ehci->periodic_sched == 0)
 				break;
 			ehci->next_uframe = now_uframe;
