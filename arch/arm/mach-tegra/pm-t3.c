@@ -32,8 +32,8 @@
 #include <mach/iomap.h>
 #include <mach/irqs.h>
 #include <mach/io_dpd.h>
+#include <linux/cpu_pm.h>
 
-#include <asm/cpu_pm.h>
 #include <asm/hardware/gic.h>
 
 #include <trace/events/power.h>

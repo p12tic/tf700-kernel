@@ -23,7 +23,6 @@
 #include <asm/cputype.h>
 #include <asm/thread_notify.h>
 #include <asm/vfp.h>
-#include <asm/cpu_pm.h>
 
 #include "vfpinstr.h"
 #include "vfp.h"
@@ -61,7 +60,6 @@ static bool vfp_state_in_hw(unsigned int cpu, struct thread_info *thread)
  * Force a reload of the VFP context from the thread structure.  We do
  * this by ensuring that access to the VFP hardware is disabled, and
  * clear vfp_current_hw_state.  Must be called from non-preemptible context.
->>>>>>> c825dda905bac330c2da7fabdf5c0ac28758b3cd
  */
 unsigned int VFP_arch;
 
@@ -192,34 +190,6 @@ static struct notifier_block vfp_notifier_block = {
 	.notifier_call	= vfp_notifier,
 };
 
-static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
-	void *v)
-{
-	u32 fpexc = fmrx(FPEXC);
-	unsigned int cpu = smp_processor_id();
-
-	switch (cmd) {
-	case CPU_PM_ENTER:
-		if (vfp_current_hw_state[cpu]) {
-			fmxr(FPEXC, fpexc | FPEXC_EN);
-			vfp_save_state(vfp_current_hw_state[cpu], fpexc);
-			/* force a reload when coming back from idle */
-			vfp_current_hw_state[cpu] = NULL;
-			fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		}
-		break;
-	case CPU_PM_ENTER_FAILED:
-	case CPU_PM_EXIT:
-		/* make sure VFP is disabled when leaving idle */
-		fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		break;
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block vfp_cpu_pm_notifier_block = {
-	.notifier_call = vfp_cpu_pm_notifier,
-};
 
 /*
  * Raise a SIGFPE for the current process.

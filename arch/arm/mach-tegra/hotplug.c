@@ -11,7 +11,7 @@
 #include <linux/io.h>
 #include <linux/smp.h>
 
-#include <asm/cpu_pm.h>
+#include <linux/cpu_pm.h>
 #include <asm/cacheflush.h>
 
 #include <mach/iomap.h>

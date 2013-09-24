@@ -30,7 +30,6 @@
 #include <linux/cpumask.h>
 #include <linux/io.h>
 
-#include <asm/cpu_pm.h>
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 #include <asm/hardware/gic.h>
@@ -472,7 +471,7 @@ static void gic_cpu_save(unsigned int gic_nr)
 	for (i = 0; i < DIV_ROUND_UP(32, 16); i++)
 		ptr[i] = readl_relaxed(dist_base + GIC_DIST_CONFIG + i * 4);
 
-	tr = __this_cpu_ptr(gic_data[gic_nr].saved_ppi_pri);
+	ptr = __this_cpu_ptr(gic_data[gic_nr].saved_ppi_pri);
 	for (i = 0; i < DIV_ROUND_UP(32, 4); i++)
 		ptr[i] = readl_relaxed(dist_base + GIC_DIST_PRI + i * 4);
 }
