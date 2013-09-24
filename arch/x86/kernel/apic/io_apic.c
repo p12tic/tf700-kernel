@@ -1202,6 +1202,7 @@ void __setup_vector_irq(int cpu)
 }
 
 static struct irq_chip ioapic_chip;
+static struct irq_chip ir_ioapic_chip;
 
 #ifdef CONFIG_X86_32
 static inline int IO_APIC_irq_trigger(int irq)
@@ -1245,7 +1246,7 @@ static void ioapic_register_intr(unsigned int irq, struct irq_cfg *cfg,
 
 	if (irq_remapped(cfg)) {
 		irq_set_status_flags(irq, IRQ_MOVE_PCNTXT);
-		irq_remap_modify_chip_defaults(chip);
+		chip = &ir_ioapic_chip;
 		fasteoi = trigger != 0;
 	}
 
@@ -2254,7 +2255,7 @@ ioapic_set_affinity(struct irq_data *data, const struct cpumask *mask,
 	return ret;
 }
 
-#ifdef CONFIG_IRQ_REMAP
+#ifdef CONFIG_INTR_REMAP
 
 /*
  * Migrate the IO-APIC irq in the presence of intr-remapping.
@@ -2266,9 +2267,6 @@ ioapic_set_affinity(struct irq_data *data, const struct cpumask *mask,
  * updated vector information), by using a virtual vector (io-apic pin number).
  * Real vector that is used for interrupting cpu will be coming from
  * the interrupt-remapping table entry.
- *
- * As the migration is a simple atomic update of IRTE, the same mechanism
- * is used to migrate MSI irq's in the presence of interrupt-remapping.
  */
 static int
 ir_ioapic_set_affinity(struct irq_data *data, const struct cpumask *mask,
@@ -2293,16 +2291,10 @@ ir_ioapic_set_affinity(struct irq_data *data, const struct cpumask *mask,
 	irte.dest_id = IRTE_DEST(dest);
 
 	/*
-	 * Atomically updates the IRTE with the new destination, vector
-	 * and flushes the interrupt entry cache.
+	 * Modified the IRTE and flushes the Interrupt entry cache.
 	 */
 	modify_irte(irq, &irte);
 
-	/*
-	 * After this point, all the interrupts will start arriving
-	 * at the new destination. So, time to cleanup the previous
-	 * vector allocation.
-	 */
 	if (cfg->move_in_progress)
 		send_cleanup_vector(cfg);
 
@@ -2560,7 +2552,7 @@ static void ack_apic_level(struct irq_data *data)
 	}
 }
 
-#ifdef CONFIG_IRQ_REMAP
+#ifdef CONFIG_INTR_REMAP
 static void ir_ack_apic_edge(struct irq_data *data)
 {
 	ack_APIC_irq();
@@ -2571,23 +2563,7 @@ static void ir_ack_apic_level(struct irq_data *data)
 	ack_APIC_irq();
 	eoi_ioapic_irq(data->irq, data->chip_data);
 }
-
-static void ir_print_prefix(struct irq_data *data, struct seq_file *p)
-{
-	seq_printf(p, " IR-%s", data->chip->name);
-}
-
-static void irq_remap_modify_chip_defaults(struct irq_chip *chip)
-{
-	chip->irq_print_chip = ir_print_prefix;
-	chip->irq_ack = ir_ack_apic_edge;
-	chip->irq_eoi = ir_ack_apic_level;
-
-#ifdef CONFIG_SMP
-	chip->irq_set_affinity = ir_ioapic_set_affinity;
-#endif
-}
-#endif /* CONFIG_IRQ_REMAP */
+#endif /* CONFIG_INTR_REMAP */
 
 static struct irq_chip ioapic_chip __read_mostly = {
 	.name			= "IO-APIC",
@@ -2598,6 +2574,21 @@ static struct irq_chip ioapic_chip __read_mostly = {
 	.irq_eoi		= ack_apic_level,
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= ioapic_set_affinity,
+#endif
+	.irq_retrigger		= ioapic_retrigger_irq,
+};
+
+static struct irq_chip ir_ioapic_chip __read_mostly = {
+	.name			= "IR-IO-APIC",
+	.irq_startup		= startup_ioapic_irq,
+	.irq_mask		= mask_ioapic_irq,
+	.irq_unmask		= unmask_ioapic_irq,
+#ifdef CONFIG_INTR_REMAP
+	.irq_ack		= ir_ack_apic_edge,
+	.irq_eoi		= ir_ack_apic_level,
+#ifdef CONFIG_SMP
+	.irq_set_affinity	= ir_ioapic_set_affinity,
+#endif
 #endif
 	.irq_retrigger		= ioapic_retrigger_irq,
 };
@@ -3153,6 +3144,45 @@ msi_set_affinity(struct irq_data *data, const struct cpumask *mask, bool force)
 
 	return 0;
 }
+#ifdef CONFIG_INTR_REMAP
+/*
+ * Migrate the MSI irq to another cpumask. This migration is
+ * done in the process context using interrupt-remapping hardware.
+ */
+static int
+ir_msi_set_affinity(struct irq_data *data, const struct cpumask *mask,
+		    bool force)
+{
+	struct irq_cfg *cfg = data->chip_data;
+	unsigned int dest, irq = data->irq;
+	struct irte irte;
+
+	if (get_irte(irq, &irte))
+		return -1;
+
+	if (__ioapic_set_affinity(data, mask, &dest))
+		return -1;
+
+	irte.vector = cfg->vector;
+	irte.dest_id = IRTE_DEST(dest);
+
+	/*
+	 * atomically update the IRTE with the new destination and vector.
+	 */
+	modify_irte(irq, &irte);
+
+	/*
+	 * After this point, all the interrupts will start arriving
+	 * at the new destination. So, time to cleanup the previous
+	 * vector allocation.
+	 */
+	if (cfg->move_in_progress)
+		send_cleanup_vector(cfg);
+
+	return 0;
+}
+
+#endif
 #endif /* CONFIG_SMP */
 
 /*
@@ -3166,6 +3196,19 @@ static struct irq_chip msi_chip = {
 	.irq_ack		= ack_apic_edge,
 #ifdef CONFIG_SMP
 	.irq_set_affinity	= msi_set_affinity,
+#endif
+	.irq_retrigger		= ioapic_retrigger_irq,
+};
+
+static struct irq_chip msi_ir_chip = {
+	.name			= "IR-PCI-MSI",
+	.irq_unmask		= unmask_msi_irq,
+	.irq_mask		= mask_msi_irq,
+#ifdef CONFIG_INTR_REMAP
+	.irq_ack		= ir_ack_apic_edge,
+#ifdef CONFIG_SMP
+	.irq_set_affinity	= ir_msi_set_affinity,
+#endif
 #endif
 	.irq_retrigger		= ioapic_retrigger_irq,
 };
@@ -3212,7 +3255,7 @@ static int setup_msi_irq(struct pci_dev *dev, struct msi_desc *msidesc, int irq)
 
 	if (irq_remapped(irq_get_chip_data(irq))) {
 		irq_set_status_flags(irq, IRQ_MOVE_PCNTXT);
-		irq_remap_modify_chip_defaults(chip);
+		chip = &msi_ir_chip;
 	}
 
 	irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
@@ -3285,7 +3328,7 @@ void native_teardown_msi_irq(unsigned int irq)
 	destroy_irq(irq);
 }
 
-#ifdef CONFIG_DMAR_TABLE
+#if defined (CONFIG_DMAR) || defined (CONFIG_INTR_REMAP)
 #ifdef CONFIG_SMP
 static int
 dmar_msi_set_affinity(struct irq_data *data, const struct cpumask *mask,
@@ -3366,6 +3409,19 @@ static int hpet_msi_set_affinity(struct irq_data *data,
 
 #endif /* CONFIG_SMP */
 
+static struct irq_chip ir_hpet_msi_type = {
+	.name			= "IR-HPET_MSI",
+	.irq_unmask		= hpet_msi_unmask,
+	.irq_mask		= hpet_msi_mask,
+#ifdef CONFIG_INTR_REMAP
+	.irq_ack		= ir_ack_apic_edge,
+#ifdef CONFIG_SMP
+	.irq_set_affinity	= ir_msi_set_affinity,
+#endif
+#endif
+	.irq_retrigger		= ioapic_retrigger_irq,
+};
+
 static struct irq_chip hpet_msi_type = {
 	.name = "HPET_MSI",
 	.irq_unmask = hpet_msi_unmask,
@@ -3402,7 +3458,7 @@ int arch_setup_hpet_msi(unsigned int irq, unsigned int id)
 	hpet_msi_write(irq_get_handler_data(irq), &msg);
 	irq_set_status_flags(irq, IRQ_MOVE_PCNTXT);
 	if (irq_remapped(irq_get_chip_data(irq)))
-		irq_remap_modify_chip_defaults(chip);
+		chip = &ir_hpet_msi_type;
 
 	irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
 	return 0;

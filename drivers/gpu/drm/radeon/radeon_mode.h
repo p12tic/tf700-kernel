@@ -447,7 +447,6 @@ struct radeon_connector {
 	struct edid *edid;
 	void *con_priv;
 	bool dac_load_detect;
-	bool detected_by_load; /* if the connection status was determined by load */
 	uint16_t connector_object_id;
 	struct radeon_hpd hpd;
 	struct radeon_router router;
@@ -468,8 +467,8 @@ radeon_atombios_get_tv_info(struct radeon_device *rdev);
 extern struct drm_connector *
 radeon_get_connector_for_encoder(struct drm_encoder *encoder);
 
-extern u16 radeon_encoder_get_dp_bridge_encoder_id(struct drm_encoder *encoder);
-extern u16 radeon_connector_encoder_get_dp_bridge_encoder_id(struct drm_connector *connector);
+extern bool radeon_encoder_is_dp_bridge(struct drm_encoder *encoder);
+extern bool radeon_connector_encoder_is_dp_bridge(struct drm_connector *connector);
 extern bool radeon_connector_encoder_is_hbr2(struct drm_connector *connector);
 extern bool radeon_connector_is_dp12_capable(struct drm_connector *connector);
 

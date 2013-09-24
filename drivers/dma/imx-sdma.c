@@ -40,8 +40,6 @@
 #include <mach/dma.h>
 #include <mach/hardware.h>
 
-#include "dmaengine.h"
-
 /* SDMA registers */
 #define SDMA_H_C0PTR		0x000
 #define SDMA_H_INTR		0x004
@@ -266,6 +264,7 @@ struct sdma_channel {
 	struct dma_chan			chan;
 	spinlock_t			lock;
 	struct dma_async_tx_descriptor	desc;
+	dma_cookie_t			last_completed;
 	enum dma_status			status;
 };
 
@@ -510,7 +509,6 @@ static void mxc_sdma_handle_channel_normal(struct sdma_channel *sdmac)
 	else
 		sdmac->status = DMA_SUCCESS;
 
-	dma_cookie_complete(&sdmac->desc);
 	if (sdmac->desc.callback)
 		sdmac->desc.callback(sdmac->desc.callback_param);
 	sdmac->last_completed = sdmac->desc.cookie;
@@ -800,6 +798,19 @@ static void sdma_enable_channel(struct sdma_engine *sdma, int channel)
 	__raw_writel(1 << channel, sdma->regs + SDMA_H_START);
 }
 
+static dma_cookie_t sdma_assign_cookie(struct sdma_channel *sdmac)
+{
+	dma_cookie_t cookie = sdmac->chan.cookie;
+
+	if (++cookie < 0)
+		cookie = 1;
+
+	sdmac->chan.cookie = cookie;
+	sdmac->desc.cookie = cookie;
+
+	return cookie;
+}
+
 static struct sdma_channel *to_sdma_chan(struct dma_chan *chan)
 {
 	return container_of(chan, struct sdma_channel, chan);
@@ -813,7 +824,7 @@ static dma_cookie_t sdma_tx_submit(struct dma_async_tx_descriptor *tx)
 
 	spin_lock_irq(&sdmac->lock);
 
-	cookie = dma_cookie_assign(tx);
+	cookie = sdma_assign_cookie(sdmac);
 
 	sdma_enable_channel(sdma, sdmac->channel);
 
@@ -886,8 +897,8 @@ static void sdma_free_chan_resources(struct dma_chan *chan)
 
 static struct dma_async_tx_descriptor *sdma_prep_slave_sg(
 		struct dma_chan *chan, struct scatterlist *sgl,
-		unsigned int sg_len, enum dma_transfer_direction direction,
-		unsigned long flags, void *context)
+		unsigned int sg_len, enum dma_data_direction direction,
+		unsigned long flags)
 {
 	struct sdma_channel *sdmac = to_sdma_chan(chan);
 	struct sdma_engine *sdma = sdmac->sdma;
@@ -983,8 +994,7 @@ err_out:
 
 static struct dma_async_tx_descriptor *sdma_prep_dma_cyclic(
 		struct dma_chan *chan, dma_addr_t dma_addr, size_t buf_len,
-		size_t period_len, enum dma_transfer_direction direction,
-		void *context)
+		size_t period_len, enum dma_data_direction direction)
 {
 	struct sdma_channel *sdmac = to_sdma_chan(chan);
 	struct sdma_engine *sdma = sdmac->sdma;
@@ -1095,19 +1105,16 @@ static enum dma_status sdma_tx_status(struct dma_chan *chan,
 
 	last_used = chan->cookie;
 
-	dma_set_tx_state(txstate, chan->completed_cookie, last_used,
-			sdmac->chn_count - sdmac->chn_real_count);
+	dma_set_tx_state(txstate, sdmac->last_completed, last_used, 0);
 
 	return sdmac->status;
 }
 
 static void sdma_issue_pending(struct dma_chan *chan)
 {
-	struct sdma_channel *sdmac = to_sdma_chan(chan);
-	struct sdma_engine *sdma = sdmac->sdma;
-
-	if (sdmac->status == DMA_IN_PROGRESS)
-		sdma_enable_channel(sdma, sdmac->channel);
+	/*
+	 * Nothing to do. We only have a single descriptor
+	 */
 }
 
 #define SDMA_SCRIPT_ADDRS_ARRAY_SIZE_V1	34

@@ -18,7 +18,6 @@
 
 #include <plat/ste_dma40.h>
 
-#include "dmaengine.h"
 #include "ste_dma40_ll.h"
 
 #define D40_NAME "dma40"
@@ -164,6 +163,8 @@ struct d40_base;
  *
  * @lock: A spinlock to protect this struct.
  * @log_num: The logical number, if any of this channel.
+ * @completed: Starts with 1, after first interrupt it is set to dma engine's
+ * current cookie.
  * @pending_tx: The number of pending transfers. Used between interrupt handler
  * and tasklet.
  * @busy: Set to true when transfer is ongoing on this channel.
@@ -193,6 +194,8 @@ struct d40_base;
 struct d40_chan {
 	spinlock_t			 lock;
 	int				 log_num;
+	/* ID of the most recent completed transfer */
+	int				 completed;
 	int				 pending_tx;
 	bool				 busy;
 	struct d40_phy_res		*phy_chan;
@@ -1080,14 +1083,21 @@ static dma_cookie_t d40_tx_submit(struct dma_async_tx_descriptor *tx)
 					     chan);
 	struct d40_desc *d40d = container_of(tx, struct d40_desc, txd);
 	unsigned long flags;
-	dma_cookie_t cookie;
 
 	spin_lock_irqsave(&d40c->lock, flags);
-	cookie = dma_cookie_assign(tx);
+
+	d40c->chan.cookie++;
+
+	if (d40c->chan.cookie < 0)
+		d40c->chan.cookie = 1;
+
+	d40d->txd.cookie = d40c->chan.cookie;
+
 	d40_desc_queue(d40c, d40d);
+
 	spin_unlock_irqrestore(&d40c->lock, flags);
 
-	return cookie;
+	return tx->cookie;
 }
 
 static int d40_start(struct d40_chan *d40c)
@@ -1202,7 +1212,7 @@ static void dma_tasklet(unsigned long data)
 		goto err;
 
 	if (!d40d->cyclic)
-		dma_cookie_complete(&d40d->txd);
+		d40c->completed = d40d->txd.cookie;
 
 	/*
 	 * If terminating a channel pending_tx is set to zero.
@@ -1990,7 +2000,7 @@ static int d40_alloc_chan_resources(struct dma_chan *chan)
 	bool is_free_phy;
 	spin_lock_irqsave(&d40c->lock, flags);
 
-	dma_cookie_init(chan);
+	d40c->completed = chan->cookie = 1;
 
 	/* If no dma configuration is set use default configuration (memcpy) */
 	if (!d40c->configured) {
@@ -2097,9 +2107,8 @@ d40_prep_memcpy_sg(struct dma_chan *chan,
 static struct dma_async_tx_descriptor *d40_prep_slave_sg(struct dma_chan *chan,
 							 struct scatterlist *sgl,
 							 unsigned int sg_len,
-							 enum dma_transfer_direction direction,
-							 unsigned long dma_flags,
-							 void *context)
+							 enum dma_data_direction direction,
+							 unsigned long dma_flags)
 {
 	if (direction != DMA_FROM_DEVICE && direction != DMA_TO_DEVICE)
 		return NULL;
@@ -2110,7 +2119,7 @@ static struct dma_async_tx_descriptor *d40_prep_slave_sg(struct dma_chan *chan,
 static struct dma_async_tx_descriptor *
 dma40_prep_dma_cyclic(struct dma_chan *chan, dma_addr_t dma_addr,
 		     size_t buf_len, size_t period_len,
-		     enum dma_transfer_direction direction, void *context)
+		     enum dma_data_direction direction)
 {
 	unsigned int periods = buf_len / period_len;
 	struct dma_async_tx_descriptor *txd;
@@ -2142,19 +2151,25 @@ static enum dma_status d40_tx_status(struct dma_chan *chan,
 				     struct dma_tx_state *txstate)
 {
 	struct d40_chan *d40c = container_of(chan, struct d40_chan, chan);
-	enum dma_status ret;
+	dma_cookie_t last_used;
+	dma_cookie_t last_complete;
+	int ret;
 
 	if (d40c->phy_chan == NULL) {
 		chan_err(d40c, "Cannot read status of unallocated channel\n");
 		return -EINVAL;
 	}
 
-	ret = dma_cookie_status(chan, cookie, txstate);
-	if (ret != DMA_SUCCESS)
-		dma_set_residue(txstate, stedma40_residue(chan));
+	last_complete = d40c->completed;
+	last_used = chan->cookie;
 
 	if (d40_is_paused(d40c))
 		ret = DMA_PAUSED;
+	else
+		ret = dma_async_is_complete(cookie, last_complete, last_used);
+
+	dma_set_tx_state(txstate, last_complete, last_used,
+			 stedma40_residue(chan));
 
 	return ret;
 }

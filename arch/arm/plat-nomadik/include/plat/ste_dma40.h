@@ -195,7 +195,8 @@ dma_async_tx_descriptor *stedma40_slave_mem(struct dma_chan *chan,
 	sg.dma_address = addr;
 	sg.length = size;
 
-	return dmaengine_prep_slave_sg(chan, &sg, 1, direction, flags);
+	return chan->device->device_prep_slave_sg(chan, &sg, 1,
+						  direction, flags);
 }
 
 #else

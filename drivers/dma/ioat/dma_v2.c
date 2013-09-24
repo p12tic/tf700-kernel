@@ -41,8 +41,6 @@
 #include "registers.h"
 #include "hw.h"
 
-#include "../dmaengine.h"
-
 int ioat_ring_alloc_order = 8;
 module_param(ioat_ring_alloc_order, int, 0644);
 MODULE_PARM_DESC(ioat_ring_alloc_order,
@@ -149,7 +147,8 @@ static void __cleanup(struct ioat2_dma_chan *ioat, unsigned long phys_complete)
 		dump_desc_dbg(ioat, desc);
 		if (tx->cookie) {
 			ioat_dma_unmap(chan, tx->flags, desc->len, desc->hw);
-			dma_cookie_complete(tx);
+			chan->completed_cookie = tx->cookie;
+			tx->cookie = 0;
 			if (tx->callback) {
 				tx->callback(tx->callback_param);
 				tx->callback = NULL;
@@ -399,9 +398,13 @@ static dma_cookie_t ioat2_tx_submit_unlock(struct dma_async_tx_descriptor *tx)
 	struct dma_chan *c = tx->chan;
 	struct ioat2_dma_chan *ioat = to_ioat2_chan(c);
 	struct ioat_chan_common *chan = &ioat->base;
-	dma_cookie_t cookie;
+	dma_cookie_t cookie = c->cookie;
 
-	cookie = dma_cookie_assign(tx);
+	cookie++;
+	if (cookie < 0)
+		cookie = 1;
+	tx->cookie = cookie;
+	c->cookie = cookie;
 	dev_dbg(to_dev(&ioat->base), "%s: cookie: %d\n", __func__, cookie);
 
 	if (!test_and_set_bit(IOAT_COMPLETION_PENDING, &chan->state))

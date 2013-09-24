@@ -3,8 +3,7 @@
 
 #define IRTE_DEST(dest) ((x2apic_mode) ? dest : dest << 8)
 
-#ifdef CONFIG_IRQ_REMAP
-static void irq_remap_modify_chip_defaults(struct irq_chip *chip);
+#ifdef CONFIG_INTR_REMAP
 static inline void prepare_irte(struct irte *irte, int vector,
 			        unsigned int dest)
 {
@@ -36,9 +35,6 @@ static void prepare_irte(struct irte *irte, int vector, unsigned int dest)
 static inline bool irq_remapped(struct irq_cfg *cfg)
 {
 	return false;
-}
-static inline void irq_remap_modify_chip_defaults(struct irq_chip *chip)
-{
 }
 #endif
 

@@ -66,7 +66,7 @@
 	 ((pgsz) == MMU_CAM_PGSZ_4K)  ? 0xfffff000 : 0)
 
 
-static void __iommu_set_twl(struct omap_iommu *obj, bool on)
+static void __iommu_set_twl(struct iommu *obj, bool on)
 {
 	u32 l = iommu_read_reg(obj, MMU_CNTL);
 
@@ -85,7 +85,7 @@ static void __iommu_set_twl(struct omap_iommu *obj, bool on)
 }
 
 
-static int omap2_iommu_enable(struct omap_iommu *obj)
+static int omap2_iommu_enable(struct iommu *obj)
 {
 	u32 l, pa;
 	unsigned long timeout;
@@ -127,7 +127,7 @@ static int omap2_iommu_enable(struct omap_iommu *obj)
 	return 0;
 }
 
-static void omap2_iommu_disable(struct omap_iommu *obj)
+static void omap2_iommu_disable(struct iommu *obj)
 {
 	u32 l = iommu_read_reg(obj, MMU_CNTL);
 
@@ -138,12 +138,12 @@ static void omap2_iommu_disable(struct omap_iommu *obj)
 	dev_dbg(obj->dev, "%s is shutting down\n", obj->name);
 }
 
-static void omap2_iommu_set_twl(struct omap_iommu *obj, bool on)
+static void omap2_iommu_set_twl(struct iommu *obj, bool on)
 {
 	__iommu_set_twl(obj, false);
 }
 
-static u32 omap2_iommu_fault_isr(struct omap_iommu *obj, u32 *ra)
+static u32 omap2_iommu_fault_isr(struct iommu *obj, u32 *ra)
 {
 	u32 stat, da;
 	u32 errs = 0;
@@ -173,13 +173,13 @@ static u32 omap2_iommu_fault_isr(struct omap_iommu *obj, u32 *ra)
 	return errs;
 }
 
-static void omap2_tlb_read_cr(struct omap_iommu *obj, struct cr_regs *cr)
+static void omap2_tlb_read_cr(struct iommu *obj, struct cr_regs *cr)
 {
 	cr->cam = iommu_read_reg(obj, MMU_READ_CAM);
 	cr->ram = iommu_read_reg(obj, MMU_READ_RAM);
 }
 
-static void omap2_tlb_load_cr(struct omap_iommu *obj, struct cr_regs *cr)
+static void omap2_tlb_load_cr(struct iommu *obj, struct cr_regs *cr)
 {
 	iommu_write_reg(obj, cr->cam | MMU_CAM_V, MMU_CAM);
 	iommu_write_reg(obj, cr->ram, MMU_RAM);
@@ -193,8 +193,7 @@ static u32 omap2_cr_to_virt(struct cr_regs *cr)
 	return cr->cam & mask;
 }
 
-static struct cr_regs *omap2_alloc_cr(struct omap_iommu *obj,
-						struct iotlb_entry *e)
+static struct cr_regs *omap2_alloc_cr(struct iommu *obj, struct iotlb_entry *e)
 {
 	struct cr_regs *cr;
 
@@ -231,8 +230,7 @@ static u32 omap2_get_pte_attr(struct iotlb_entry *e)
 	return attr;
 }
 
-static ssize_t
-omap2_dump_cr(struct omap_iommu *obj, struct cr_regs *cr, char *buf)
+static ssize_t omap2_dump_cr(struct iommu *obj, struct cr_regs *cr, char *buf)
 {
 	char *p = buf;
 
@@ -256,8 +254,7 @@ omap2_dump_cr(struct omap_iommu *obj, struct cr_regs *cr, char *buf)
 			goto out;					\
 	} while (0)
 
-static ssize_t
-omap2_iommu_dump_ctx(struct omap_iommu *obj, char *buf, ssize_t len)
+static ssize_t omap2_iommu_dump_ctx(struct iommu *obj, char *buf, ssize_t len)
 {
 	char *p = buf;
 
@@ -283,7 +280,7 @@ out:
 	return p - buf;
 }
 
-static void omap2_iommu_save_ctx(struct omap_iommu *obj)
+static void omap2_iommu_save_ctx(struct iommu *obj)
 {
 	int i;
 	u32 *p = obj->ctx;
@@ -296,7 +293,7 @@ static void omap2_iommu_save_ctx(struct omap_iommu *obj)
 	BUG_ON(p[0] != IOMMU_ARCH_VERSION);
 }
 
-static void omap2_iommu_restore_ctx(struct omap_iommu *obj)
+static void omap2_iommu_restore_ctx(struct iommu *obj)
 {
 	int i;
 	u32 *p = obj->ctx;
@@ -346,13 +343,13 @@ static const struct iommu_functions omap2_iommu_ops = {
 
 static int __init omap2_iommu_init(void)
 {
-	return omap_install_iommu_arch(&omap2_iommu_ops);
+	return install_iommu_arch(&omap2_iommu_ops);
 }
 module_init(omap2_iommu_init);
 
 static void __exit omap2_iommu_exit(void)
 {
-	omap_uninstall_iommu_arch(&omap2_iommu_ops);
+	uninstall_iommu_arch(&omap2_iommu_ops);
 }
 module_exit(omap2_iommu_exit);
 

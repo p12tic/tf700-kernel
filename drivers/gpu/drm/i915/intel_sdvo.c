@@ -1064,13 +1064,15 @@ static void intel_sdvo_mode_set(struct drm_encoder *encoder,
 
 	/* Set the SDVO control regs. */
 	if (INTEL_INFO(dev)->gen >= 4) {
-		/* The real mode polarity is set by the SDVO commands, using
-		 * struct intel_sdvo_dtd. */
-		sdvox = SDVO_VSYNC_ACTIVE_HIGH | SDVO_HSYNC_ACTIVE_HIGH;
+		sdvox = 0;
 		if (intel_sdvo->is_hdmi)
 			sdvox |= intel_sdvo->color_range;
 		if (INTEL_INFO(dev)->gen < 5)
 			sdvox |= SDVO_BORDER_ENABLE;
+		if (adjusted_mode->flags & DRM_MODE_FLAG_PVSYNC)
+			sdvox |= SDVO_VSYNC_ACTIVE_HIGH;
+		if (adjusted_mode->flags & DRM_MODE_FLAG_PHSYNC)
+			sdvox |= SDVO_HSYNC_ACTIVE_HIGH;
 	} else {
 		sdvox = I915_READ(intel_sdvo->sdvo_reg);
 		switch (intel_sdvo->sdvo_reg) {
@@ -1083,12 +1085,8 @@ static void intel_sdvo_mode_set(struct drm_encoder *encoder,
 		}
 		sdvox |= (9 << 19) | SDVO_BORDER_ENABLE;
 	}
-
-	if (INTEL_PCH_TYPE(dev) >= PCH_CPT)
-		sdvox |= TRANSCODER_CPT(intel_crtc->pipe);
-	else
-		sdvox |= TRANSCODER(intel_crtc->pipe);
-
+	if (intel_crtc->pipe == 1)
+		sdvox |= SDVO_PIPE_B_SELECT;
 	if (intel_sdvo->has_hdmi_audio)
 		sdvox |= SDVO_AUDIO_ENABLE;
 

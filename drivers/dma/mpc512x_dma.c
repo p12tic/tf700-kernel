@@ -44,8 +44,6 @@
 
 #include <linux/random.h>
 
-#include "dmaengine.h"
-
 /* Number of DMA Transfer descriptors allocated per channel */
 #define MPC_DMA_DESCRIPTORS	64
 
@@ -190,6 +188,7 @@ struct mpc_dma_chan {
 	struct list_head		completed;
 	struct mpc_dma_tcd		*tcd;
 	dma_addr_t			tcd_paddr;
+	dma_cookie_t			completed_cookie;
 
 	/* Lock for this structure */
 	spinlock_t			lock;
@@ -366,7 +365,7 @@ static void mpc_dma_process_completed(struct mpc_dma *mdma)
 		/* Free descriptors */
 		spin_lock_irqsave(&mchan->lock, flags);
 		list_splice_tail_init(&list, &mchan->free);
-		mchan->chan.completed_cookie = last_cookie;
+		mchan->completed_cookie = last_cookie;
 		spin_unlock_irqrestore(&mchan->lock, flags);
 	}
 }
@@ -439,7 +438,13 @@ static dma_cookie_t mpc_dma_tx_submit(struct dma_async_tx_descriptor *txd)
 		mpc_dma_execute(mchan);
 
 	/* Update cookie */
-	cookie = dma_cookie_assign(txd);
+	cookie = mchan->chan.cookie + 1;
+	if (cookie <= 0)
+		cookie = 1;
+
+	mchan->chan.cookie = cookie;
+	mdesc->desc.cookie = cookie;
+
 	spin_unlock_irqrestore(&mchan->lock, flags);
 
 	return cookie;
@@ -557,14 +562,17 @@ mpc_dma_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 	       struct dma_tx_state *txstate)
 {
 	struct mpc_dma_chan *mchan = dma_chan_to_mpc_dma_chan(chan);
-	enum dma_status ret;
 	unsigned long flags;
+	dma_cookie_t last_used;
+	dma_cookie_t last_complete;
 
 	spin_lock_irqsave(&mchan->lock, flags);
-	ret = dma_cookie_status(chan, cookie, txstate);
+	last_used = mchan->chan.cookie;
+	last_complete = mchan->completed_cookie;
 	spin_unlock_irqrestore(&mchan->lock, flags);
 
-	return ret;
+	dma_set_tx_state(txstate, last_complete, last_used, 0);
+	return dma_async_is_complete(cookie, last_complete, last_used);
 }
 
 /* Prepare descriptor for memory to memory copy */
@@ -734,7 +742,8 @@ static int __devinit mpc_dma_probe(struct platform_device *op)
 
 		mchan->chan.device = dma;
 		mchan->chan.chan_id = i;
-		dma_cookie_init(&mchan->chan);
+		mchan->chan.cookie = 1;
+		mchan->completed_cookie = mchan->chan.cookie;
 
 		INIT_LIST_HEAD(&mchan->free);
 		INIT_LIST_HEAD(&mchan->prepared);

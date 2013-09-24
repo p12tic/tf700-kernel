@@ -28,8 +28,6 @@
 #include <mach/dma.h>
 #include <mach/common.h>
 
-#include "dmaengine.h"
-
 /*
  * NOTE: The term "PIO" throughout the mxs-dma implementation means
  * PIO mode of mxs apbh-dma and apbx-dma.  With this working mode,
@@ -113,7 +111,7 @@ struct mxs_dma_chan {
 	int				chan_irq;
 	struct mxs_dma_ccw		*ccw;
 	dma_addr_t			ccw_phys;
-	int				desc_count;
+	dma_cookie_t			last_completed;
 	enum dma_status			status;
 	unsigned int			flags;
 #define MXS_DMA_SG_LOOP			(1 << 0)
@@ -218,6 +216,19 @@ static void mxs_dma_resume_chan(struct mxs_dma_chan *mxs_chan)
 	mxs_chan->status = DMA_IN_PROGRESS;
 }
 
+static dma_cookie_t mxs_dma_assign_cookie(struct mxs_dma_chan *mxs_chan)
+{
+	dma_cookie_t cookie = mxs_chan->chan.cookie;
+
+	if (++cookie < 0)
+		cookie = 1;
+
+	mxs_chan->chan.cookie = cookie;
+	mxs_chan->desc.cookie = cookie;
+
+	return cookie;
+}
+
 static struct mxs_dma_chan *to_mxs_dma_chan(struct dma_chan *chan)
 {
 	return container_of(chan, struct mxs_dma_chan, chan);
@@ -229,7 +240,7 @@ static dma_cookie_t mxs_dma_tx_submit(struct dma_async_tx_descriptor *tx)
 
 	mxs_dma_enable_chan(mxs_chan);
 
-	return dma_cookie_assign(tx);
+	return mxs_dma_assign_cookie(mxs_chan);
 }
 
 static void mxs_dma_tasklet(unsigned long data)
@@ -286,7 +297,7 @@ static irqreturn_t mxs_dma_int_handler(int irq, void *dev_id)
 		stat1 &= ~(1 << channel);
 
 		if (mxs_chan->status == DMA_SUCCESS)
-			dma_cookie_complete(&mxs_chan->desc);
+			mxs_chan->last_completed = mxs_chan->desc.cookie;
 
 		/* schedule tasklet on this channel */
 		tasklet_schedule(&mxs_chan->tasklet);
@@ -363,8 +374,8 @@ static void mxs_dma_free_chan_resources(struct dma_chan *chan)
 
 static struct dma_async_tx_descriptor *mxs_dma_prep_slave_sg(
 		struct dma_chan *chan, struct scatterlist *sgl,
-		unsigned int sg_len, enum dma_transfer_direction direction,
-		unsigned long append, void *context)
+		unsigned int sg_len, enum dma_data_direction direction,
+		unsigned long append)
 {
 	struct mxs_dma_chan *mxs_chan = to_mxs_dma_chan(chan);
 	struct mxs_dma_engine *mxs_dma = mxs_chan->mxs_dma;
@@ -458,8 +469,7 @@ err_out:
 
 static struct dma_async_tx_descriptor *mxs_dma_prep_dma_cyclic(
 		struct dma_chan *chan, dma_addr_t dma_addr, size_t buf_len,
-		size_t period_len, enum dma_transfer_direction direction,
-		void *context)
+		size_t period_len, enum dma_data_direction direction)
 {
 	struct mxs_dma_chan *mxs_chan = to_mxs_dma_chan(chan);
 	struct mxs_dma_engine *mxs_dma = mxs_chan->mxs_dma;
@@ -549,7 +559,7 @@ static enum dma_status mxs_dma_tx_status(struct dma_chan *chan,
 	dma_cookie_t last_used;
 
 	last_used = chan->cookie;
-	dma_set_tx_state(txstate, chan->completed_cookie, last_used, 0);
+	dma_set_tx_state(txstate, mxs_chan->last_completed, last_used, 0);
 
 	return mxs_chan->status;
 }
