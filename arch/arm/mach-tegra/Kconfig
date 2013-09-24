@@ -100,20 +100,6 @@ config TEGRA_IRDA
 
 comment "Tegra board type"
 
-config MACH_HARMONY
-       bool "Harmony board"
-       depends on ARCH_TEGRA_2x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
-       help
-         Support for NVIDIA Harmony development platform
-
-config MACH_VENTANA
-       bool "Ventana board"
-       depends on ARCH_TEGRA_2x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
-       help
-         Support for NVIDIA Ventana development platform
-
 config MACH_KAEN
        bool "Kaen board"
        depends on ARCH_TEGRA_2x_SOC
@@ -121,12 +107,6 @@ config MACH_KAEN
        select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
        help
          Support for the Kaen version of Seaboard
-
-config MACH_PAZ00
-       bool "Paz00 board"
-       depends on ARCH_TEGRA_2x_SOC
-       help
-         Support for the Toshiba AC100/Dynabook AZ netbook
 
 config MACH_SEABOARD
        bool "Seaboard board"
@@ -143,34 +123,12 @@ config MACH_TEGRA_DT
 	help
 	  Support for generic nVidia Tegra boards using Flattened Device Tree
 
-config MACH_TRIMSLICE
-       bool "TrimSlice board"
-       depends on ARCH_TEGRA_2x_SOC
-       select TEGRA_PCI
-       help
-         Support for CompuLab TrimSlice platform
-
 config MACH_WARIO
        bool "Wario board"
        depends on ARCH_TEGRA_2x_SOC
        select MACH_SEABOARD
        help
          Support for the Wario version of Seaboard
-
-config MACH_WHISTLER
-       bool "Whistler board"
-       depends on ARCH_TEGRA_2x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_WM8753 if SND_SOC
-       select MACH_HAS_SND_SOC_TEGRA_TLV320AIC326X if SND_SOC
-       help
-         Support for NVIDIA Whistler development platform
-
-config MACH_ARUBA
-       bool "Aruba board"
-       depends on ARCH_TEGRA_3x_SOC
-       select TEGRA_FPGA_PLATFORM
-       help
-         Support for NVIDIA Aruba2 FPGA development platform
 
 config MACH_CARDHU
        bool "Cardhu board"
@@ -181,29 +139,6 @@ config MACH_CARDHU
        select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
        help
          Support for NVIDIA Cardhu development platform
-
-config MACH_P1852
-       bool "P1852 board"
-       depends on ARCH_TEGRA_3x_SOC
-       help
-         Support for NVIDIA P1852 development platform
-
-config MACH_TEGRA_ENTERPRISE
-       bool "Enterprise board"
-       depends on ARCH_TEGRA_3x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_MAX98088 if SND_SOC
-       select MACH_HAS_SND_SOC_TEGRA_TLV320AIC326X if SND_SOC
-       select TEGRA_SLOW_CSITE
-       help
-         Support for NVIDIA Enterprise development platform
-
-config MACH_KAI
-       bool "Kai board"
-       depends on ARCH_TEGRA_3x_SOC
-       select MACH_HAS_SND_SOC_TEGRA_RT5639 if SND_SOC
-       select MACH_HAS_SND_SOC_TEGRA_RT5640 if SND_SOC
-       help
-         Support for NVIDIA KAI development platform
 
 choice
        prompt "Tegra platform type"

@@ -114,49 +114,9 @@ obj-$(CONFIG_SENSORS_TEGRA_TSENSOR)     += tegra3_tsensor.o
 obj-$(CONFIG_TEGRA_DYNAMIC_PWRDET)      += powerdetect.o
 obj-$(CONFIG_TEGRA_USB_MODEM_POWER)     += tegra_usb_modem_power.o
 obj-$(CONFIG_TEGRA_PCI)                 += pcie.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony-kbc.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony-panel.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony-pinmux.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony-pcie.o
-obj-${CONFIG_MACH_HARMONY}              += board-harmony-power.o
-
-obj-${CONFIG_MACH_PAZ00}                += board-paz00.o
-obj-${CONFIG_MACH_PAZ00}                += board-paz00-pinmux.o
-
-obj-${CONFIG_MACH_SEABOARD}             += board-seaboard.o
-obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-pinmux.o
 
 obj-${CONFIG_MACH_TEGRA_DT}             += board-dt.o
 obj-${CONFIG_MACH_TEGRA_DT}             += board-harmony-pinmux.o
-
-obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice.o
-obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice-pinmux.o
-
-obj-${CONFIG_MACH_VENTANA}              += board-ventana.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-pinmux.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-sdhci.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-power.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-panel.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-sensors.o
-obj-${CONFIG_MACH_VENTANA}              += board-ventana-memory.o
-
-obj-${CONFIG_MACH_ARUBA}                += board-aruba.o
-obj-${CONFIG_MACH_ARUBA}                += board-aruba-panel.o
-obj-${CONFIG_MACH_ARUBA}                += board-aruba-pinmux.o
-obj-${CONFIG_MACH_ARUBA}                += board-aruba-power.o
-obj-${CONFIG_MACH_ARUBA}                += board-aruba-sdhci.o
-obj-${CONFIG_MACH_ARUBA}                += board-aruba-sensors.o
-
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-pinmux.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-sdhci.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-power.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-panel.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-sensors.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-kbc.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-baseband.o
-obj-${CONFIG_MACH_WHISTLER}             += board-whistler-memory.o
 
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-kbc.o
@@ -173,33 +133,7 @@ obj-${CONFIG_MACH_CARDHU}               += board-cardhu-powermon.o
 obj-${CONFIG_MACH_CARDHU}               += board-cardhu-misc.o
 obj-${CONFIG_MACH_CARDHU}               += vibrator.o
 
-obj-${CONFIG_MACH_KAI}                  += board-touch-kai-synaptics-spi.o
 obj-y                                   += board-touch-raydium_spi.o
-
-obj-${CONFIG_MACH_P1852}               += board-p1852.o
-obj-${CONFIG_MACH_P1852}               += board-p1852-panel.o
-obj-${CONFIG_MACH_P1852}               += board-p1852-pinmux.o
-obj-${CONFIG_MACH_P1852}               += board-p1852-sdhci.o
-
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-panel.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-pinmux.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-sdhci.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-memory.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-power.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-baseband.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-kbc.o
-obj-${CONFIG_MACH_TEGRA_ENTERPRISE}     += board-enterprise-sensors.o
-
-obj-${CONFIG_MACH_KAI}                  += board-kai.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-kbc.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-memory.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-panel.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-pinmux.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-power.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-sdhci.o
-obj-${CONFIG_MACH_KAI}                  += board-kai-sensors.o
-obj-y                                   += eeprom-wifi-mac.o
 
 obj-${CONFIG_TEGRA_BB_XMM_POWER}        += baseband-xmm-power.o
 obj-${CONFIG_TEGRA_BB_XMM_POWER2}       += baseband-xmm-power2.o
