@@ -40,6 +40,7 @@ struct tegra_sdhci_host {
         bool is_rail_enabled;
         struct clk *emc_clk;
         unsigned int emc_max_clk;
+	struct tegra_sdhci_platform_data *plat;
 };
 
 struct mmc_ios {
