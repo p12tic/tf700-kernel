@@ -39,7 +39,7 @@
 #include "rt56xx_ioctl.h"
 #endif //RTK_IOCTL
 #define VIRTUAL_REG_FOR_MISC_FUNC 0x90
-#define RT5631_PWR_ADC_L_CLK (1 << 11)
+#define RT5631_RT5631_PWR_ADC_L_CLK (1 << 11)
 
 #define AUDIO_IOC_MAGIC	0xf7
 #define AUDIO_IOC_MAXNR	6
@@ -420,19 +420,19 @@ static int rt5631_dmic_get(struct snd_kcontrol *kcontrol,
 
 static void rt5631_enable_dmic(struct snd_soc_codec *codec)
 {
-	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL, DMIC_ENA, DMIC_ENA_MASK);
+	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL, RT5631_DMIC_ENA, RT5631_DMIC_ENA_MASK);
 	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-		DMIC_L_CH_UNMUTE | DMIC_R_CH_UNMUTE,
-		DMIC_L_CH_MUTE_MASK | DMIC_R_CH_MUTE_MASK);
+		RT5631_DMIC_L_CH_UNMUTE | RT5631_DMIC_R_CH_UNMUTE,
+		RT5631_DMIC_L_CH_MUTE_MASK | RT5631_DMIC_R_CH_MUTE_MASK);
 }
 
 static void rt5631_close_dmic(struct snd_soc_codec *codec)
 {
 	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-		DMIC_L_CH_MUTE | DMIC_R_CH_MUTE,
-		DMIC_L_CH_MUTE_MASK | DMIC_R_CH_MUTE_MASK);
+		RT5631_DMIC_L_CH_MUTE | RT5631_DMIC_R_CH_MUTE,
+		RT5631_DMIC_L_CH_MUTE_MASK | RT5631_DMIC_R_CH_MUTE_MASK);
 	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-		DMIC_DIS, DMIC_ENA_MASK);
+		RT5631_DMIC_DIS, RT5631_DMIC_ENA_MASK);
 
 	rt5631_write_mask(codec, RT5631_ADC_CTRL_1, 0x0000, 0x001f);	//boost 0dB
 	return;
@@ -488,8 +488,8 @@ static void rt5631_update_eqmode(struct snd_soc_codec *codec, int mode)
 		/* Fill and update EQ parameter,
 		 * and EQ block are enabled.
 		 */
-		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,RT5631_PWR_ADC_L_CLK ,
-			RT5631_PWR_ADC_L_CLK );
+		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,RT5631_RT5631_PWR_ADC_L_CLK ,
+			RT5631_RT5631_PWR_ADC_L_CLK );
 		rt5631_write_index_mask(codec, RT5631_EQ_PRE_VOL_CTRL
 						, 0x8000, 0x8000);
 		snd_soc_write(codec, RT5631_EQ_CTRL,0x8000);
@@ -504,7 +504,7 @@ static void rt5631_update_eqmode(struct snd_soc_codec *codec, int mode)
 		else
 			rt5631_write_mask(codec, RT5631_EQ_CTRL, 0x0000, 0xc000);
 		if(!pw_ladc)
-			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1, 0, RT5631_PWR_ADC_L_CLK );
+			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1, 0, RT5631_RT5631_PWR_ADC_L_CLK );
 	}
 
 	return;
@@ -783,11 +783,11 @@ static int spk_event(struct snd_soc_dapm_widget *w,
 			}
 
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD4,
-					PWR_SPK_L_VOL, PWR_SPK_L_VOL);
+					RT5631_PWR_SPK_L_VOL, RT5631_PWR_SPK_L_VOL);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-					PWR_CLASS_D, PWR_CLASS_D);
+					RT5631_PWR_CLASS_D, RT5631_PWR_CLASS_D);
 			rt5631_write_mask(codec, RT5631_SPK_OUT_VOL,
-					0, RT_L_MUTE);
+					0, RT5631_L_MUTE);
 			spkl_out_enable = 1;
 		}
 		if (!spkr_out_enable && !strcmp(w->name, "SPKR Amp")) {
@@ -808,11 +808,11 @@ static int spk_event(struct snd_soc_dapm_widget *w,
 			}
 
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD4,
-					PWR_SPK_R_VOL, PWR_SPK_R_VOL);
+					RT5631_PWR_SPK_R_VOL, RT5631_PWR_SPK_R_VOL);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-					PWR_CLASS_D, PWR_CLASS_D);
+					RT5631_PWR_CLASS_D, RT5631_PWR_CLASS_D);
 			rt5631_write_mask(codec, RT5631_SPK_OUT_VOL,
-					0, RT_R_MUTE);
+					0, RT5631_R_MUTE);
 			spkr_out_enable = 1;
 		}
 		break;
@@ -820,21 +820,21 @@ static int spk_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		if (spkl_out_enable && !strcmp(w->name, "SPKL Amp")) {
 			rt5631_write_mask(codec, RT5631_SPK_OUT_VOL,
-					RT_L_MUTE, RT_L_MUTE);
+					RT5631_L_MUTE, RT5631_L_MUTE);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD4,
-					0, PWR_SPK_L_VOL);
+					0, RT5631_PWR_SPK_L_VOL);
 			spkl_out_enable = 0;
 		}
 		if (spkr_out_enable && !strcmp(w->name, "SPKR Amp")) {
 			rt5631_write_mask(codec, RT5631_SPK_OUT_VOL,
-					RT_R_MUTE, RT_R_MUTE);
+					RT5631_R_MUTE, RT5631_R_MUTE);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD4,
-					0, PWR_SPK_R_VOL);
+					0, RT5631_PWR_SPK_R_VOL);
 			spkr_out_enable = 0;
 		}
 		if (0 == spkl_out_enable && 0 == spkr_out_enable)
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-					0, PWR_CLASS_D);
+					0, RT5631_PWR_CLASS_D);
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
@@ -892,7 +892,7 @@ static void hp_depop_mode2_onebit(struct snd_soc_codec *codec, int enable)
 {
 	unsigned int soft_vol, hp_zc;
 
-	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2, 0, EN_ONE_BIT_DEPOP);
+	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2, 0, RT5631_EN_ONE_BIT_DEPOP);
 
 	soft_vol = rt5631_read(codec, RT5631_SOFT_VOL_CTRL);
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, 0);
@@ -903,7 +903,7 @@ static void hp_depop_mode2_onebit(struct snd_soc_codec *codec, int enable)
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x309f);
 		rt5631_write_index(codec, RT5631_CP_INTL_REG2, 0x6530);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_2,
-				EN_CAP_FREE_DEPOP);
+				RT5631_EN_CAP_FREE_DEPOP);
 	} else {
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_2, 0);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(100));
@@ -919,7 +919,7 @@ static void hp_mute_unmute_depop_onebit(struct snd_soc_codec *codec, int enable)
 {
 	unsigned int soft_vol, hp_zc;
 
-	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2, 0, EN_ONE_BIT_DEPOP);
+	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2, 0, RT5631_EN_ONE_BIT_DEPOP);
 	soft_vol = rt5631_read(codec, RT5631_SOFT_VOL_CTRL);
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, 0);
 	hp_zc = rt5631_read(codec, RT5631_INT_ST_IRQ_CTRL_2);
@@ -928,12 +928,12 @@ static void hp_mute_unmute_depop_onebit(struct snd_soc_codec *codec, int enable)
 		schedule_timeout_uninterruptible(msecs_to_jiffies(10));
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x307f);
 		rt5631_write_mask(codec, RT5631_HP_OUT_VOL, 0,
-				RT_L_MUTE | RT_R_MUTE);
+				RT5631_L_MUTE | RT5631_R_MUTE);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(300));
 
 	} else {
 		rt5631_write_mask(codec, RT5631_HP_OUT_VOL,
-			RT_L_MUTE | RT_R_MUTE, RT_L_MUTE | RT_R_MUTE);
+			RT5631_L_MUTE | RT5631_R_MUTE, RT5631_L_MUTE | RT5631_R_MUTE);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(100));
 	}
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, soft_vol);
@@ -947,7 +947,7 @@ static void hp_depop2(struct snd_soc_codec *codec, int enable)
 	unsigned int soft_vol, hp_zc;
 
 	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2,
-		EN_ONE_BIT_DEPOP, EN_ONE_BIT_DEPOP);
+		RT5631_EN_ONE_BIT_DEPOP, RT5631_EN_ONE_BIT_DEPOP);
 	soft_vol = rt5631_read(codec, RT5631_SOFT_VOL_CTRL);
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, 0);
 	hp_zc = rt5631_read(codec, RT5631_INT_ST_IRQ_CTRL_2);
@@ -955,30 +955,30 @@ static void hp_depop2(struct snd_soc_codec *codec, int enable)
 	if (enable) {
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x303e);
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-			PWR_CHARGE_PUMP | PWR_HP_L_AMP | PWR_HP_R_AMP,
-			PWR_CHARGE_PUMP | PWR_HP_L_AMP | PWR_HP_R_AMP);
+			RT5631_PWR_CHARGE_PUMP | RT5631_PWR_HP_L_AMP | RT5631_PWR_HP_R_AMP,
+			RT5631_PWR_CHARGE_PUMP | RT5631_PWR_HP_L_AMP | RT5631_PWR_HP_R_AMP);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | EN_DEPOP2_FOR_HP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_EN_DEPOP2_FOR_HP);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(100));
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-			PWR_HP_DEPOP_DIS, PWR_HP_DEPOP_DIS);
+			RT5631_PWR_HP_DEPOP_DIS, RT5631_PWR_HP_DEPOP_DIS);
 	} else {
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x303F);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | EN_MUTE_UNMUTE_DEPOP |
-			PD_HPAMP_L_ST_UP | PD_HPAMP_R_ST_UP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_EN_MUTE_UNMUTE_DEPOP |
+			RT5631_PD_HPAMP_L_ST_UP | RT5631_PD_HPAMP_R_ST_UP);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(75));
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | PD_HPAMP_L_ST_UP | PD_HPAMP_R_ST_UP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_PD_HPAMP_L_ST_UP | RT5631_PD_HPAMP_R_ST_UP);
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3, 0,
-					PWR_HP_DEPOP_DIS);
+					RT5631_PWR_HP_DEPOP_DIS);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | EN_DEPOP2_FOR_HP |
-			PD_HPAMP_L_ST_UP | PD_HPAMP_R_ST_UP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_EN_DEPOP2_FOR_HP |
+			RT5631_PD_HPAMP_L_ST_UP | RT5631_PD_HPAMP_R_ST_UP);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(80));
-		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1, POW_ON_SOFT_GEN);
+		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1, RT5631_POW_ON_SOFT_GEN);
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3, 0,
-			PWR_CHARGE_PUMP | PWR_HP_L_AMP | PWR_HP_R_AMP);
+			RT5631_PWR_CHARGE_PUMP | RT5631_PWR_HP_L_AMP | RT5631_PWR_HP_R_AMP);
 	}
 
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, soft_vol);
@@ -992,7 +992,7 @@ static void hp_mute_unmute_depop(struct snd_soc_codec *codec, int enable)
 	unsigned int soft_vol, hp_zc;
 
 	rt5631_write_mask(codec, RT5631_DEPOP_FUN_CTRL_2,
-		EN_ONE_BIT_DEPOP, EN_ONE_BIT_DEPOP);
+		RT5631_EN_ONE_BIT_DEPOP, RT5631_EN_ONE_BIT_DEPOP);
 	soft_vol = rt5631_read(codec, RT5631_SOFT_VOL_CTRL);
 	rt5631_write(codec, RT5631_SOFT_VOL_CTRL, 0);
 	hp_zc = rt5631_read(codec, RT5631_INT_ST_IRQ_CTRL_2);
@@ -1001,18 +1001,18 @@ static void hp_mute_unmute_depop(struct snd_soc_codec *codec, int enable)
 		schedule_timeout_uninterruptible(msecs_to_jiffies(10));
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x302f);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | EN_MUTE_UNMUTE_DEPOP |
-			EN_HP_R_M_UN_MUTE_DEPOP | EN_HP_L_M_UN_MUTE_DEPOP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_EN_MUTE_UNMUTE_DEPOP |
+			RT5631_EN_HP_R_M_UN_MUTE_DEPOP | RT5631_EN_HP_L_M_UN_MUTE_DEPOP);
 		rt5631_write_mask(codec, RT5631_HP_OUT_VOL, 0,
-				RT_L_MUTE | RT_R_MUTE);
+				RT5631_L_MUTE | RT5631_R_MUTE);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(160));
 	} else {
 		rt5631_write_index(codec, RT5631_SPK_INTL_CTRL, 0x302f);
 		rt5631_write(codec, RT5631_DEPOP_FUN_CTRL_1,
-			POW_ON_SOFT_GEN | EN_MUTE_UNMUTE_DEPOP |
-			EN_HP_R_M_UN_MUTE_DEPOP | EN_HP_L_M_UN_MUTE_DEPOP);
+			RT5631_POW_ON_SOFT_GEN | RT5631_EN_MUTE_UNMUTE_DEPOP |
+			RT5631_EN_HP_R_M_UN_MUTE_DEPOP | RT5631_EN_HP_L_M_UN_MUTE_DEPOP);
 		rt5631_write_mask(codec, RT5631_HP_OUT_VOL,
-			RT_L_MUTE | RT_R_MUTE, RT_L_MUTE | RT_R_MUTE);
+			RT5631_L_MUTE | RT5631_R_MUTE, RT5631_L_MUTE | RT5631_R_MUTE);
 		schedule_timeout_uninterruptible(msecs_to_jiffies(150));
 	}
 
@@ -1030,8 +1030,8 @@ static int hp_event(struct snd_soc_dapm_widget *w,
 	static bool hp_en;
 	int pu_l, pu_r;
 
-	pu_l = rt5631_read(codec, RT5631_PWR_MANAG_ADD4) & PWR_HP_L_OUT_VOL;
-	pu_r = rt5631_read(codec, RT5631_PWR_MANAG_ADD4) & PWR_HP_R_OUT_VOL;
+	pu_l = rt5631_read(codec, RT5631_PWR_MANAG_ADD4) & RT5631_PWR_HP_L_OUT_VOL;
+	pu_r = rt5631_read(codec, RT5631_PWR_MANAG_ADD4) & RT5631_PWR_HP_R_OUT_VOL;
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMD:
 		if ((pu_l && pu_r) && hp_en) {
@@ -1075,7 +1075,7 @@ static int dac_to_hp_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMD:
-		
+
 		if (hp_en) {
 			if (rt5631->codec_version) {
 				hp_mute_unmute_depop_onebit(codec, 0);
@@ -1115,9 +1115,9 @@ static int mic_event(struct snd_soc_dapm_widget *w,
 	int val_mic1, val_mic2;
 
 	val_mic1 = rt5631_read(codec, RT5631_PWR_MANAG_ADD2) &
-				PWR_MIC1_BOOT_GAIN;
+				RT5631_PWR_MIC1_BOOT_GAIN;
 	val_mic2 = rt5631_read(codec, RT5631_PWR_MANAG_ADD2) &
-				PWR_MIC2_BOOT_GAIN;
+				RT5631_PWR_MIC2_BOOT_GAIN;
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		/*
@@ -1156,7 +1156,7 @@ static int auxo1_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMD:
 		if (aux1_en) {
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						RT_L_MUTE, RT_L_MUTE);
+						RT5631_L_MUTE, RT5631_L_MUTE);
 			aux1_en = false;
 		}
 		break;
@@ -1164,7 +1164,7 @@ static int auxo1_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMU:
 		if (!aux1_en) {
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						0, RT_L_MUTE);
+						0, RT5631_L_MUTE);
 			aux1_en = true;
 		}
 		break;
@@ -1189,7 +1189,7 @@ static int auxo2_event(struct snd_soc_dapm_widget *w,
 		asusAudiodec_i2c_write_data(mute_all_audioDock, 2);
 		if (aux2_en) {
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						RT_R_MUTE, RT_R_MUTE);
+						RT5631_R_MUTE, RT5631_R_MUTE);
 			aux2_en = false;
 		}
 		break;
@@ -1197,7 +1197,7 @@ static int auxo2_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMU:
 		if (!aux2_en) {
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						0, RT_R_MUTE);
+						0, RT5631_R_MUTE);
 			aux2_en = true;
 		}
 		asusAudiodec_i2c_write_data(unmute_all_audioDock, 2);
@@ -1220,9 +1220,9 @@ static int mono_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMD:
 		if (mono_en) {
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						MUTE_MONO, MUTE_MONO);
+						RT5631_MUTE_MONO, RT5631_MUTE_MONO);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-						0, PWR_MONO_DEPOP_DIS);
+						0, RT5631_PWR_MONO_DEPOP_DIS);
 			mono_en = false;
 		}
 		break;
@@ -1230,9 +1230,9 @@ static int mono_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMU:
 		if (!mono_en) {
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-				PWR_MONO_DEPOP_DIS, PWR_MONO_DEPOP_DIS);
+				RT5631_PWR_MONO_DEPOP_DIS, RT5631_PWR_MONO_DEPOP_DIS);
 			rt5631_write_mask(codec, RT5631_MONO_AXO_1_2_VOL,
-						0, MUTE_MONO);
+						0, RT5631_MUTE_MONO);
 			mono_en = true;
 		}
 		break;
@@ -1257,29 +1257,29 @@ static int config_common_power(struct snd_soc_codec *codec, bool pmu)
 	if (pmu) {
 		ref_count++;
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-			PWR_MAIN_I2S_EN | PWR_DAC_REF,
-			PWR_MAIN_I2S_EN | PWR_DAC_REF);
+			RT5631_PWR_MAIN_I2S_EN | RT5631_PWR_DAC_REF,
+			RT5631_PWR_MAIN_I2S_EN | RT5631_PWR_DAC_REF);
 		mux_val = rt5631_read(codec, RT5631_SPK_MONO_HP_OUT_CTRL);
-		if (!(mux_val & HP_L_MUX_SEL_DAC_L))
+		if (!(mux_val & RT5631_HP_L_MUX_SEL_DAC_L))
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-				PWR_DAC_L_TO_MIXER, PWR_DAC_L_TO_MIXER);
-		if (!(mux_val & HP_R_MUX_SEL_DAC_R))
+				RT5631_PWR_DAC_L_TO_MIXER, RT5631_PWR_DAC_L_TO_MIXER);
+		if (!(mux_val & RT5631_HP_R_MUX_SEL_DAC_R))
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1,
-				PWR_DAC_R_TO_MIXER, PWR_DAC_R_TO_MIXER);
+				RT5631_PWR_DAC_R_TO_MIXER, RT5631_PWR_DAC_R_TO_MIXER);
 		if (rt5631->pll_used_flag)
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD2,
-						PWR_PLL, PWR_PLL);
+						RT5631_PWR_PLL1, RT5631_PWR_PLL1);
 	} else{
 		ref_count--;
 		if(ref_count == 0){
 			printk("%s: Real powr down, ref_count = 0\n", __func__);
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD1, 0,
-				PWR_MAIN_I2S_EN | PWR_DAC_REF |
-				PWR_DAC_L_TO_MIXER | PWR_DAC_R_TO_MIXER);
+				RT5631_PWR_MAIN_I2S_EN | RT5631_PWR_DAC_REF |
+				RT5631_PWR_DAC_L_TO_MIXER | RT5631_PWR_DAC_R_TO_MIXER);
 		}
 		if (rt5631->pll_used_flag)
 			rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD2,
-						0, PWR_PLL);
+						0, RT5631_PWR_PLL1);
 	}
 
 	return 0;
@@ -1809,32 +1809,32 @@ static void rt5631_set_dmic_params(struct snd_soc_codec *codec,
 	int rate;
 
 	rt5631_write_mask(codec, RT5631_GPIO_CTRL,
-		GPIO_PIN_FUN_SEL_GPIO_DIMC | GPIO_DMIC_FUN_SEL_DIMC,
-		GPIO_PIN_FUN_SEL_MASK | GPIO_DMIC_FUN_SEL_MASK);
-	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL, DMIC_ENA, DMIC_ENA_MASK);
+		RT5631_GPIO_PIN_FUN_SEL_GPIO_DIMC | RT5631_GPIO_DMIC_FUN_SEL_DIMC,
+		RT5631_GPIO_PIN_FUN_SEL_MASK | RT5631_GPIO_DMIC_FUN_SEL_MASK);
+	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL, RT5631_DMIC_ENA, RT5631_DMIC_ENA_MASK);
 	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-		DMIC_L_CH_LATCH_FALLING | DMIC_R_CH_LATCH_RISING,
-		DMIC_L_CH_LATCH_MASK|DMIC_R_CH_LATCH_MASK);
+		RT5631_DMIC_L_CH_LATCH_FALLING | RT5631_DMIC_R_CH_LATCH_RISING,
+		RT5631_DMIC_L_CH_LATCH_MASK|RT5631_DMIC_R_CH_LATCH_MASK);
 
 	rate = params_rate(params);
 	switch (rate) {
 	case 44100:
 	case 48000:
 		rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-			DMIC_CLK_CTRL_TO_32FS, DMIC_CLK_CTRL_MASK);
+			RT5631_DMIC_CLK_CTRL_TO_32FS, RT5631_DMIC_CLK_CTRL_MASK);
 		break;
 
 	case 32000:
 	case 22050:
 		rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-			DMIC_CLK_CTRL_TO_64FS, DMIC_CLK_CTRL_MASK);
+			RT5631_DMIC_CLK_CTRL_TO_64FS, RT5631_DMIC_CLK_CTRL_MASK);
 		break;
 
 	case 16000:
 	case 11025:
 	case 8000:
 		rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-			DMIC_CLK_CTRL_TO_128FS, DMIC_CLK_CTRL_MASK);
+			RT5631_DMIC_CLK_CTRL_TO_128FS, RT5631_DMIC_CLK_CTRL_MASK);
 		break;
 
 	default:
@@ -1842,8 +1842,8 @@ static void rt5631_set_dmic_params(struct snd_soc_codec *codec,
 	}
 
 	rt5631_write_mask(codec, RT5631_DIG_MIC_CTRL,
-		DMIC_L_CH_UNMUTE | DMIC_R_CH_UNMUTE,
-		DMIC_L_CH_MUTE_MASK | DMIC_R_CH_MUTE_MASK);
+		RT5631_DMIC_L_CH_UNMUTE | RT5631_DMIC_R_CH_UNMUTE,
+		RT5631_DMIC_L_CH_MUTE_MASK | RT5631_DMIC_R_CH_MUTE_MASK);
 
 	return;
 }
@@ -1871,13 +1871,13 @@ static int rt5631_hifi_pcm_params(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_FORMAT_S16_LE:
 		break;
 	case SNDRV_PCM_FORMAT_S20_3LE:
-		iface |= SDP_I2S_DL_20;
+		iface |= RT5631_SDP_I2S_DL_20;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
-		iface |= SDP_I2S_DL_24;
+		iface |= RT5631_SDP_I2S_DL_24;
 		break;
 	case SNDRV_PCM_FORMAT_S8:
-		iface |= SDP_I2S_DL_8;
+		iface |= RT5631_SDP_I2S_DL_8;
 		break;
 	default:
 		return -EINVAL;
@@ -1890,7 +1890,7 @@ static int rt5631_hifi_pcm_params(struct snd_pcm_substream *substream,
 			rt5631_close_dmic(codec);
 	}
 
-	rt5631_write_mask(codec, RT5631_SDP_CTRL, iface, SDP_I2S_DL_MASK);
+	rt5631_write_mask(codec, RT5631_SDP_CTRL, iface, RT5631_SDP_I2S_DL_MASK);
 
 	if (coeff >= 0)
 		rt5631_write(codec, RT5631_STEREO_AD_DA_CLK_CTRL,
@@ -1913,7 +1913,7 @@ static int rt5631_hifi_codec_set_dai_fmt(struct snd_soc_dai *codec_dai,
 		rt5631->master = 1;
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
-		iface |= SDP_MODE_SEL_SLAVE;
+		iface |= RT5631_SDP_MODE_SEL_SLAVE;
 		rt5631->master = 0;
 		break;
 	default:
@@ -1924,13 +1924,13 @@ static int rt5631_hifi_codec_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	case SND_SOC_DAIFMT_I2S:
 		break;
 	case SND_SOC_DAIFMT_LEFT_J:
-		iface |= SDP_I2S_DF_LEFT;
+		iface |= RT5631_SDP_I2S_DF_LEFT;
 		break;
 	case SND_SOC_DAIFMT_DSP_A:
-		iface |= SDP_I2S_DF_PCM_A;
+		iface |= RT5631_SDP_I2S_DF_PCM_A;
 		break;
 	case SND_SOC_DAIFMT_DSP_B:
-		iface  |= SDP_I2S_DF_PCM_B;
+		iface  |= RT5631_SDP_I2S_DF_PCM_B;
 		break;
 	default:
 		return -EINVAL;
@@ -1940,7 +1940,7 @@ static int rt5631_hifi_codec_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	case SND_SOC_DAIFMT_NB_NF:
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
-		iface |= SDP_I2S_BCLK_POL_CTRL;
+		iface |= RT5631_SDP_I2S_BCLK_POL_CTRL;
 		break;
 	default:
 		return -EINVAL;
@@ -1991,7 +1991,7 @@ static int rt5631_codec_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 				schedule_timeout_uninterruptible(
 					msecs_to_jiffies(20));
 				rt5631_write(codec, RT5631_GLOBAL_CLK_CTRL,
-					SYSCLK_SOUR_SEL_PLL);
+					RT5631_SYSCLK_SOUR_SEL_PLL);
 				rt5631->pll_used_flag = 1;
 				ret = 0;
 				break;
@@ -2005,8 +2005,8 @@ static int rt5631_codec_set_dai_pll(struct snd_soc_dai *codec_dai, int pll_id,
 				schedule_timeout_uninterruptible(
 					msecs_to_jiffies(20));
 				rt5631_write(codec, RT5631_GLOBAL_CLK_CTRL,
-					SYSCLK_SOUR_SEL_PLL |
-					PLLCLK_SOUR_SEL_BITCLK);
+					RT5631_SYSCLK_SOUR_SEL_PLL |
+					RT5631_PLLCLK_SOUR_SEL_BCLK);
 				rt5631->pll_used_flag = 1;
 				ret = 0;
 				break;
@@ -2457,7 +2457,7 @@ static int rt5631_set_bias_level(struct snd_soc_codec *codec,
 
 	case SND_SOC_BIAS_PREPARE:
 		rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-			PWR_VREF | PWR_MAIN_BIAS, PWR_VREF | PWR_MAIN_BIAS);
+			RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS, RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS);
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
@@ -2465,9 +2465,9 @@ static int rt5631_set_bias_level(struct snd_soc_codec *codec,
 
 	case SND_SOC_BIAS_OFF:
 		rt5631_write_mask(codec, RT5631_SPK_OUT_VOL,
-			RT_L_MUTE | RT_R_MUTE, RT_L_MUTE | RT_R_MUTE);
+			RT5631_L_MUTE | RT5631_R_MUTE, RT5631_L_MUTE | RT5631_R_MUTE);
 		rt5631_write_mask(codec, RT5631_HP_OUT_VOL,
-			RT_L_MUTE | RT_R_MUTE, RT_L_MUTE | RT_R_MUTE);
+			RT5631_L_MUTE | RT5631_R_MUTE, RT5631_L_MUTE | RT5631_R_MUTE);
 		rt5631_write(codec, RT5631_PWR_MANAG_ADD1, 0x0000);
 		rt5631_write(codec, RT5631_PWR_MANAG_ADD2, 0x0000);
 		rt5631_write(codec, RT5631_PWR_MANAG_ADD3, 0x0000);
@@ -2563,7 +2563,7 @@ static int rt56xx_hwdep_ioctl_common(struct snd_hwdep *hw, struct file *file, un
 		case RT_SET_CODEC_SPK_VOL_IOCTL:
 			snd_soc_update_bits(codec, RT5631_SPK_OUT_VOL,
 				RT5631_L_VOL_MASK | RT5631_R_VOL_MASK,
-				*(buf)<<RT5631_L_VOL_SFT | *(buf)<<RT5631_R_VOL_SFT);
+				*(buf)<<RT5631_L_VOL_SHIFT | *(buf)<<RT5631_R_VOL_SHIFT);
 			break;
 		case RT_SET_CODEC_MIC_GAIN_IOCTL:
 			snd_soc_update_bits(codec, RT5631_MIC_CTRL_2,
@@ -2694,10 +2694,10 @@ static int rt5631_probe(struct snd_soc_codec *codec)
 
 	rt5631_reset(codec);
 	rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-		PWR_VREF | PWR_MAIN_BIAS, PWR_VREF | PWR_MAIN_BIAS);
+		RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS, RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS);
 	schedule_timeout_uninterruptible(msecs_to_jiffies(80));
-	rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3, PWR_FAST_VREF_CTRL,
-					PWR_FAST_VREF_CTRL);
+	rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3, RT5631_PWR_FAST_VREF_CTRL,
+					RT5631_PWR_FAST_VREF_CTRL);
 	rt5631_reg_init(codec);
 
 	/* power off ClassD auto Recovery */
@@ -2815,10 +2815,10 @@ static int rt5631_resume(struct snd_soc_codec *codec)
 	struct rt5631_priv *rt5631 = snd_soc_codec_get_drvdata(codec);
 
 	rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-		PWR_VREF | PWR_MAIN_BIAS, PWR_VREF | PWR_MAIN_BIAS);
+		RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS, RT5631_PWR_VREF | RT5631_PWR_MAIN_BIAS);
 	schedule_timeout_uninterruptible(msecs_to_jiffies(110));
 	rt5631_write_mask(codec, RT5631_PWR_MANAG_ADD3,
-		PWR_FAST_VREF_CTRL, PWR_FAST_VREF_CTRL);
+		RT5631_PWR_FAST_VREF_CTRL, RT5631_PWR_FAST_VREF_CTRL);
 	rt5631_reg_init(codec);
 
 	/* power off ClassD auto Recovery */
@@ -2841,8 +2841,8 @@ int rt5631_ext_mic_detect(void)
 	struct snd_soc_codec *codec = rt5631_codec;
 	int det;
 
-	rt5631_write_mask(codec, RT5631_MIC_CTRL_2, MICBIAS1_S_C_DET_ENA,
-				MICBIAS1_S_C_DET_MASK);
+	rt5631_write_mask(codec, RT5631_MIC_CTRL_2, RT5631_MICBIAS1_S_C_DET_ENA,
+				RT5631_MICBIAS1_S_C_DET_MASK);
 	det = rt5631_read(codec, RT5631_INT_ST_IRQ_CTRL_2) & 0x0001;
 	rt5631_write_mask(codec, RT5631_INT_ST_IRQ_CTRL_2, 0x0001, 0x00001);
 
