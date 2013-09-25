@@ -592,6 +592,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	 * need to tell some cards to go back to the idle
 	 * state.  We wait 1ms to give cards time to
 	 * respond.
+	 * mmc_go_idle is needed for eMMC that are asleep
 	 */
 	mmc_go_idle(host);
 
@@ -984,7 +985,7 @@ static int mmc_detect(struct mmc_host *host)
  */
 static int mmc_suspend(struct mmc_host *host)
 {
-	int err;
+	int err = 0;
 
 	BUG_ON(!host);
 	BUG_ON(!host->card);
@@ -999,7 +1000,7 @@ static int mmc_suspend(struct mmc_host *host)
 	host->card->state &= ~(MMC_STATE_HIGHSPEED | MMC_STATE_HIGHSPEED_200);
 	mmc_release_host(host);
 
-	return 0;
+	return err;
 }
 
 /*
