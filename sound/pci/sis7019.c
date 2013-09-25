@@ -1265,7 +1265,7 @@ static int sis_resume(struct pci_dev *pci)
 		goto error;
 	}
 
-	if (request_irq(pci->irq, sis_interrupt, IRQF_DISABLED|IRQF_SHARED,
+	if (request_irq(pci->irq, sis_interrupt, IRQF_SHARED,
 			KBUILD_MODNAME, sis)) {
 		printk(KERN_ERR "sis7019: unable to regain IRQ %d\n", pci->irq);
 		goto error;
@@ -1371,7 +1371,7 @@ static int __devinit sis_chip_create(struct snd_card *card,
 	if (rc)
 		goto error_out_cleanup;
 
-	if (request_irq(pci->irq, sis_interrupt, IRQF_DISABLED|IRQF_SHARED,
+	if (request_irq(pci->irq, sis_interrupt, IRQF_SHARED,
 			KBUILD_MODNAME, sis)) {
 		printk(KERN_ERR "unable to allocate irq %d\n", sis->irq);
 		goto error_out_cleanup;
