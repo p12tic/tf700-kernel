@@ -28,6 +28,7 @@
 #include <linux/mmc/sd.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 
 #include <asm/gpio.h>
 
