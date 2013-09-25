@@ -260,8 +260,8 @@ static __init int create_suspend_pgtable(void)
 		return -ENOMEM;
 
 	/* Only identity-map size of lowmem (high_memory - PAGE_OFFSET) */
-	identity_mapping_add(tegra_pgd, PLAT_PHYS_OFFSET,
-		PLAT_PHYS_OFFSET + (unsigned long)high_memory - PAGE_OFFSET);
+	identity_mapping_add(tegra_pgd, PHYS_OFFSET,
+		PHYS_OFFSET + (unsigned long)high_memory - PAGE_OFFSET);
 	identity_mapping_add(tegra_pgd, IO_IRAM_PHYS,
 		IO_IRAM_PHYS + SECTION_SIZE);
 
@@ -645,7 +645,7 @@ unsigned int tegra_idle_lp2_last(unsigned int sleep_time, unsigned int flags)
 			  __pa(pgd + PTRS_PER_PGD));
 	outer_disable();
 
-	tegra_sleep_cpu(PLAT_PHYS_OFFSET - PAGE_OFFSET);
+	tegra_sleep_cpu(PHYS_OFFSET - PAGE_OFFSET);
 
 	tegra_init_cache(false);
 	tegra_cluster_switch_time(flags, tegra_cluster_switch_time_id_switch);
@@ -930,9 +930,9 @@ int tegra_suspend_dram(enum tegra_suspend_mode mode, unsigned int flags)
 	outer_disable();
 
 	if (mode == TEGRA_SUSPEND_LP2)
-		tegra_sleep_cpu(PLAT_PHYS_OFFSET - PAGE_OFFSET);
+		tegra_sleep_cpu(PHYS_OFFSET - PAGE_OFFSET);
 	else
-		tegra_sleep_core(mode, PLAT_PHYS_OFFSET - PAGE_OFFSET);
+		tegra_sleep_core(mode, PHYS_OFFSET - PAGE_OFFSET);
 
 	tegra_init_cache(true);
 
