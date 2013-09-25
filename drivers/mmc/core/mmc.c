@@ -414,6 +414,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
 	if (card->ext_csd.rev >= 5) {
 		card->ext_csd.rel_param = ext_csd[EXT_CSD_WR_REL_PARAM];
+		card->ext_csd.rst_n_function = ext_csd[EXT_CSD_RST_N_FUNCTION];
+
 		/* check whether the eMMC card supports HPI */
 		if (ext_csd[EXT_CSD_HPI_FEATURES] & 0x1) {
 			card->ext_csd.hpi = 1;
@@ -437,6 +439,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		if ((card->cid.manfid == 0x90) && ((card->cid.prod_rev == 0x73)
 			|| (card->cid.prod_rev == 0x7b)))
 			card->ext_csd.refresh = 1;
+
 	}
 
 	if (ext_csd[EXT_CSD_ERASED_MEM_CONT])
@@ -586,6 +589,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
+
+	/* Set correct bus mode for MMC before attempting init */
+	if (!mmc_host_is_spi(host))
+		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
 
 	/*
 	 * Since we're changing the OCR value, we seem to
@@ -777,7 +784,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable HPI feature (if supported)
 	 */
-	if (card->ext_csd.hpi && (card->host->caps & MMC_CAP_BKOPS)) {
+	if (card->ext_csd.hpi && (card->host->caps2 & MMC_CAP2_BKOPS)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 			EXT_CSD_HPI_MGMT, 1, 0);
 		if (err && err != -EBADMSG)
@@ -794,7 +801,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Enable Background ops feature (if supported)
 	 */
-	if (card->ext_csd.bk_ops && (card->host->caps & MMC_CAP_BKOPS)) {
+	if (card->ext_csd.bk_ops && (card->host->caps2 & MMC_CAP2_BKOPS)) {
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 			EXT_CSD_BKOPS_EN, 1, 0);
 		if (err && err != -EBADMSG)
@@ -1111,6 +1118,10 @@ int mmc_attach_mmc(struct mmc_host *host)
 
 	BUG_ON(!host);
 	WARN_ON(!host->claimed);
+
+	/* Set correct bus mode for MMC before attempting attach */
+	if (!mmc_host_is_spi(host))
+		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
 
 	err = mmc_send_op_cond(host, 0, &ocr);
 	if (err)
