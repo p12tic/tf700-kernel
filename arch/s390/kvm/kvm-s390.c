@@ -46,6 +46,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "instruction_lctlg", VCPU_STAT(instruction_lctlg) },
 	{ "instruction_lctl", VCPU_STAT(instruction_lctl) },
 	{ "deliver_emergency_signal", VCPU_STAT(deliver_emergency_signal) },
+	{ "deliver_external_call", VCPU_STAT(deliver_external_call) },
 	{ "deliver_service_signal", VCPU_STAT(deliver_service_signal) },
 	{ "deliver_virtio_interrupt", VCPU_STAT(deliver_virtio_interrupt) },
 	{ "deliver_stop_signal", VCPU_STAT(deliver_stop_signal) },
@@ -64,6 +65,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "instruction_stfl", VCPU_STAT(instruction_stfl) },
 	{ "instruction_tprot", VCPU_STAT(instruction_tprot) },
 	{ "instruction_sigp_sense", VCPU_STAT(instruction_sigp_sense) },
+	{ "instruction_sigp_external_call", VCPU_STAT(instruction_sigp_external_call) },
 	{ "instruction_sigp_emergency", VCPU_STAT(instruction_sigp_emergency) },
 	{ "instruction_sigp_stop", VCPU_STAT(instruction_sigp_stop) },
 	{ "instruction_sigp_set_arch", VCPU_STAT(instruction_sigp_arch) },
@@ -174,6 +176,8 @@ int kvm_arch_init_vm(struct kvm *kvm)
 	rc = s390_enable_sie();
 	if (rc)
 		goto out_err;
+
+	rc = -ENOMEM;
 
 	kvm->arch.sca = (struct sca_block *) get_zeroed_page(GFP_KERNEL);
 	if (!kvm->arch.sca)
@@ -396,6 +400,7 @@ int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu,
 {
 	memcpy(&vcpu->arch.guest_acrs, &sregs->acrs, sizeof(sregs->acrs));
 	memcpy(&vcpu->arch.sie_block->gcr, &sregs->crs, sizeof(sregs->crs));
+	restore_access_regs(vcpu->arch.guest_acrs);
 	return 0;
 }
 
@@ -411,6 +416,7 @@ int kvm_arch_vcpu_ioctl_set_fpu(struct kvm_vcpu *vcpu, struct kvm_fpu *fpu)
 {
 	memcpy(&vcpu->arch.guest_fpregs.fprs, &fpu->fprs, sizeof(fpu->fprs));
 	vcpu->arch.guest_fpregs.fpc = fpu->fpc;
+	restore_fp_regs(&vcpu->arch.guest_fpregs);
 	return 0;
 }
 
