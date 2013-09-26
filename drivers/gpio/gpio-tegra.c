@@ -120,7 +120,7 @@ void tegra_gpio_set_tristate(int gpio_nr, enum tegra_tristate ts)
 	tegra_pinmux_set_tristate(pin_group, ts);
 }
 
-static void tegra_gpio_mask_write(u32 reg, int gpio, int value)
+static void tegra_gpio_mask_write(volatile void __iomem *reg, int gpio, int value)
 {
 	u32 val;
 

@@ -2132,7 +2132,7 @@ static inline u32 periph_clk_source_shift(struct clk *c)
 static void tegra3_periph_clk_init(struct clk *c)
 {
 	u32 val = clk_readl(c->reg);
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	if (c->flags & MUX) {
 		for (sel = c->inputs; sel->input != NULL; sel++) {
@@ -2522,7 +2522,7 @@ static DEFINE_SPINLOCK(clk_out_lock);
 
 static void tegra3_clk_out_init(struct clk *c)
 {
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	u32 val = pmc_readl(c->reg);
 

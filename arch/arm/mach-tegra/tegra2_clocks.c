@@ -1057,7 +1057,7 @@ static struct clk_ops tegra_pll_div_ops = {
 static void tegra2_periph_clk_init(struct clk *c)
 {
 	u32 val = clk_readl(c->reg);
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	if (c->flags & MUX) {
 		for (sel = c->inputs; sel->input != NULL; sel++) {
@@ -1478,7 +1478,7 @@ static struct clk_ops tegra_audio_sync_clk_ops = {
 /* call this function after pinmux configuration */
 static void tegra2_cdev_clk_set_parent(struct clk *c)
 {
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	enum tegra_pingroup pg = TEGRA_PINGROUP_CDEV1;
 	int val;
