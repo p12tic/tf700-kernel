@@ -2575,7 +2575,7 @@ static struct clk_duplicate tegra_clk_duplicates[] = {
 		.clk = ck,	\
 	}
 
-struct clk *tegra_ptr_clks[] = {
+static struct clk *tegra_ptr_clks[] = {
 	&tegra_clk_32k,
 	&tegra_pll_s,
 	&tegra_clk_m,
