@@ -50,6 +50,8 @@
 
 #define MSELECT_CONFIG_0_ENABLE_PCIE_APERTURE				5
 
+#include "board.h"
+
 /* register definitions */
 #define AFI_OFFSET							0x3800
 #define PADS_OFFSET							0x3000
