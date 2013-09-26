@@ -590,5 +590,6 @@ source "drivers/misc/inv_mpu/Kconfig"
 source "drivers/misc/inv_mpu6050/Kconfig"
 source "drivers/misc/tegra-baseband/Kconfig"
 source "drivers/misc/tegra-cec/Kconfig"
+source "drivers/misc/altera-stapl/Kconfig"
 
 endif # MISC_DEVICES
