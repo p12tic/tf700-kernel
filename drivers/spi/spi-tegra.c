@@ -23,6 +23,7 @@
 /*#define VERBOSE_DEBUG   1*/
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/platform_device.h>
@@ -1340,7 +1341,7 @@ static int __init spi_tegra_init_dma_param(struct spi_tegra_data *tspi,
 	return 0;
 }
 
-static int __init spi_tegra_probe(struct platform_device *pdev)
+static int __devinit spi_tegra_probe(struct platform_device *pdev)
 {
 	struct spi_master	*master;
 	struct spi_tegra_data	*tspi;
@@ -1702,6 +1703,7 @@ static struct platform_driver spi_tegra_driver = {
 		.pm =		&tegra_spi_dev_pm_ops,
 		.of_match_table = spi_tegra_of_match_table,
 	},
+	.probe =	spi_tegra_probe,
 	.remove =	__devexit_p(spi_tegra_remove),
 };
 
@@ -1710,6 +1712,19 @@ static int __init spi_tegra_init(void)
 	return platform_driver_probe(&spi_tegra_driver, spi_tegra_probe);
 }
 subsys_initcall(spi_tegra_init);
+
+static void __exit spi_tegra_exit(void)
+{
+	platform_driver_unregister(&spi_tegra_driver);
+}
+module_exit(spi_tegra_exit);
+||||||| merged common ancestors
+
+static int __init spi_tegra_init(void)
+{
+	return platform_driver_probe(&spi_tegra_driver, spi_tegra_probe);
+}
+module_init(spi_tegra_init);
 
 static void __exit spi_tegra_exit(void)
 {
