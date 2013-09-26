@@ -2134,7 +2134,7 @@ static struct clk tegra_clk_audio_2x = {
 	},
 };
 
-struct clk_lookup tegra_audio_clk_lookups[] = {
+static struct clk_lookup tegra_audio_clk_lookups[] = {
 	{ .con_id = "audio", .clk = &tegra_clk_audio },
 	{ .con_id = "audio_2x", .clk = &tegra_clk_audio_2x }
 };
@@ -2541,7 +2541,7 @@ struct clk tegra_list_shared_clks[] = {
  * configuration.  List those here to register them twice in the clock lookup
  * table under two names.
  */
-struct clk_duplicate tegra_clk_duplicates[] = {
+static struct clk_duplicate tegra_clk_duplicates[] = {
 	CLK_DUPLICATE("uarta",  "serial8250.0", "uarta"),
 	CLK_DUPLICATE("uartb",  "serial8250.0", "uartb"),
 	CLK_DUPLICATE("uartc",  "serial8250.0", "uartc"),
