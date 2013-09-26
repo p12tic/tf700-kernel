@@ -484,7 +484,7 @@ static int powergate_module(int id)
 	return tegra_powergate_set(id, false);
 }
 
-static bool tegra_powergate_is_powered(int id)
+bool tegra_powergate_is_powered(int id)
 {
 	u32 status;
 
