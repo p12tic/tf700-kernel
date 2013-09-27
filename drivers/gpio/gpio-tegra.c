@@ -28,6 +28,8 @@
 #include <linux/gpio.h>
 #include <linux/of.h>
 #include <linux/syscore_ops.h>
+#include <linux/platform_device.h>
+#include <linux/module.h>
 
 #include <asm/mach/irq.h>
 
@@ -108,6 +110,15 @@ static struct tegra_gpio_bank tegra_gpio_banks[] = {
 	{.bank = 7, .irq = INT_GPIO8},
 #endif
 };
+static inline void tegra_gpio_writel(u32 val, volatile void* reg)
+{
+	__raw_writel(val, reg);
+}
+
+static inline u32 tegra_gpio_readl(const volatile void* reg)
+{
+	return __raw_readl(reg);
+}
 
 static int tegra_gpio_compose(int bank, int port, int bit)
 {
@@ -120,14 +131,14 @@ void tegra_gpio_set_tristate(int gpio_nr, enum tegra_tristate ts)
 	tegra_pinmux_set_tristate(pin_group, ts);
 }
 
-static void tegra_gpio_mask_write(volatile void __iomem *reg, int gpio, int value)
+static void tegra_gpio_mask_write(volatile void* reg, int gpio, int value)
 {
 	u32 val;
 
 	val = 0x100 << GPIO_BIT(gpio);
 	if (value)
 		val |= 1 << GPIO_BIT(gpio);
-	__raw_writel(val, reg);
+	tegra_gpio_writel(val, reg);
 }
 
 int tegra_gpio_get_bank_int_nr(int gpio)
@@ -185,10 +196,10 @@ static void tegra_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 
 static int tegra_gpio_get(struct gpio_chip *chip, unsigned offset)
 {
-	if ((__raw_readl(GPIO_OE(offset)) >> GPIO_BIT(offset)) & 0x1)
-		return (__raw_readl(GPIO_OUT(offset)) >>
+	if ((tegra_gpio_readl(GPIO_OE(offset)) >> GPIO_BIT(offset)) & 0x1)
+		return (tegra_gpio_readl(GPIO_OUT(offset)) >>
 			GPIO_BIT(offset)) & 0x1;
-	return (__raw_readl(GPIO_IN(offset)) >> GPIO_BIT(offset)) & 0x1;
+	return (tegra_gpio_readl(GPIO_IN(offset)) >> GPIO_BIT(offset)) & 0x1;
 }
 
 static int tegra_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
@@ -246,7 +257,7 @@ static void tegra_gpio_irq_ack(struct irq_data *d)
 {
 	int gpio = d->irq - INT_GPIO_BASE;
 
-	__raw_writel(1 << GPIO_BIT(gpio), GPIO_INT_CLR(gpio));
+	tegra_gpio_writel(1 << GPIO_BIT(gpio), GPIO_INT_CLR(gpio));
 
 #ifdef CONFIG_TEGRA_FPGA_PLATFORM
 	/* FPGA platforms have a serializer between the GPIO
@@ -308,10 +319,10 @@ static int tegra_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 
 	spin_lock_irqsave(&bank->lvl_lock[port], flags);
 
-	val = __raw_readl(GPIO_INT_LVL(gpio));
+	val = tegra_gpio_readl(GPIO_INT_LVL(gpio));
 	val &= ~(GPIO_INT_LVL_MASK << GPIO_BIT(gpio));
 	val |= lvl_type << GPIO_BIT(gpio);
-	__raw_writel(val, GPIO_INT_LVL(gpio));
+	tegra_gpio_writel(val, GPIO_INT_LVL(gpio));
 
 	spin_unlock_irqrestore(&bank->lvl_lock[port], flags);
 
@@ -341,8 +352,8 @@ static void tegra_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
 
 	for (port = 0; port < 4; port++) {
 		int gpio = tegra_gpio_compose(bank->bank, port, 0);
-		unsigned long sta = __raw_readl(GPIO_INT_STA(gpio)) &
-			__raw_readl(GPIO_INT_ENB(gpio));
+		unsigned long sta = tegra_gpio_readl(GPIO_INT_STA(gpio)) &
+			tegra_gpio_readl(GPIO_INT_ENB(gpio));
 
 		for_each_set_bit(pin, &sta, 8)
 			generic_handle_irq(gpio_to_irq(gpio + pin));
@@ -366,11 +377,11 @@ static void tegra_gpio_resume(void)
 
 		for (p = 0; p < ARRAY_SIZE(bank->oe); p++) {
 			unsigned int gpio = (b<<5) | (p<<3);
-			__raw_writel(bank->cnf[p], GPIO_CNF(gpio));
-			__raw_writel(bank->out[p], GPIO_OUT(gpio));
-			__raw_writel(bank->oe[p], GPIO_OE(gpio));
-			__raw_writel(bank->int_lvl[p], GPIO_INT_LVL(gpio));
-			__raw_writel(bank->int_enb[p], GPIO_INT_ENB(gpio));
+			tegra_gpio_writel(bank->cnf[p], GPIO_CNF(gpio));
+			tegra_gpio_writel(bank->out[p], GPIO_OUT(gpio));
+			tegra_gpio_writel(bank->oe[p], GPIO_OE(gpio));
+			tegra_gpio_writel(bank->int_lvl[p], GPIO_INT_LVL(gpio));
+			tegra_gpio_writel(bank->int_enb[p], GPIO_INT_ENB(gpio));
 		}
 	}
 
@@ -389,14 +400,14 @@ static int tegra_gpio_suspend(void)
 
 		for (p = 0; p < ARRAY_SIZE(bank->oe); p++) {
 			unsigned int gpio = (b<<5) | (p<<3);
-			bank->cnf[p] = __raw_readl(GPIO_CNF(gpio));
-			bank->out[p] = __raw_readl(GPIO_OUT(gpio));
-			bank->oe[p] = __raw_readl(GPIO_OE(gpio));
-			bank->int_enb[p] = __raw_readl(GPIO_INT_ENB(gpio));
-			bank->int_lvl[p] = __raw_readl(GPIO_INT_LVL(gpio));
+			bank->cnf[p] = tegra_gpio_readl(GPIO_CNF(gpio));
+			bank->out[p] = tegra_gpio_readl(GPIO_OUT(gpio));
+			bank->oe[p] = tegra_gpio_readl(GPIO_OE(gpio));
+			bank->int_enb[p] = tegra_gpio_readl(GPIO_INT_ENB(gpio));
+			bank->int_lvl[p] = tegra_gpio_readl(GPIO_INT_LVL(gpio));
 
 			/* disable gpio interrupts that are not wake sources */
-			__raw_writel(bank->wake_enb[p], GPIO_INT_ENB(gpio));
+			tegra_gpio_writel(bank->wake_enb[p], GPIO_INT_ENB(gpio));
 		}
 	}
 	local_irq_restore(flags);
@@ -504,8 +515,8 @@ static int __init tegra_gpio_init(void)
 	for (i = 0; i < ARRAY_SIZE(tegra_gpio_banks); i++) {
 		for (j = 0; j < 4; j++) {
 			int gpio = tegra_gpio_compose(i, j, 0);
-			__raw_writel(0x00, GPIO_INT_ENB(gpio));
-			__raw_writel(0x00, GPIO_INT_STA(gpio));
+			tegra_gpio_writel(0x00, GPIO_INT_ENB(gpio));
+			tegra_gpio_writel(0x00, GPIO_INT_STA(gpio));
 		}
 	}
 
@@ -580,13 +591,13 @@ static int dbg_gpio_show(struct seq_file *s, void *unused)
 			seq_printf(s,
 				"%d:%d %02x %02x %02x %02x %02x %02x %06x\n",
 				i, j,
-				__raw_readl(GPIO_CNF(gpio)),
-				__raw_readl(GPIO_OE(gpio)),
-				__raw_readl(GPIO_OUT(gpio)),
-				__raw_readl(GPIO_IN(gpio)),
-				__raw_readl(GPIO_INT_STA(gpio)),
-				__raw_readl(GPIO_INT_ENB(gpio)),
-				__raw_readl(GPIO_INT_LVL(gpio)));
+				tegra_gpio_readl(GPIO_CNF(gpio)),
+				tegra_gpio_readl(GPIO_OE(gpio)),
+				tegra_gpio_readl(GPIO_OUT(gpio)),
+				tegra_gpio_readl(GPIO_IN(gpio)),
+				tegra_gpio_readl(GPIO_INT_STA(gpio)),
+				tegra_gpio_readl(GPIO_INT_ENB(gpio)),
+				tegra_gpio_readl(GPIO_INT_LVL(gpio)));
 		}
 	}
 	return 0;
