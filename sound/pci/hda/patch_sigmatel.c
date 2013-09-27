@@ -94,7 +94,6 @@ enum {
 	STAC_92HD83XXX_REF,
 	STAC_92HD83XXX_PWR_REF,
 	STAC_DELL_S14,
-	STAC_DELL_VOSTRO_3500,
 	STAC_92HD83XXX_HP,
 	STAC_92HD83XXX_HP_cNB11_INTQUAD,
 	STAC_HP_DV7_4000,
@@ -214,7 +213,6 @@ struct sigmatel_spec {
 	unsigned int gpio_mute;
 	unsigned int gpio_led;
 	unsigned int gpio_led_polarity;
-	unsigned int vref_mute_led_nid; /* pin NID for mute-LED vref control */
 	unsigned int vref_led;
 
 	/* stream */
@@ -1660,12 +1658,6 @@ static const unsigned int dell_s14_pin_configs[10] = {
 	0x40f000f0, 0x40f000f0,
 };
 
-static const unsigned int dell_vostro_3500_pin_configs[10] = {
-	0x02a11020, 0x0221101f, 0x400000f0, 0x90170110,
-	0x400000f1, 0x400000f2, 0x400000f3, 0x90a60160,
-	0x400000f4, 0x400000f5,
-};
-
 static const unsigned int hp_dv7_4000_pin_configs[10] = {
 	0x03a12050, 0x0321201f, 0x40f000f0, 0x90170110,
 	0x40f000f0, 0x40f000f0, 0x90170110, 0xd5a30140,
@@ -1682,7 +1674,6 @@ static const unsigned int *stac92hd83xxx_brd_tbl[STAC_92HD83XXX_MODELS] = {
 	[STAC_92HD83XXX_REF] = ref92hd83xxx_pin_configs,
 	[STAC_92HD83XXX_PWR_REF] = ref92hd83xxx_pin_configs,
 	[STAC_DELL_S14] = dell_s14_pin_configs,
-	[STAC_DELL_VOSTRO_3500] = dell_vostro_3500_pin_configs,
 	[STAC_92HD83XXX_HP_cNB11_INTQUAD] = hp_cNB11_intquad_pin_configs,
 	[STAC_HP_DV7_4000] = hp_dv7_4000_pin_configs,
 };
@@ -1692,7 +1683,6 @@ static const char * const stac92hd83xxx_models[STAC_92HD83XXX_MODELS] = {
 	[STAC_92HD83XXX_REF] = "ref",
 	[STAC_92HD83XXX_PWR_REF] = "mic-ref",
 	[STAC_DELL_S14] = "dell-s14",
-	[STAC_DELL_VOSTRO_3500] = "dell-vostro-3500",
 	[STAC_92HD83XXX_HP] = "hp",
 	[STAC_92HD83XXX_HP_cNB11_INTQUAD] = "hp_cNB11_intquad",
 	[STAC_HP_DV7_4000] = "hp-dv7-4000",
@@ -1706,8 +1696,6 @@ static const struct snd_pci_quirk stac92hd83xxx_cfg_tbl[] = {
 		      "DFI LanParty", STAC_92HD83XXX_REF),
 	SND_PCI_QUIRK(PCI_VENDOR_ID_DELL, 0x02ba,
 		      "unknown Dell", STAC_DELL_S14),
-	SND_PCI_QUIRK(PCI_VENDOR_ID_DELL, 0x1028,
-		      "Dell Vostro 3500", STAC_DELL_VOSTRO_3500),
 	SND_PCI_QUIRK_MASK(PCI_VENDOR_ID_HP, 0xff00, 0x3600,
 			  "HP", STAC_92HD83XXX_HP),
 	SND_PCI_QUIRK(PCI_VENDOR_ID_HP, 0x1656,
@@ -3803,9 +3791,10 @@ static int is_dual_headphones(struct hda_codec *codec)
 }
 
 
-static int stac92xx_parse_auto_config(struct hda_codec *codec, hda_nid_t dig_out, hda_nid_t dig_in)
+static int stac92xx_parse_auto_config(struct hda_codec *codec)
 {
 	struct sigmatel_spec *spec = codec->spec;
+	hda_nid_t dig_out = 0, dig_in = 0;
 	int hp_swap = 0;
 	int i, err;
 
@@ -3988,6 +3977,22 @@ static int stac92xx_parse_auto_config(struct hda_codec *codec, hda_nid_t dig_out
 	if (spec->multiout.max_channels > 2)
 		spec->surr_switch = 1;
 
+	/* find digital out and in converters */
+	for (i = codec->start_nid; i < codec->start_nid + codec->num_nodes; i++) {
+		unsigned int wid_caps = get_wcaps(codec, i);
+		if (wid_caps & AC_WCAP_DIGITAL) {
+			switch (get_wcaps_type(wid_caps)) {
+			case AC_WID_AUD_OUT:
+				if (!dig_out)
+					dig_out = i;
+				break;
+			case AC_WID_AUD_IN:
+				if (!dig_in)
+					dig_in = i;
+				break;
+			}
+		}
+	}
 	if (spec->autocfg.dig_outs)
 		spec->multiout.dig_out_nid = dig_out;
 	if (dig_in && spec->autocfg.dig_in_pin)
@@ -4237,15 +4242,13 @@ static int enable_pin_detect(struct hda_codec *codec, hda_nid_t nid,
 	return 1;
 }
 
-static int is_nid_out_jack_pin(struct auto_pin_cfg *cfg, hda_nid_t nid)
+static int is_nid_hp_pin(struct auto_pin_cfg *cfg, hda_nid_t nid)
 {
 	int i;
 	for (i = 0; i < cfg->hp_outs; i++)
 		if (cfg->hp_pins[i] == nid)
 			return 1; /* nid is a HP-Out */
-	for (i = 0; i < cfg->line_outs; i++)
-		if (cfg->line_out_pins[i] == nid)
-			return 1; /* nid is a line-Out */
+
 	return 0; /* nid is not a HP-Out */
 };
 
@@ -4305,32 +4308,13 @@ static void stac_store_hints(struct hda_codec *codec)
 		spec->eapd_switch = val;
 	get_int_hint(codec, "gpio_led_polarity", &spec->gpio_led_polarity);
 	if (get_int_hint(codec, "gpio_led", &spec->gpio_led)) {
-		spec->gpio_mask |= spec->gpio_led;
-		spec->gpio_dir |= spec->gpio_led;
-		if (spec->gpio_led_polarity)
-			spec->gpio_data |= spec->gpio_led;
+		if (spec->gpio_led <= 8) {
+			spec->gpio_mask |= spec->gpio_led;
+			spec->gpio_dir |= spec->gpio_led;
+			if (spec->gpio_led_polarity)
+				spec->gpio_data |= spec->gpio_led;
+		}
 	}
-}
-
-static void stac_issue_unsol_events(struct hda_codec *codec, int num_pins,
-				    const hda_nid_t *pins)
-{
-	while (num_pins--)
-		stac_issue_unsol_event(codec, *pins++);
-}
-
-/* fake event to set up pins */
-static void stac_fake_hp_events(struct hda_codec *codec)
-{
-	struct sigmatel_spec *spec = codec->spec;
-
-	if (spec->autocfg.hp_outs)
-		stac_issue_unsol_events(codec, spec->autocfg.hp_outs,
-					spec->autocfg.hp_pins);
-	if (spec->autocfg.line_outs &&
-	    spec->autocfg.line_out_pins[0] != spec->autocfg.hp_pins[0])
-		stac_issue_unsol_events(codec, spec->autocfg.line_outs,
-					spec->autocfg.line_out_pins);
 }
 
 static int stac92xx_init(struct hda_codec *codec)
@@ -4383,7 +4367,10 @@ static int stac92xx_init(struct hda_codec *codec)
 		stac92xx_auto_set_pinctl(codec, spec->autocfg.line_out_pins[0],
 				AC_PINCTL_OUT_EN);
 		/* fake event to set up pins */
-		stac_fake_hp_events(codec);
+		if (cfg->hp_pins[0])
+			stac_issue_unsol_event(codec, cfg->hp_pins[0]);
+		else if (cfg->line_out_pins[0])
+			stac_issue_unsol_event(codec, cfg->line_out_pins[0]);
 	} else {
 		stac92xx_auto_init_multi_out(codec);
 		stac92xx_auto_init_hp_out(codec);
@@ -4449,7 +4436,7 @@ static int stac92xx_init(struct hda_codec *codec)
 			continue;
 		}
 
-		if (is_nid_out_jack_pin(cfg, nid))
+		if (is_nid_hp_pin(cfg, nid))
 			continue; /* already has an unsol event */
 
 		pinctl = snd_hda_codec_read(codec, nid, 0,
@@ -4916,14 +4903,8 @@ static int find_mute_led_gpio(struct hda_codec *codec, int default_polarity)
 			if (sscanf(dev->name, "HP_Mute_LED_%d_%x",
 				  &spec->gpio_led_polarity,
 				  &spec->gpio_led) == 2) {
-				unsigned int max_gpio;
-				max_gpio = snd_hda_param_read(codec, codec->afg,
-							      AC_PAR_GPIO_CAP);
-				max_gpio &= AC_GPIO_IO_COUNT;
-				if (spec->gpio_led < max_gpio)
+				if (spec->gpio_led < 4)
 					spec->gpio_led = 1 << spec->gpio_led;
-				else
-					spec->vref_mute_led_nid = spec->gpio_led;
 				return 1;
 			}
 			if (sscanf(dev->name, "HP_Mute_LED_%d",
@@ -5024,11 +5005,19 @@ static void stac927x_proc_hook(struct snd_info_buffer *buffer,
 #ifdef CONFIG_PM
 static int stac92xx_resume(struct hda_codec *codec)
 {
+	struct sigmatel_spec *spec = codec->spec;
+
 	stac92xx_init(codec);
 	snd_hda_codec_resume_amp(codec);
 	snd_hda_codec_resume_cache(codec);
 	/* fake event to set up pins again to override cached values */
-	stac_fake_hp_events(codec);
+	if (spec->hp_detect) {
+		if (spec->autocfg.hp_pins[0])
+			stac_issue_unsol_event(codec, spec->autocfg.hp_pins[0]);
+		else if (spec->autocfg.line_out_pins[0])
+			stac_issue_unsol_event(codec,
+					       spec->autocfg.line_out_pins[0]);
+	}
 	return 0;
 }
 
@@ -5044,12 +5033,29 @@ static int stac92xx_pre_resume(struct hda_codec *codec)
 	struct sigmatel_spec *spec = codec->spec;
 
 	/* sync mute LED */
-	if (spec->vref_mute_led_nid)
-		stac_vrefout_set(codec, spec->vref_mute_led_nid,
-				 spec->vref_led);
-	else if (spec->gpio_led)
-		stac_gpio_set(codec, spec->gpio_mask,
-			      spec->gpio_dir, spec->gpio_data);
+	if (spec->gpio_led) {
+		if (spec->gpio_led <= 8) {
+			stac_gpio_set(codec, spec->gpio_mask,
+					spec->gpio_dir, spec->gpio_data);
+		} else {
+			stac_vrefout_set(codec,
+					spec->gpio_led, spec->vref_led);
+		}
+	}
+	return 0;
+}
+
+static int stac92xx_post_suspend(struct hda_codec *codec)
+{
+	struct sigmatel_spec *spec = codec->spec;
+	if (spec->gpio_led > 8) {
+		/* with vref-out pin used for mute led control
+		 * codec AFG is prevented from D3 state, but on
+		 * system suspend it can (and should) be used
+		 */
+		snd_hda_codec_read(codec, codec->afg, 0,
+				AC_VERB_SET_POWER_STATE, AC_PWRST_D3);
+	}
 	return 0;
 }
 
@@ -5060,7 +5066,7 @@ static void stac92xx_set_power_state(struct hda_codec *codec, hda_nid_t fg,
 	struct sigmatel_spec *spec = codec->spec;
 
 	if (power_state == AC_PWRST_D3) {
-		if (spec->vref_mute_led_nid) {
+		if (spec->gpio_led > 8) {
 			/* with vref-out pin used for mute led control
 			 * codec AFG is prevented from D3 state
 			 */
@@ -5113,7 +5119,7 @@ static int stac92xx_update_led_status(struct hda_codec *codec)
 		}
 	}
 	/*polarity defines *not* muted state level*/
-	if (!spec->vref_mute_led_nid) {
+	if (spec->gpio_led <= 8) {
 		if (muted)
 			spec->gpio_data &= ~spec->gpio_led; /* orange */
 		else
@@ -5131,8 +5137,7 @@ static int stac92xx_update_led_status(struct hda_codec *codec)
 		muted_lvl = spec->gpio_led_polarity ?
 				AC_PINCTL_VREF_GRD : AC_PINCTL_VREF_HIZ;
 		spec->vref_led = muted ? muted_lvl : notmtd_lvl;
-		stac_vrefout_set(codec,	spec->vref_mute_led_nid,
-				 spec->vref_led);
+		stac_vrefout_set(codec,	spec->gpio_led, spec->vref_led);
 	}
 	return 0;
 }
@@ -5291,7 +5296,7 @@ static int patch_stac925x(struct hda_codec *codec)
 	spec->capvols = stac925x_capvols;
 	spec->capsws = stac925x_capsws;
 
-	err = stac92xx_parse_auto_config(codec, 0x8, 0x7);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -5432,7 +5437,7 @@ again:
 	spec->num_pwrs = ARRAY_SIZE(stac92hd73xx_pwr_nids);
 	spec->pwr_nids = stac92hd73xx_pwr_nids;
 
-	err = stac92xx_parse_auto_config(codec, 0x25, 0x27);
+	err = stac92xx_parse_auto_config(codec);
 
 	if (!err) {
 		if (spec->board_config < 0) {
@@ -5653,13 +5658,15 @@ again:
 
 #ifdef CONFIG_SND_HDA_POWER_SAVE
 	if (spec->gpio_led) {
-		if (!spec->vref_mute_led_nid) {
+		if (spec->gpio_led <= 8) {
 			spec->gpio_mask |= spec->gpio_led;
 			spec->gpio_dir |= spec->gpio_led;
 			spec->gpio_data |= spec->gpio_led;
 		} else {
 			codec->patch_ops.set_power_state =
 					stac92xx_set_power_state;
+			codec->patch_ops.post_suspend =
+					stac92xx_post_suspend;
 		}
 		codec->patch_ops.pre_resume = stac92xx_pre_resume;
 		codec->patch_ops.check_power_status =
@@ -5667,11 +5674,7 @@ again:
 	}
 #endif	
 
-	/* 92HD65/66 series has S/PDIF-IN */
-	if (codec->vendor_id >= 0x111d76e8 && codec->vendor_id <= 0x111d76f3)
-		err = stac92xx_parse_auto_config(codec, 0x1d, 0x22);
-	else
-		err = stac92xx_parse_auto_config(codec, 0x1d, 0);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -5974,13 +5977,15 @@ again:
 
 #ifdef CONFIG_SND_HDA_POWER_SAVE
 	if (spec->gpio_led) {
-		if (!spec->vref_mute_led_nid) {
+		if (spec->gpio_led <= 8) {
 			spec->gpio_mask |= spec->gpio_led;
 			spec->gpio_dir |= spec->gpio_led;
 			spec->gpio_data |= spec->gpio_led;
 		} else {
 			codec->patch_ops.set_power_state =
 					stac92xx_set_power_state;
+			codec->patch_ops.post_suspend =
+					stac92xx_post_suspend;
 		}
 		codec->patch_ops.pre_resume = stac92xx_pre_resume;
 		codec->patch_ops.check_power_status =
@@ -5990,7 +5995,7 @@ again:
 
 	spec->multiout.dac_nids = spec->dac_nids;
 
-	err = stac92xx_parse_auto_config(codec, 0x21, 0);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -6099,7 +6104,7 @@ static int patch_stac922x(struct hda_codec *codec)
 
 	spec->multiout.dac_nids = spec->dac_nids;
 	
-	err = stac92xx_parse_auto_config(codec, 0x08, 0x09);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -6224,7 +6229,7 @@ static int patch_stac927x(struct hda_codec *codec)
 	spec->aloopback_shift = 0;
 	spec->eapd_switch = 1;
 
-	err = stac92xx_parse_auto_config(codec, 0x1e, 0x20);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -6349,7 +6354,7 @@ static int patch_stac9205(struct hda_codec *codec)
 		break;
 	}
 
-	err = stac92xx_parse_auto_config(codec, 0x1f, 0x20);
+	err = stac92xx_parse_auto_config(codec);
 	if (!err) {
 		if (spec->board_config < 0) {
 			printk(KERN_WARNING "hda_codec: No auto-config is "
@@ -6454,7 +6459,7 @@ static int patch_stac9872(struct hda_codec *codec)
 	spec->capvols = stac9872_capvols;
 	spec->capsws = stac9872_capsws;
 
-	err = stac92xx_parse_auto_config(codec, 0x10, 0x12);
+	err = stac92xx_parse_auto_config(codec);
 	if (err < 0) {
 		stac92xx_free(codec);
 		return -EINVAL;
