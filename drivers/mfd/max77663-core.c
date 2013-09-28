@@ -19,6 +19,7 @@
 #include <linux/ratelimit.h>
 #include <linux/kthread.h>
 #include <linux/mfd/core.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>

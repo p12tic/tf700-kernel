@@ -22,6 +22,7 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
+#include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/thermal.h>

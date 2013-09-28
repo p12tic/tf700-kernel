@@ -27,6 +27,7 @@
 #include <linux/debugfs.h>
 #include <linux/cdev.h>
 #include <linux/mutex.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/earlysuspend.h>
 #include <linux/delay.h>
@@ -153,7 +154,7 @@ u32 cfg_crc;
 static int debug = NO_DEBUG;
 static int comms;
 static unsigned int resume_flag;
-static bool delta_flag; 
+static bool delta_flag;
 static bool cfg_flag;
 static u8 touch_vendor_id;
 static const  u32 touch_panel_config_checksum[2][4] = {
@@ -161,7 +162,7 @@ static const  u32 touch_panel_config_checksum[2][4] = {
 	[HANNSTOUCH_SINTEK_PANEL] = 0x9d3d50, // Hannstar/Sintek
 	[TPK_75_OHM_PANEL] = 0x3a66c2,            // TPK 75 ohm
 	[TPK_50_OHM_PANEL] = 0x3a66c2,           //  TPK 50 ohm
-    }, 
+    },
     { // for firmware version 2
 	[HANNSTOUCH_SINTEK_PANEL] = 0x361b04, // Hannstar/Sintek
 	[TPK_75_OHM_PANEL] = 0x4ba693,            // TPK 75 ohm
@@ -191,9 +192,9 @@ struct report_id_map {
 };
 
 #define USB_NO_Cable 0
-#define USB_DETECT_CABLE 1 
+#define USB_DETECT_CABLE 1
 #define USB_SHIFT 0
-#define AC_SHIFT 1 
+#define AC_SHIFT 1
 #define USB_Cable ((1 << (USB_SHIFT)) | (USB_DETECT_CABLE))
 #define USB_AC_Adapter ((1 << (AC_SHIFT)) | (USB_DETECT_CABLE))
 #define USB_CALBE_DETECT_MASK (USB_Cable  | USB_DETECT_CABLE)
@@ -261,7 +262,7 @@ static const u8 *object_type_name[] = {
 	[52] = "TOUCH_PROXKEY_T52",
 	[53] = "GEN_DATASOURCE_T53",
 	[55] = "PROCI_ADAPTIVETHRESHOLD_T55",
-	[56] = "PROCI_SHIELDLESS_T56", 
+	[56] = "PROCI_SHIELDLESS_T56",
 	[57] = "PROCI_EXTRATOUCHAREA_T57"
 };
 typedef struct
@@ -335,7 +336,7 @@ struct touch_char_dev
 	struct semaphore sem;
 	wait_queue_head_t fifo_inq;
 };
-static int global_major = 0; // dynamic major by default 
+static int global_major = 0; // dynamic major by default
 static int global_minor = 0;
 static struct touch_char_dev *p_char_dev = NULL;	// allocated in probe
 static atomic_t touch_char_available = ATOMIC_INIT(1);
@@ -343,14 +344,14 @@ static atomic_t wait_command_ack = ATOMIC_INIT(0);
 static struct class *touch_class;
 // ioctl command
 #define TOUCH_SELFTEST_CMD  1
-// number 2 is curse number. 
+// number 2 is curse number.
 #define TOUCH_READ_T28_DATA  3
 #define TOUCH_WRITE_T28_CMD  4
 #define TOUCH_WRITE_T6_DIAGNOSTIC 5
 #define TOUCH_READ_T37_OBJECT  6
 
 #define FIFO_SIZE		PAGE_SIZE
-static unsigned int mTouchCharCmd = -1; 
+static unsigned int mTouchCharCmd = -1;
 
 static int touch_cdev_open(struct inode *inode, struct file *filp)
 {
@@ -358,17 +359,17 @@ static int touch_cdev_open(struct inode *inode, struct file *filp)
        /*
        if(p_touch_serial_dev == NULL){
 	     printk("[touch_char]: No touch char device!\n");
-	     return -ENODEV;	
+	     return -ENODEV;
 	}
-	*/     
-	   
+	*/
+
 	cdev = container_of(inode->i_cdev, struct touch_char_dev, cdev);
 	if( cdev == NULL )
 	{
         	TOUCH_DBG(DBG_CDEV, " No such char device node \n");
 		return -ENODEV;
 	}
-	
+
 	if( !atomic_dec_and_test(&touch_char_available) )
 	{
 		atomic_inc(&touch_char_available);
@@ -415,7 +416,7 @@ static ssize_t touch_cdev_read(struct file *file, char __user *buf, size_t count
 	int read_cnt, ret, fifoLen;
 	struct touch_char_dev *cdev = file->private_data;
 	 u8 temp[130];
-	
+
 	if( down_interruptible(&cdev->sem) )
 		return -ERESTARTSYS;
 
@@ -436,7 +437,7 @@ static ssize_t touch_cdev_read(struct file *file, char __user *buf, size_t count
 			up(&cdev->sem);
 			return ret;
 	    }
-	}   
+	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	fifoLen = kfifo_len(cdev->pCharKFiFo);
 #else
@@ -479,7 +480,7 @@ static ssize_t touch_cdev_read(struct file *file, char __user *buf, size_t count
 	ret = copy_to_user(buf, fifo_read_buf, read_cnt)?-EFAULT:read_cnt;
 
 	up(&cdev->sem);
-	
+
 	return ret;
 }
 
@@ -488,28 +489,28 @@ static ssize_t touch_cdev_write(struct file *file, const char __user *buf, size_
 	struct touch_char_dev *cdev = file->private_data;
 	int ret=0, written=0;
 	unsigned char c;
-      
+
 	if( down_interruptible(&cdev->sem) )
 		return -ERESTARTSYS;
 	TOUCH_DBG(DBG_CDEV, "Start Write the SIGLIM value.\n", written);
-	if(globe_mxt == NULL) 
+	if(globe_mxt == NULL)
 	{
 		ret = -ENODEV;
 		goto out;
 	}
 
-	if(count > 4) // for four byte T25 HI/LO  SIGLIM 
+	if(count > 4) // for four byte T25 HI/LO  SIGLIM
 		count = 4;
-	
+
 	while(count--) {
-		if(get_user(c, buf++)) 
+		if(get_user(c, buf++))
 		{
 			ret = -EFAULT;
 			goto out;
 		}
 	      // write T25 HISIGLIM/LOSIGLIM
 	      TOUCH_DBG(DBG_CDEV, "T25[%d] =  0X%02X\n", (written + 2), c);
-		if(mxt_write_byte(globe_mxt->client, MXT_BASE_ADDR(MXT_SPT_SELFTEST_T25, globe_mxt) + 2+ written , c)) 
+		if(mxt_write_byte(globe_mxt->client, MXT_BASE_ADDR(MXT_SPT_SELFTEST_T25, globe_mxt) + 2+ written , c))
 		{
 			ret = -EIO;
 			goto out;
@@ -532,14 +533,14 @@ out:
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 static int touch_cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long args)
-{	
+{
 	struct touch_char_dev *cdev = file->private_data;
 	int ret=0;
-	TOUCH_DBG(DBG_CDEV, " Handle device ioctl command version 36\n");  
+	TOUCH_DBG(DBG_CDEV, " Handle device ioctl command version 36\n");
 	if(globe_mxt == NULL)
 		return -EFAULT;
-      
-	u8 cmd_code = args & 0xFFUL;  
+
+	u8 cmd_code = args & 0xFFUL;
 	switch (cmd)
 	{
 		case TOUCH_SELFTEST_CMD:
@@ -577,14 +578,14 @@ static int touch_cdev_ioctl (struct inode *inode, struct file *file, unsigned in
 
 #else
 static int touch_cdev_ioctl (struct file *file, unsigned int cmd, unsigned long args)
-{	
+{
 	struct touch_char_dev *cdev = file->private_data;
 	int ret=0;
-	TOUCH_DBG(DBG_CDEV, " Handle device ioctl command version 36\n");  
+	TOUCH_DBG(DBG_CDEV, " Handle device ioctl command version 36\n");
 	if(globe_mxt == NULL)
 		return -EFAULT;
-      
-	u8 cmd_code = args & 0xFFUL;  
+
+	u8 cmd_code = args & 0xFFUL;
 	switch (cmd)
 	{
 		case TOUCH_SELFTEST_CMD:
@@ -624,7 +625,7 @@ static unsigned int touch_cdev_poll(struct file *filp, struct poll_table_struct 
 	struct touch_char_dev *cdev = filp->private_data;
 	unsigned int mask = 0;
 	int fifoLen;
-	
+
 	down(&cdev->sem);
 	poll_wait(filp, &cdev->fifo_inq,  wait);
 
@@ -650,8 +651,8 @@ static const struct file_operations touch_cdev_fops = {
 	.write	= touch_cdev_write,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
       .ioctl=touch_cdev_ioctl,
-#else 
-      .unlocked_ioctl=touch_cdev_ioctl, 
+#else
+      .unlocked_ioctl=touch_cdev_ioctl,
 #endif
 	.poll	= touch_cdev_poll,
 	.open	= touch_cdev_open,
@@ -664,7 +665,7 @@ static struct touch_char_dev* setup_chardev(dev_t dev)
 	int result;
 
 	pCharDev = kmalloc(1*sizeof(struct touch_char_dev), GFP_KERNEL);
-	if(!pCharDev) 
+	if(!pCharDev)
 		goto fail_cdev;
 	memset(pCharDev, 0, sizeof(struct touch_char_dev));
 
@@ -683,7 +684,7 @@ static struct touch_char_dev* setup_chardev(dev_t dev)
 	if( !kfifo_initialized(&pCharDev->CharKFiFo) )
 		goto fail_kfifo;
 #endif
-	
+
 	pCharDev->OpenCnts = 0;
 	cdev_init(&pCharDev->cdev, &touch_cdev_fops);
 	pCharDev->cdev.owner = THIS_MODULE;
@@ -697,7 +698,7 @@ static struct touch_char_dev* setup_chardev(dev_t dev)
 		goto fail_kfifo;
 	}
 
-	return pCharDev; 
+	return pCharDev;
 
 fail_kfifo:
 	kfree(pCharDev->pFiFoBuf);
@@ -710,14 +711,14 @@ fail_cdev:
 static void exit_touch_char_dev(void)
 {
 	dev_t devno = MKDEV(global_major, global_minor);
-	
+
 	TOUCH_DBG(DBG_MODULE, " Exit driver ...\n");
 
 	if(p_char_dev)
 	{
 		if( p_char_dev->pFiFoBuf )
 			kfree(p_char_dev->pFiFoBuf);
-	
+
 		cdev_del(&p_char_dev->cdev);
 		kfree(p_char_dev);
 		p_char_dev = NULL;
@@ -731,7 +732,7 @@ static void exit_touch_char_dev(void)
 		class_device_destroy(touch_class, devno);
 #else
 		device_destroy(touch_class, devno);
-#endif 
+#endif
 		class_destroy(touch_class);
 	}
 /*
@@ -753,12 +754,12 @@ static int init_touch_char_dev(void){
 	TOUCH_DBG(DBG_MODULE, " Driver init ...\n");
 
 	// Asking for a dynamic major unless directed otherwise at load time.
-	if(global_major) 
+	if(global_major)
 	{
 		devno = MKDEV(global_major, global_minor);
 		result = register_chrdev_region(devno, 1, "touch_debug");
-	} 
-	else 
+	}
+	else
 	{
 		result = alloc_chrdev_region(&devno, global_minor, 1, "touch_debug");
 		global_major = MAJOR(devno);
@@ -772,7 +773,7 @@ static int init_touch_char_dev(void){
 
 	// allocate the character device
 	p_char_dev = setup_chardev(devno);
-	if(!p_char_dev) 
+	if(!p_char_dev)
 	{
 		result = -ENOMEM;
 		goto fail;
@@ -795,7 +796,7 @@ static int init_touch_char_dev(void){
 
       TOUCH_DBG(DBG_MODULE, " Driver init done!\n");
 	return 0;
-      fail:	
+      fail:
 	exit_touch_char_dev();
 	return result;
 }
@@ -889,7 +890,7 @@ static ssize_t dump_T7(struct device *dev, struct device_attribute *devattr, cha
 			strncat (buf,tmpstr,strlen(tmpstr));
 		}
 	}
-	  
+
 	err = mxt_read_block(data->client, MXT_ADDR_INFO_BLOCK, MXT_ID_BLOCK_SIZE,(u8 *) tmp);
 	if (err < 0){
 		sprintf(tmpstr, "read Family ID error, ret %d\n",err);
@@ -903,7 +904,7 @@ static ssize_t dump_T7(struct device *dev, struct device_attribute *devattr, cha
 	return strlen(buf);
 }
 static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, char *buf)
-{	
+{
 	int i;
 	int err;
 	u8 tmp[74];
@@ -917,7 +918,7 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
       if (err < 0){
 		sprintf(tmpstr, "read T18 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 2; i++){
 		sprintf(tmpstr,"T18 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
@@ -927,17 +928,17 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
       if (err < 0){
 		sprintf(tmpstr, "read T19 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 16; i++){
 		sprintf(tmpstr,"T19 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
 	}
-	  
+
       err = mxt_read_block(data->client, MXT_BASE_ADDR(MXT_PROCI_ONETOUCHGESTUREPROCESSOR_T24, data), 19, (u8 *) tmp);
       if (err < 0){
 		sprintf(tmpstr, "read T24 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 19; i++){
 		sprintf(tmpstr,"T24 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
@@ -947,7 +948,7 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
       if (err < 0){
 		sprintf(tmpstr, "read T27 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 7; i++){
 		sprintf(tmpstr,"T27 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
@@ -957,17 +958,17 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
       if (err < 0){
 		sprintf(tmpstr, "read T40 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 5; i++){
 		sprintf(tmpstr,"T40 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
 	}
-			  
+
       err = mxt_read_block(data->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, data), 8, (u8 *) tmp);
 	if (err < 0){
 		sprintf(tmpstr, "read T42 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else  
+	}else
 	for (i=0; i< 10; i++){
 		sprintf(tmpstr,"T42 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
@@ -977,17 +978,17 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
 	if (err < 0){
 		sprintf(tmpstr, "read T43 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else  
+	}else
 	for (i=0; i< 7; i++){
 		sprintf(tmpstr,"T43 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
 	}
-	  
+
       err = mxt_read_block(data->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, data), 9, (u8 *) tmp);
       if (err < 0){
 		sprintf(tmpstr, "read T46 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 9; i++){
 		sprintf(tmpstr,"T46 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
@@ -997,12 +998,12 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
       if (err < 0){
 		sprintf(tmpstr, "read T47 cfg error, ret %d\n",err);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	}else	  
+	}else
 	for (i=0; i< 10; i++){
 		sprintf(tmpstr,"T47 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
-	} 
-	  
+	}
+
 	err = mxt_read_block(data->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, data), 74, (u8 *) tmp);
 	if (err < 0){
 		sprintf(tmpstr, "read T48 cfg error, ret %d\n",err);
@@ -1012,7 +1013,7 @@ static ssize_t dump_T48(struct device *dev, struct device_attribute *devattr, ch
 		sprintf(tmpstr,"T48 byte[%d] = %d\n",i,tmp[i]);
 		strncat (buf,tmpstr,strlen(tmpstr));
 	}
-	
+
 	return strlen(buf);
 
 }
@@ -1030,11 +1031,11 @@ static ssize_t store_mode2(struct device *dev, struct device_attribute *devattr,
 	char *pch;
 
 	sscanf(buf, "%d%d%d\n",&cfg[0], &cfg[1], &cfg[2]);
-		
+
 	mxt_write_byte(data->client, MXT_BASE_ADDR(cfg[0], data)+cfg[1],cfg[2]);
 
 	printk("Touch: cfg[0]=%d, cfg[1]=%d, cfg[2]=%d\n",cfg[0],cfg[1],cfg[2]);
-	
+
 	mxt_write_byte(data->client, MXT_BASE_ADDR(MXT_GEN_COMMANDPROCESSOR_T6, data) + MXT_ADR_T6_BACKUPNV,MXT_CMD_T6_BACKUP);
 	return count;
 }
@@ -1225,7 +1226,7 @@ int debug_data_open(struct inode *inode, struct file *file)
 		atomic_inc(&touch_char_available);
 		return -EBUSY; /* already open */
 	}
-	
+
 	mxt->current_debug_datap = 0;
 	mxt->debug_data = kmalloc(mxt->device_info.num_nodes * sizeof(u16),
 				  GFP_KERNEL);
@@ -1244,7 +1245,7 @@ int debug_data_release(struct inode *inode, struct file *file)
 	struct mxt_data *mxt;
 	mxt = file->private_data;
 	kfree(mxt->debug_data);
-	
+
 	atomic_inc(&touch_char_available); /* release the device */
 	return 0;
 }
@@ -1498,7 +1499,7 @@ u16 get_object_address(uint8_t object_type,
 }
 
 /* Return the pointer of mxt object*/
-const struct mxt_object* get_object(uint8_t object_type, 
+const struct mxt_object* get_object(uint8_t object_type,
 	                 const struct mxt_data *mxt){
     uint8_t object_table_index = 0;
     int max_objs = mxt->device_info.num_objs;
@@ -1508,12 +1509,12 @@ const struct mxt_object* get_object(uint8_t object_type,
     while(object_table_index < max_objs){
         obj = &object_table[object_table_index];
         if(obj->type == object_type)
-            return obj; 
-		
+            return obj;
+
         object_table_index++;
-    }	
-	
-    return NULL; 
+    }
+
+    return NULL;
 }
 
 /*
@@ -1718,9 +1719,9 @@ void mxt_hw_reset(void){
 
 static int mxt_init_Boot(struct mxt_data *mxt)
 {
-    int ret; 
+    int ret;
     u8 firmware_id[MXT_ID_BLOCK_SIZE];
-	
+
     dev_info(&mxt->client->dev, "Touch: start doing FW update\n");
     wake_lock(&mxt->wakelock);
     disable_irq(mxt->irq);
@@ -1776,7 +1777,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt, int last_touch)
       static int origin_x;
       static int origin_y;
 	int del_x, del_y;
-	
+
 	/*
 	 * If the 'last_touch' flag is set, we have received
 		all the touch messages
@@ -1864,7 +1865,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt, int last_touch)
 					touch_size = touch_size << 4;
 				else
 					touch_size = 255;
-				
+
 				if (!touch_size)
 					touch_size = 1;
 
@@ -1898,7 +1899,7 @@ void process_T9_message(u8 *message, struct mxt_data *mxt, int last_touch)
 						}
 						else
 							delta_flag = true;
-					}    	
+					}
 				}
 
 				if(unlikely(d_flag))
@@ -1946,7 +1947,7 @@ int process_message(u8 *message, u8 object, struct mxt_data *mxt)
 	client = mxt->client;
 	length = mxt->message_size;
 	report_id = message[0];
-	  
+
 	if ((mxt->nontouch_msg_only == 0) || (!IS_TOUCH_OBJECT(object))) {
 		mutex_lock(&mxt->msg_mutex);
 		/* Copy the message to buffer */
@@ -2028,7 +2029,7 @@ int process_message(u8 *message, u8 object, struct mxt_data *mxt)
 
 		    cfg_flag =false;
 	      }
-		
+
 		break;
 
 	case MXT_TOUCH_MULTITOUCHSCREEN_T9:
@@ -2158,7 +2159,7 @@ int process_message(u8 *message, u8 object, struct mxt_data *mxt)
 				"maXTouch: Power-Up CRC failure\n");
 
 		break;
-	case MXT_PROCG_NOISESUPPRESSION_T48: // the nosie message 
+	case MXT_PROCG_NOISESUPPRESSION_T48: // the nosie message
 		dev_info(&client->dev, "Noise Message with bytes: 0x%02X:0x%02X:0x%02X:0x%02X:0x%02X\n",
 			      message[1], message[2], message[3], message[4], message[5]);
 		break;
@@ -2288,7 +2289,7 @@ static void mxt_worker(struct work_struct *work)
 	    process_T9_message(NULL, mxt, 1);
 	    mxt->hasTouch = false;
 	}
-	
+
 
 	kfree(message);
 	enable_irq(mxt->irq);
@@ -2331,7 +2332,7 @@ static int recovery_from_bootMode(struct i2c_client *client){
     int times;
     unsigned char data[] = {0x01, 0x01};
     struct i2c_msg wmsg;
-    
+
     wmsg.addr = 0x27;
     wmsg.flags = I2C_M_WR;
     wmsg.len = 2;
@@ -2340,21 +2341,21 @@ static int recovery_from_bootMode(struct i2c_client *client){
 	/*Write two nosense bytes to I2C address "0x35" in order to force touch to leave the bootloader mode.*/
     i2c_transfer(client->adapter, &wmsg, 1);
     mdelay(10);
-	
+
     /* Read Device info to check if chip is valid */
     for(times = 0; times < retry; times++ ){
-        ret = mxt_read_block(client, MXT_ADDR_INFO_BLOCK, MXT_ID_BLOCK_SIZE, (u8 *) buf); 
+        ret = mxt_read_block(client, MXT_ADDR_INFO_BLOCK, MXT_ID_BLOCK_SIZE, (u8 *) buf);
 	  if(ret >= 0)
 	      break;
 
-	  dev_err(&client->dev, "Retry addressing I2C address 0x%02X with %d times\n", client->addr,times+1); 	 
+	  dev_err(&client->dev, "Retry addressing I2C address 0x%02X with %d times\n", client->addr,times+1);
 	  msleep(25);
-    }	
-	
+    }
+
     if(ret >= 0){
         dev_err(&client->dev, "---------Touch: Successfully leave the bootloader mode!\n");
 		ret = 0;
-    }    
+    }
     return ret;
 }
 static bool isInBootLoaderMode(struct i2c_client *client){
@@ -2369,13 +2370,13 @@ static bool isInBootLoaderMode(struct i2c_client *client){
 	rmsg.flags = I2C_M_RD;
 	rmsg.len = 2;
 	rmsg.buf = buf;
-	
-    /* Read 2 byte from boot loader I2C address to make sure touch chip is in bootloader mode */   
+
+    /* Read 2 byte from boot loader I2C address to make sure touch chip is in bootloader mode */
 	for(times = 0; times < retry; times++ ){
-	     ret = i2c_transfer(client->adapter, &rmsg, 1); 
+	     ret = i2c_transfer(client->adapter, &rmsg, 1);
 	     if(ret >= 0)
 		 	break;
-		 	  	 
+
 	     mdelay(25);
 	}
 	dev_err(&client->dev, "The touch is %s in bootloader mode.\n", (ret < 0 ? "not" : "indeed"));
@@ -2393,15 +2394,15 @@ int __devinit mxt_identify(struct i2c_client *client,
 	int identified;
       int retry = 2;
       int times;
-	      
+
 	identified = 0;
 	/* Read Device info to check if chip is valid */
        for(times = 0; times < retry; times++ ){
 	     error = mxt_read_block(client, MXT_ADDR_INFO_BLOCK, MXT_ID_BLOCK_SIZE,
-			       (u8 *) buf); 
+			       (u8 *) buf);
 	     if(error >= 0)
 		 	break;
-		  	 
+
 	     mdelay(25);
 	 }
 
@@ -2725,12 +2726,12 @@ static void mxt_start(struct mxt_data *mxt)
       int error;
 
       force_release_pos(mxt);
-		
+
 	//dummy read to wake up from deep sleep mode
 	mxt_read_block(mxt->client, MXT_BASE_ADDR(MXT_SPT_COMMSCONFIG_T18, mxt), 1, buf);
 	mdelay(25);
 	error = mxt_read_block(mxt->client, MXT_BASE_ADDR(MXT_USER_INFO_T38, mxt), 1, buf);
-      
+
       if(error < 0){ // start hardware reset
           gpio_direction_output(TEGRA_GPIO_PH6, 0);
 	    mdelay(1);
@@ -2741,10 +2742,10 @@ static void mxt_start(struct mxt_data *mxt)
           }while(--wait_count && mxt->read_chg() != 0);
 	    error = mxt_read_block(mxt->client, MXT_BASE_ADDR(MXT_USER_INFO_T38, mxt), 1, buf);
 	}
-	
+
 	if(error < 0 && isInBootLoaderMode(mxt->client)) // start boot loader recovery mode
             recovery_from_bootMode(mxt->client);
-	
+
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt), 0x0F);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt)+1, 0xFF);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt), 0);
@@ -2753,8 +2754,8 @@ static void mxt_start(struct mxt_data *mxt)
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt) + 8, 0x06);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt) + 9, 0xC0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt) + 7, 0x50);
-	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt), 0x8F);	
-	resume_flag = 1; 
+	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt), 0x8F);
+	resume_flag = 1;
 	delta_flag = true;
 	schedule_delayed_work(&mxt->dwork, 0);
 	if(!mxt->interruptable){
@@ -2803,7 +2804,7 @@ static void update_noise_state(){
         return;
 
     struct i2c_client *client = globe_mxt->client;
-    down(&globe_mxt->sem);	
+    down(&globe_mxt->sem);
     if((pre_usb_cable_status == USB_AC_Adapter) && now_usb_cable_status < USB_AC_Adapter){
 	  mxt_write_byte(client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, globe_mxt) + 2 , 0x42);
 	  dev_info(&client->dev, "touch_callback  set charger off\n");
@@ -2818,7 +2819,7 @@ static void update_noise_state(){
 extern void touch_callback_elan(unsigned cable_status);
 #endif
 
-void touch_callback(unsigned cable_status){	 		
+void touch_callback(unsigned cable_status){
     printk("Touch charger state: %d\n",  cable_status);
     pre_usb_cable_status = now_usb_cable_status;
     now_usb_cable_status = cable_status;
@@ -2949,12 +2950,12 @@ int mxt_stress_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 static ssize_t mxt_touch_switch_name(struct switch_dev *sdev, char *buf)
 {
       struct mxt_data *mxt = globe_mxt;
-	return sprintf(buf, "MXT-%d.%d build-%u\n", 
+	return sprintf(buf, "MXT-%d.%d build-%u\n",
 		        mxt->device_info.major, mxt->device_info.minor, mxt->device_info.build);
 }
 
 static ssize_t mxt_touch_switch_state(struct switch_dev *sdev, char *buf)
-{ 
+{
       	return sprintf(buf, "%s\n", "0");
 }
 
@@ -2989,7 +2990,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		pr_debug("maXTouch: id == NULL\n");
 		return -EINVAL;
 	}
-      
+
 	mxt_debug(DEBUG_INFO, "maXTouch driver\n");
 	mxt_debug(DEBUG_INFO, "\t \"%s\"\n", client->name);
 	mxt_debug(DEBUG_INFO, "\taddr:\t0x%04x\n", client->addr);
@@ -3078,9 +3079,9 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	if(isInBootLoaderMode(client)){
 	    mxt_update_firmware(mxt, true);
 	    msleep(200);
-	} 
-             
-	   
+	}
+
+
 	if (mxt_identify(client, mxt, id_data) < 0) {
 		dev_err(&client->dev, "Chip could not be identified\n");
 		error = -ENODEV;
@@ -3127,7 +3128,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, mxt->max_y_val, 0, 0);
 	input_set_abs_params(input, ABS_MT_TOUCH_MAJOR, 0, MXT_MAX_TOUCH_SIZE,
 			     0, 0);
-	input_set_abs_params(input, ABS_MT_PRESSURE, 0, MXT_MAX_REPORTED_PRESSURE, 
+	input_set_abs_params(input, ABS_MT_PRESSURE, 0, MXT_MAX_REPORTED_PRESSURE,
 		           0, 0);
 	input_set_abs_params(input, ABS_MT_TRACKING_ID, 0, MXT_MAX_NUM_TOUCHES,
 			     0, 0);
@@ -3138,7 +3139,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	//__set_bit(EV_TOUCH, input->evbit);
 
 	mxt_debug(DEBUG_TRACE, "maXTouch driver setting client data\n");
-	sema_init(&mxt->sem, 1); 
+	sema_init(&mxt->sem, 1);
 	mxt->interruptable = true;
 	i2c_set_clientdata(client, mxt);
 	mxt->status = 0;
@@ -3154,10 +3155,10 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	error = mxt_read_object_table(client, mxt, id_data);
 	if (error < 0)
 		goto err_read_ot;
- 
-      touch_vendor_id = tegra3_query_touch_module_pcbid();	 	
+
+      touch_vendor_id = tegra3_query_touch_module_pcbid();
 	dev_info(&client->dev, "The touch vendor is 0x%02X\n", touch_vendor_id);
-	init_touch_config(mxt, touch_vendor_id); // start config  
+	init_touch_config(mxt, touch_vendor_id); // start config
 	/* Create debugfs entries. */
 	mxt->debug_dir = debugfs_create_dir("maXTouch", NULL);
 	if (mxt->debug_dir == ERR_PTR(-ENODEV)) {
@@ -3208,7 +3209,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	mxt->msg_buffer_startp = 0;
 	mxt->msg_buffer_endp = 0;
 	  // add the touch char device
-      init_touch_char_dev();  
+      init_touch_char_dev();
 
 	/* Allocate the interrupt */
 	mxt_debug(DEBUG_TRACE, "maXTouch driver allocating interrupt...\n");
@@ -3268,7 +3269,7 @@ static int __devinit mxt_probe(struct i2c_client *client,
 		//goto exit;
 	}
 	switch_set_state(&mxt->touch_sdev, 0);
-	  
+
 	if (debug > DEBUG_INFO)
 		dev_info(&client->dev, "touchscreen, irq %d\n", mxt->irq);
 
@@ -3453,7 +3454,7 @@ static int __init mxt_init(void)
 			  mxt_driver.driver.name);
 		//Mars Add
 		dbgProcFile = create_proc_entry(PROC_FS_NAME, 0666, NULL);
-		if (dbgProcFile == NULL) 
+		if (dbgProcFile == NULL)
 		{
 			remove_proc_entry(PROC_FS_NAME, NULL);
 			printk(" Could not initialize /proc/%s\n", PROC_FS_NAME);

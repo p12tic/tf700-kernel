@@ -17,6 +17,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
+#include <linux/module.h>
 #include <mach/board-cardhu-misc.h>
 #include "gpio-names.h"
 #include "../../../drivers/staging/android/timed_output.h"

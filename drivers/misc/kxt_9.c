@@ -23,6 +23,7 @@
 #include <linux/fs.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
+#include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 #include <linux/irq.h>

@@ -19,6 +19,7 @@
  */
 
 #include <linux/slab.h>
+#include <linux/module.h>
 #include <mach/gpufuse.h>
 
 #include "t20/t20.h"

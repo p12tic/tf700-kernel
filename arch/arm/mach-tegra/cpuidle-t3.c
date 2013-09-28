@@ -30,6 +30,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/module.h>
 #include <linux/ratelimit.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>

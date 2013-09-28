@@ -38,6 +38,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
+#include <linux/export.h>
 
 #include <asm/sizes.h>
 #include <asm/mach/pci.h>
