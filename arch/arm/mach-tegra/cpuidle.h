@@ -77,7 +77,7 @@ static inline void tegra_cpu_idle_stats_lp2_time(unsigned int cpu, s64 us)
 }
 
 static inline int tegra_idle_lp2(struct cpuidle_device *dev,
-			int index)
+				int index)
 {
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	return tegra2_idle_lp2(dev, index);

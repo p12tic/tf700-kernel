@@ -70,6 +70,8 @@ static s64 tegra_cpu_wake_by_time[4] = {
 	LLONG_MAX, LLONG_MAX, LLONG_MAX, LLONG_MAX };
 #endif
 
+extern struct cpuidle_driver tegra_idle;
+
 static bool lp2_0_in_idle = true;
 module_param(lp2_0_in_idle, bool, 0644);
 
@@ -138,6 +140,7 @@ static bool tegra3_rail_off_is_allowed(void)
 
 bool tegra3_lp2_is_allowed(struct cpuidle_device *dev, int index)
 {
+	struct cpuidle_driver *drv = &tegra_idle;
 	s64 request;
 
 	if (!tegra_all_cpus_booted)
@@ -164,12 +167,12 @@ bool tegra3_lp2_is_allowed(struct cpuidle_device *dev, int index)
 		return false;
 
 	request = ktime_to_us(tick_nohz_get_sleep_length());
-	if (dev->states[index].exit_latency != lp2_exit_latencies[cpu_number(dev->cpu)]) {
+	if (drv->states[index].exit_latency != lp2_exit_latencies[cpu_number(dev->cpu)]) {
 		/* possible on the 1st entry after cluster switch*/
-		dev->states[index].exit_latency = lp2_exit_latencies[cpu_number(dev->cpu)];
-		tegra_lp2_update_target_residency(&dev->states[index]);
+		drv->states[index].exit_latency = lp2_exit_latencies[cpu_number(dev->cpu)];
+		tegra_lp2_update_target_residency(&drv->states[index]);
 	}
-	if (request < dev->states[index].target_residency) {
+	if (request < drv->states[index].target_residency) {
 		/* Not enough time left to enter LP2 */
 		return false;
 	}
@@ -207,11 +210,12 @@ static int tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 	bool multi_cpu_entry = false;
 	int bin;
 	s64 sleep_time;
+	struct cpuidle_driver *drv = &tegra_idle;
 
 	/* LP2 entry time */
 	entry_time = ktime_get();
 
-	if (request < dev->states[index].target_residency) {
+	if (request < drv->states[index].target_residency) {
 		/* Not enough time left to enter LP2 */
 		return tegra3_lp3_fall_back(dev);
 	}
@@ -249,7 +253,7 @@ static int tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 		request = wake_time - ktime_to_us(entry_time);
 		BUG_ON(wake_time < 0LL);
 
-		if (request < dev->states[index].target_residency) {
+		if (request < drv->states[index].target_residency) {
 			/* Not enough time left to enter LP2 */
 			tegra_gic_dist_enable();
 			return tegra3_lp3_fall_back(dev);
@@ -308,7 +312,7 @@ static int tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 			offset / 16;
 		latency = clamp(latency, 0, 10000);
 		lp2_exit_latencies[cpu_number(dev->cpu)] = latency;
-		dev->states[index].exit_latency = latency;		/* for idle governor */
+		drv->states[index].exit_latency = latency;		/* for idle governor */
 		smp_wmb();
 
 		idle_stats.lp2_completed_count++;
@@ -329,7 +333,8 @@ static int tegra3_idle_enter_lp2_cpu_n(struct cpuidle_device *dev,
 	ktime_t entry_time;
 	struct tegra_twd_context twd_context;
 	bool sleep_completed = false;
-	struct cpuidle_state* state = &dev->states[index];
+	struct cpuidle_driver *drv = &tegra_idle;
+	struct cpuidle_state* state = &drv->states[index];
 	struct tick_sched *ts = tick_get_tick_sched(dev->cpu);
 
 	if (!tegra_twd_get_state(&twd_context)) {
