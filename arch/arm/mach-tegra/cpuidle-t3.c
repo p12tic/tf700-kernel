@@ -136,8 +136,7 @@ static bool tegra3_rail_off_is_allowed(void)
 	return true;
 }
 
-bool tegra3_lp2_is_allowed(struct cpuidle_device *dev,
-	struct cpuidle_state *state)
+bool tegra3_lp2_is_allowed(struct cpuidle_device *dev, int index)
 {
 	s64 request;
 
@@ -165,12 +164,12 @@ bool tegra3_lp2_is_allowed(struct cpuidle_device *dev,
 		return false;
 
 	request = ktime_to_us(tick_nohz_get_sleep_length());
-	if (state->exit_latency != lp2_exit_latencies[cpu_number(dev->cpu)]) {
+	if (dev->states[index].exit_latency != lp2_exit_latencies[cpu_number(dev->cpu)]) {
 		/* possible on the 1st entry after cluster switch*/
-		state->exit_latency = lp2_exit_latencies[cpu_number(dev->cpu)];
-		tegra_lp2_update_target_residency(state);
+		dev->states[index].exit_latency = lp2_exit_latencies[cpu_number(dev->cpu)];
+		tegra_lp2_update_target_residency(&dev->states[index]);
 	}
-	if (request < state->target_residency) {
+	if (request < dev->states[index].target_residency) {
 		/* Not enough time left to enter LP2 */
 		return false;
 	}
@@ -178,11 +177,11 @@ bool tegra3_lp2_is_allowed(struct cpuidle_device *dev,
 	return true;
 }
 
-static inline void tegra3_lp3_fall_back(struct cpuidle_device *dev)
+static inline int tegra3_lp3_fall_back(struct cpuidle_device *dev)
 {
 	tegra_cpu_wfi();
 	/* fall back here from LP2 path - tell cpuidle governor */
-	dev->last_state = &dev->states[0];
+	return 0;
 }
 
 static inline void tegra3_lp2_restore_affinity(void)
@@ -199,8 +198,8 @@ static inline void tegra3_lp2_restore_affinity(void)
 #endif
 }
 
-static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
-			   struct cpuidle_state *state, s64 request)
+static int tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
+			   int index, s64 request)
 {
 	ktime_t entry_time;
 	ktime_t exit_time;
@@ -212,10 +211,9 @@ static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 	/* LP2 entry time */
 	entry_time = ktime_get();
 
-	if (request < state->target_residency) {
+	if (request < dev->states[index].target_residency) {
 		/* Not enough time left to enter LP2 */
-		tegra3_lp3_fall_back(dev);
-		return;
+		return tegra3_lp3_fall_back(dev);
 	}
 
 #ifdef CONFIG_SMP
@@ -235,8 +233,7 @@ static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 		if (!tegra3_rail_off_is_allowed()) {
 			/* Yes, re-enable the distributor and LP3. */
 			tegra_gic_dist_enable();
-			tegra3_lp3_fall_back(dev);
-			return;
+			return tegra3_lp3_fall_back(dev);
 		}
 
 		/* LP2 initial targeted wake time */
@@ -252,11 +249,10 @@ static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 		request = wake_time - ktime_to_us(entry_time);
 		BUG_ON(wake_time < 0LL);
 
-		if (request < state->target_residency) {
+		if (request < dev->states[index].target_residency) {
 			/* Not enough time left to enter LP2 */
 			tegra_gic_dist_enable();
-			tegra3_lp3_fall_back(dev);
-			return;
+			return tegra3_lp3_fall_back(dev);
 		}
 
 		/* Cancel LP2 wake timers for all secondary CPUs */
@@ -312,7 +308,7 @@ static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 			offset / 16;
 		latency = clamp(latency, 0, 10000);
 		lp2_exit_latencies[cpu_number(dev->cpu)] = latency;
-		state->exit_latency = latency;		/* for idle governor */
+		dev->states[index].exit_latency = latency;		/* for idle governor */
 		smp_wmb();
 
 		idle_stats.lp2_completed_count++;
@@ -322,16 +318,18 @@ static void tegra3_idle_enter_lp2_cpu_0(struct cpuidle_device *dev,
 			ktime_to_us(ktime_sub(exit_time, entry_time)),
 			offset, bin);
 	}
+	return index;
 }
 
-static void tegra3_idle_enter_lp2_cpu_n(struct cpuidle_device *dev,
-			   struct cpuidle_state *state, s64 request)
+static int tegra3_idle_enter_lp2_cpu_n(struct cpuidle_device *dev,
+			   int index, s64 request)
 {
 #ifdef CONFIG_SMP
 	s64 sleep_time;
 	ktime_t entry_time;
 	struct tegra_twd_context twd_context;
 	bool sleep_completed = false;
+	struct cpuidle_state* state = &dev->states[index];
 	struct tick_sched *ts = tick_get_tick_sched(dev->cpu);
 
 	if (!tegra_twd_get_state(&twd_context)) {
@@ -358,8 +356,7 @@ static void tegra3_idle_enter_lp2_cpu_n(struct cpuidle_device *dev,
 		/*
 		 * Not enough time left to enter LP2, or wake timer not ready
 		 */
-		tegra3_lp3_fall_back(dev);
-		return;
+		return tegra3_lp3_fall_back(dev);
 	}
 
 #ifndef CONFIG_TEGRA_LP2_ARM_TWD
@@ -407,26 +404,28 @@ static void tegra3_idle_enter_lp2_cpu_n(struct cpuidle_device *dev,
 		smp_wmb();
 	}
 #endif
+	return index;
 }
 
-void tegra3_idle_lp2(struct cpuidle_device *dev,
-			   struct cpuidle_state *state)
+int tegra3_idle_lp2(struct cpuidle_device *dev,
+			   int index)
 {
 	s64 request = ktime_to_us(tick_nohz_get_sleep_length());
 	bool last_cpu = tegra_set_cpu_in_lp2(dev->cpu);
-
+	int entered_index;
 	cpu_pm_enter();
 
 	if (dev->cpu == 0) {
 		if (last_cpu)
-			tegra3_idle_enter_lp2_cpu_0(dev, state, request);
+			entered_index = tegra3_idle_enter_lp2_cpu_0(dev, index, request);
 		else
-			tegra3_lp3_fall_back(dev);
+			entered_index = tegra3_lp3_fall_back(dev);
 	} else
-		tegra3_idle_enter_lp2_cpu_n(dev, state, request);
+		entered_index = tegra3_idle_enter_lp2_cpu_n(dev, index, request);
 
 	cpu_pm_exit();
 	tegra_clear_cpu_in_lp2(dev->cpu);
+	return entered_index;
 }
 
 int tegra3_cpudile_init_soc(void)
