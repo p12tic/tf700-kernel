@@ -383,6 +383,8 @@ struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type,
 
 	skb_queue_head_init(&conn->data_q);
 
+	hci_chan_hash_init(conn);
+
 	setup_timer(&conn->disc_timer, hci_conn_timeout, (unsigned long)conn);
 	setup_timer(&conn->idle_timer, hci_conn_idle, (unsigned long)conn);
 	setup_timer(&conn->auto_accept_timer, hci_conn_auto_accept,
@@ -441,6 +443,8 @@ int hci_conn_del(struct hci_conn *conn)
 
 	tasklet_disable(&hdev->tx_task);
 
+	hci_chan_hash_flush(conn);
+
 	hci_conn_hash_del(hdev, conn);
 	if (hdev->notify)
 		hdev->notify(hdev, HCI_NOTIFY_CONN_DEL);
@@ -462,16 +466,13 @@ int hci_conn_del(struct hci_conn *conn)
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src)
 {
 	int use_src = bacmp(src, BDADDR_ANY);
-	struct hci_dev *hdev = NULL;
-	struct list_head *p;
+	struct hci_dev *hdev = NULL, *d;
 
 	BT_DBG("%s -> %s", batostr(src), batostr(dst));
 
 	read_lock_bh(&hci_dev_list_lock);
 
-	list_for_each(p, &hci_dev_list) {
-		struct hci_dev *d = list_entry(p, struct hci_dev, list);
-
+	list_for_each_entry(d, &hci_dev_list, list) {
 		if (!test_bit(HCI_UP, &d->flags) || test_bit(HCI_RAW, &d->flags))
 			continue;
 
@@ -834,7 +835,7 @@ void hci_conn_hash_flush(struct hci_dev *hdev)
 
 		c->state = BT_CLOSED;
 
-		hci_proto_disconn_cfm(c, 0x16);
+		hci_proto_disconn_cfm(c, HCI_ERROR_LOCAL_HOST_TERM);
 		hci_conn_del(c);
 	}
 }
@@ -870,10 +871,10 @@ EXPORT_SYMBOL(hci_conn_put_device);
 
 int hci_get_conn_list(void __user *arg)
 {
+	register struct hci_conn *c;
 	struct hci_conn_list_req req, *cl;
 	struct hci_conn_info *ci;
 	struct hci_dev *hdev;
-	struct list_head *p;
 	int n = 0, size, err;
 
 	if (copy_from_user(&req, arg, sizeof(req)))
@@ -897,10 +898,7 @@ int hci_get_conn_list(void __user *arg)
 	ci = cl->conn_info;
 
 	hci_dev_lock_bh(hdev);
-	list_for_each(p, &hdev->conn_hash.list) {
-		register struct hci_conn *c;
-		c = list_entry(p, struct hci_conn, list);
-
+	list_for_each_entry(c, &hdev->conn_hash.list, list) {
 		bacpy(&(ci + n)->bdaddr, &c->dst);
 		(ci + n)->handle = c->handle;
 		(ci + n)->type  = c->type;
@@ -988,4 +986,53 @@ int hci_get_auth_info(struct hci_dev *hdev, void __user *arg)
 		return -ENOENT;
 
 	return copy_to_user(arg, &req, sizeof(req)) ? -EFAULT : 0;
+}
+
+struct hci_chan *hci_chan_create(struct hci_conn *conn)
+{
+	struct hci_dev *hdev = conn->hdev;
+	struct hci_chan *chan;
+
+	BT_DBG("%s conn %p", hdev->name, conn);
+
+	chan = kzalloc(sizeof(struct hci_chan), GFP_ATOMIC);
+	if (!chan)
+		return NULL;
+
+	chan->conn = conn;
+	skb_queue_head_init(&chan->data_q);
+
+	tasklet_disable(&hdev->tx_task);
+	hci_chan_hash_add(conn, chan);
+	tasklet_enable(&hdev->tx_task);
+
+	return chan;
+}
+
+int hci_chan_del(struct hci_chan *chan)
+{
+	struct hci_conn *conn = chan->conn;
+	struct hci_dev *hdev = conn->hdev;
+
+	BT_DBG("%s conn %p chan %p", hdev->name, conn, chan);
+
+	tasklet_disable(&hdev->tx_task);
+	hci_chan_hash_del(conn, chan);
+	tasklet_enable(&hdev->tx_task);
+
+	skb_queue_purge(&chan->data_q);
+	kfree(chan);
+
+	return 0;
+}
+
+void hci_chan_hash_flush(struct hci_conn *conn)
+{
+	struct hci_chan_hash *h = &conn->chan_hash;
+	struct hci_chan *chan, *tmp;
+
+	BT_DBG("conn %p", conn);
+
+	list_for_each_entry_safe(chan, tmp, &h->list, list)
+		hci_chan_del(chan);
 }
