@@ -125,7 +125,14 @@ done:
 static void be_async_link_state_process(struct be_adapter *adapter,
 		struct be_async_event_link_state *evt)
 {
-	be_link_status_update(adapter, evt->port_link_status);
+	/* When link status changes, link speed must be re-queried from FW */
+	adapter->link_speed = -1;
+
+	/* For the initial link status do not rely on the ASYNC event as
+	 * it may not be received in some cases.
+	 */
+	if (adapter->flags & BE_FLAGS_LINK_STATUS_INIT)
+		be_link_status_update(adapter, evt->port_link_status);
 }
 
 /* Grp5 CoS Priority evt */
@@ -609,7 +616,7 @@ int be_cmd_eq_create(struct be_adapter *adapter,
 
 /* Use MCC */
 int be_cmd_mac_addr_query(struct be_adapter *adapter, u8 *mac_addr,
-			u8 type, bool permanent, u32 if_handle)
+			u8 type, bool permanent, u32 if_handle, u32 pmac_id)
 {
 	struct be_mcc_wrb *wrb;
 	struct be_cmd_req_mac_query *req;
@@ -631,6 +638,7 @@ int be_cmd_mac_addr_query(struct be_adapter *adapter, u8 *mac_addr,
 		req->permanent = 1;
 	} else {
 		req->if_id = cpu_to_le16((u16) if_handle);
+		req->pmac_id = cpu_to_le32(pmac_id);
 		req->permanent = 0;
 	}
 
@@ -1231,13 +1239,16 @@ err:
 
 /* Uses synchronous mcc */
 int be_cmd_link_status_query(struct be_adapter *adapter, u8 *mac_speed,
-			u16 *link_speed, u32 dom)
+			     u16 *link_speed, u8 *link_status, u32 dom)
 {
 	struct be_mcc_wrb *wrb;
 	struct be_cmd_req_link_status *req;
 	int status;
 
 	spin_lock_bh(&adapter->mcc_lock);
+
+	if (link_status)
+		*link_status = LINK_DOWN;
 
 	wrb = wrb_from_mccq(adapter);
 	if (!wrb) {
@@ -1246,7 +1257,7 @@ int be_cmd_link_status_query(struct be_adapter *adapter, u8 *mac_speed,
 	}
 	req = embedded_payload(wrb);
 
-	if (lancer_chip(adapter))
+	if (adapter->generation == BE_GEN3 || lancer_chip(adapter))
 		req->hdr.version = 1;
 
 	be_wrb_cmd_hdr_prepare(&req->hdr, CMD_SUBSYSTEM_COMMON,
@@ -1256,10 +1267,13 @@ int be_cmd_link_status_query(struct be_adapter *adapter, u8 *mac_speed,
 	if (!status) {
 		struct be_cmd_resp_link_status *resp = embedded_payload(wrb);
 		if (resp->mac_speed != PHY_LINK_SPEED_ZERO) {
-			*link_speed = le16_to_cpu(resp->link_speed);
+			if (link_speed)
+				*link_speed = le16_to_cpu(resp->link_speed);
 			if (mac_speed)
 				*mac_speed = resp->mac_speed;
 		}
+		if (link_status)
+			*link_status = resp->logical_link_status;
 	}
 
 err:
@@ -1668,8 +1682,9 @@ int be_cmd_rss_config(struct be_adapter *adapter, u8 *rsstable, u16 table_size)
 {
 	struct be_mcc_wrb *wrb;
 	struct be_cmd_req_rss_config *req;
-	u32 myhash[10] = {0x0123, 0x4567, 0x89AB, 0xCDEF, 0x01EF,
-			0x0123, 0x4567, 0x89AB, 0xCDEF, 0x01EF};
+	u32 myhash[10] = {0x15d43fa5, 0x2534685a, 0x5f87693a, 0x5668494e,
+			0x33cf6a53, 0x383334c6, 0x76ac4257, 0x59b242b2,
+			0x3ea83c02, 0x4a110304};
 	int status;
 
 	if (mutex_lock_interruptible(&adapter->mbox_lock))
@@ -2278,5 +2293,101 @@ int be_cmd_req_native_mode(struct be_adapter *adapter)
 	}
 err:
 	mutex_unlock(&adapter->mbox_lock);
+	return status;
+}
+
+/* Uses synchronous MCCQ */
+int be_cmd_get_mac_from_list(struct be_adapter *adapter, u32 domain,
+							u32 *pmac_id)
+{
+	struct be_mcc_wrb *wrb;
+	struct be_cmd_req_get_mac_list *req;
+	int status;
+	int mac_count;
+
+	spin_lock_bh(&adapter->mcc_lock);
+
+	wrb = wrb_from_mccq(adapter);
+	if (!wrb) {
+		status = -EBUSY;
+		goto err;
+	}
+	req = embedded_payload(wrb);
+
+	be_wrb_cmd_hdr_prepare(&req->hdr, CMD_SUBSYSTEM_COMMON,
+				OPCODE_COMMON_GET_MAC_LIST, sizeof(*req),
+				wrb, NULL);
+
+	req->hdr.domain = domain;
+
+	status = be_mcc_notify_wait(adapter);
+	if (!status) {
+		struct be_cmd_resp_get_mac_list *resp =
+						embedded_payload(wrb);
+		int i;
+		u8 *ctxt = &resp->context[0][0];
+		status = -EIO;
+		mac_count = resp->mac_count;
+		be_dws_le_to_cpu(&resp->context, sizeof(resp->context));
+		for (i = 0; i < mac_count; i++) {
+			if (!AMAP_GET_BITS(struct amap_get_mac_list_context,
+					   act, ctxt)) {
+				*pmac_id = AMAP_GET_BITS
+					(struct amap_get_mac_list_context,
+					 macid, ctxt);
+				status = 0;
+				break;
+			}
+			ctxt += sizeof(struct amap_get_mac_list_context) / 8;
+		}
+	}
+
+err:
+	spin_unlock_bh(&adapter->mcc_lock);
+	return status;
+}
+
+/* Uses synchronous MCCQ */
+int be_cmd_set_mac_list(struct be_adapter *adapter, u8 *mac_array,
+			u8 mac_count, u32 domain)
+{
+	struct be_mcc_wrb *wrb;
+	struct be_cmd_req_set_mac_list *req;
+	int status;
+	struct be_dma_mem cmd;
+
+	memset(&cmd, 0, sizeof(struct be_dma_mem));
+	cmd.size = sizeof(struct be_cmd_req_set_mac_list);
+	cmd.va = dma_alloc_coherent(&adapter->pdev->dev, cmd.size,
+			&cmd.dma, GFP_KERNEL);
+	if (!cmd.va) {
+		dev_err(&adapter->pdev->dev, "Memory alloc failure\n");
+		return -ENOMEM;
+	}
+
+	spin_lock_bh(&adapter->mcc_lock);
+
+	wrb = wrb_from_mccq(adapter);
+	if (!wrb) {
+		status = -EBUSY;
+		goto err;
+	}
+
+	req = cmd.va;
+	be_wrb_cmd_hdr_prepare(&req->hdr, CMD_SUBSYSTEM_COMMON,
+				OPCODE_COMMON_SET_MAC_LIST, sizeof(*req),
+				wrb, &cmd);
+
+	req->hdr.domain = domain;
+	req->mac_count = mac_count;
+	if (mac_count)
+		memcpy(req->mac, mac_array, ETH_ALEN*mac_count);
+
+	status = be_mcc_notify_wait(adapter);
+
+err:
+	dma_free_coherent(&adapter->pdev->dev, cmd.size,
+				cmd.va, cmd.dma);
+	spin_unlock_bh(&adapter->mcc_lock);
 	return status;
 }

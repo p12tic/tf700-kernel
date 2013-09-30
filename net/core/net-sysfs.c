@@ -21,6 +21,7 @@
 #include <linux/wireless.h>
 #include <linux/vmalloc.h>
 #include <linux/export.h>
+#include <linux/jiffies.h>
 #include <net/wext.h>
 
 #include "net-sysfs.h"
@@ -621,15 +622,15 @@ static ssize_t show_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 					   char *buf)
 {
 	struct rps_dev_flow_table *flow_table;
-	unsigned int val = 0;
+	unsigned long val = 0;
 
 	rcu_read_lock();
 	flow_table = rcu_dereference(queue->rps_flow_table);
 	if (flow_table)
-		val = flow_table->mask + 1;
+		val = (unsigned long)flow_table->mask + 1;
 	rcu_read_unlock();
 
-	return sprintf(buf, "%u\n", val);
+	return sprintf(buf, "%lu\n", val);
 }
 
 static void rps_dev_flow_table_release_work(struct work_struct *work)
@@ -653,36 +654,46 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 				     struct rx_queue_attribute *attr,
 				     const char *buf, size_t len)
 {
-	unsigned int count;
-	char *endp;
+	unsigned long mask, count;
 	struct rps_dev_flow_table *table, *old_table;
 	static DEFINE_SPINLOCK(rps_dev_flow_lock);
+	int rc;
 
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
-	count = simple_strtoul(buf, &endp, 0);
-	if (endp == buf)
-		return -EINVAL;
+	rc = kstrtoul(buf, 0, &count);
+	if (rc < 0)
+		return rc;
 
 	if (count) {
-		int i;
-
-		if (count > INT_MAX)
+		mask = count - 1;
+		/* mask = roundup_pow_of_two(count) - 1;
+		 * without overflows...
+		 */
+		while ((mask | (mask >> 1)) != mask)
+			mask |= (mask >> 1);
+		/* On 64 bit arches, must check mask fits in table->mask (u32),
+		 * and on 32bit arches, must check RPS_DEV_FLOW_TABLE_SIZE(mask + 1)
+		 * doesnt overflow.
+		 */
+#if BITS_PER_LONG > 32
+		if (mask > (unsigned long)(u32)mask)
 			return -EINVAL;
-		count = roundup_pow_of_two(count);
-		if (count > (ULONG_MAX - sizeof(struct rps_dev_flow_table))
+#else
+		if (mask > (ULONG_MAX - RPS_DEV_FLOW_TABLE_SIZE(1))
 				/ sizeof(struct rps_dev_flow)) {
 			/* Enforce a limit to prevent overflow */
 			return -EINVAL;
 		}
-		table = vmalloc(RPS_DEV_FLOW_TABLE_SIZE(count));
+#endif
+		table = vmalloc(RPS_DEV_FLOW_TABLE_SIZE(mask + 1));
 		if (!table)
 			return -ENOMEM;
 
-		table->mask = count - 1;
-		for (i = 0; i < count; i++)
-			table->flows[i].cpu = RPS_NO_CPU;
+		table->mask = mask;
+		for (count = 0; count <= mask; count++)
+			table->flows[count].cpu = RPS_NO_CPU;
 	} else
 		table = NULL;
 
@@ -848,6 +859,116 @@ static ssize_t show_trans_timeout(struct netdev_queue *queue,
 static struct netdev_queue_attribute queue_trans_timeout =
 	__ATTR(tx_timeout, S_IRUGO, show_trans_timeout, NULL);
 
+#ifdef CONFIG_BQL
+/*
+ * Byte queue limits sysfs structures and functions.
+ */
+static ssize_t bql_show(char *buf, unsigned int value)
+{
+	return sprintf(buf, "%u\n", value);
+}
+
+static ssize_t bql_set(const char *buf, const size_t count,
+		       unsigned int *pvalue)
+{
+	unsigned int value;
+	int err;
+
+	if (!strcmp(buf, "max") || !strcmp(buf, "max\n"))
+		value = DQL_MAX_LIMIT;
+	else {
+		err = kstrtouint(buf, 10, &value);
+		if (err < 0)
+			return err;
+		if (value > DQL_MAX_LIMIT)
+			return -EINVAL;
+	}
+
+	*pvalue = value;
+
+	return count;
+}
+
+static ssize_t bql_show_hold_time(struct netdev_queue *queue,
+				  struct netdev_queue_attribute *attr,
+				  char *buf)
+{
+	struct dql *dql = &queue->dql;
+
+	return sprintf(buf, "%u\n", jiffies_to_msecs(dql->slack_hold_time));
+}
+
+static ssize_t bql_set_hold_time(struct netdev_queue *queue,
+				 struct netdev_queue_attribute *attribute,
+				 const char *buf, size_t len)
+{
+	struct dql *dql = &queue->dql;
+	unsigned value;
+	int err;
+
+	err = kstrtouint(buf, 10, &value);
+	if (err < 0)
+		return err;
+
+	dql->slack_hold_time = msecs_to_jiffies(value);
+
+	return len;
+}
+
+static struct netdev_queue_attribute bql_hold_time_attribute =
+	__ATTR(hold_time, S_IRUGO | S_IWUSR, bql_show_hold_time,
+	    bql_set_hold_time);
+
+static ssize_t bql_show_inflight(struct netdev_queue *queue,
+				 struct netdev_queue_attribute *attr,
+				 char *buf)
+{
+	struct dql *dql = &queue->dql;
+
+	return sprintf(buf, "%u\n", dql->num_queued - dql->num_completed);
+}
+
+static struct netdev_queue_attribute bql_inflight_attribute =
+	__ATTR(inflight, S_IRUGO | S_IWUSR, bql_show_inflight, NULL);
+
+#define BQL_ATTR(NAME, FIELD)						\
+static ssize_t bql_show_ ## NAME(struct netdev_queue *queue,		\
+				 struct netdev_queue_attribute *attr,	\
+				 char *buf)				\
+{									\
+	return bql_show(buf, queue->dql.FIELD);				\
+}									\
+									\
+static ssize_t bql_set_ ## NAME(struct netdev_queue *queue,		\
+				struct netdev_queue_attribute *attr,	\
+				const char *buf, size_t len)		\
+{									\
+	return bql_set(buf, len, &queue->dql.FIELD);			\
+}									\
+									\
+static struct netdev_queue_attribute bql_ ## NAME ## _attribute =	\
+	__ATTR(NAME, S_IRUGO | S_IWUSR, bql_show_ ## NAME,		\
+	    bql_set_ ## NAME);
+
+BQL_ATTR(limit, limit)
+BQL_ATTR(limit_max, max_limit)
+BQL_ATTR(limit_min, min_limit)
+
+static struct attribute *dql_attrs[] = {
+	&bql_limit_attribute.attr,
+	&bql_limit_max_attribute.attr,
+	&bql_limit_min_attribute.attr,
+	&bql_hold_time_attribute.attr,
+	&bql_inflight_attribute.attr,
+	NULL
+};
+
+static struct attribute_group dql_group = {
+	.name  = "byte_queue_limits",
+	.attrs  = dql_attrs,
+};
+#endif /* CONFIG_BQL */
+
 #ifdef CONFIG_XPS
 static inline unsigned int get_netdev_queue_index(struct netdev_queue *queue)
 {
@@ -912,6 +1033,52 @@ static ssize_t show_xps_map(struct netdev_queue *queue,
 static DEFINE_MUTEX(xps_map_mutex);
 #define xmap_dereference(P)		\
 	rcu_dereference_protected((P), lockdep_is_held(&xps_map_mutex))
+
+static void xps_queue_release(struct netdev_queue *queue)
+{
+	struct net_device *dev = queue->dev;
+	struct xps_dev_maps *dev_maps;
+	struct xps_map *map;
+	unsigned long index;
+	int i, pos, nonempty = 0;
+
+	index = get_netdev_queue_index(queue);
+
+	mutex_lock(&xps_map_mutex);
+	dev_maps = xmap_dereference(dev->xps_maps);
+
+	if (dev_maps) {
+		for_each_possible_cpu(i) {
+			map = xmap_dereference(dev_maps->cpu_map[i]);
+			if (!map)
+				continue;
+
+			for (pos = 0; pos < map->len; pos++)
+				if (map->queues[pos] == index)
+					break;
+
+			if (pos < map->len) {
+				if (map->len > 1)
+					map->queues[pos] =
+					    map->queues[--map->len];
+				else {
+					RCU_INIT_POINTER(dev_maps->cpu_map[i],
+					    NULL);
+					kfree_rcu(map, rcu);
+					map = NULL;
+				}
+			}
+			if (map)
+				nonempty = 1;
+		}
+
+		if (!nonempty) {
+			RCU_INIT_POINTER(dev->xps_maps, NULL);
+			kfree_rcu(dev_maps, rcu);
+		}
+	}
+	mutex_unlock(&xps_map_mutex);
+}
 
 static ssize_t store_xps_map(struct netdev_queue *queue,
 		      struct netdev_queue_attribute *attribute,
@@ -1053,64 +1220,21 @@ static struct attribute *netdev_queue_default_attrs[] = {
 	NULL
 };
 
-#ifdef CONFIG_XPS
 static void netdev_queue_release(struct kobject *kobj)
 {
 	struct netdev_queue *queue = to_netdev_queue(kobj);
-	struct net_device *dev = queue->dev;
-	struct xps_dev_maps *dev_maps;
-	struct xps_map *map;
-	unsigned long index;
-	int i, pos, nonempty = 0;
 
-	index = get_netdev_queue_index(queue);
-
-	mutex_lock(&xps_map_mutex);
-	dev_maps = xmap_dereference(dev->xps_maps);
-
-	if (dev_maps) {
-		for_each_possible_cpu(i) {
-			map = xmap_dereference(dev_maps->cpu_map[i]);
-			if (!map)
-				continue;
-
-			for (pos = 0; pos < map->len; pos++)
-				if (map->queues[pos] == index)
-					break;
-
-			if (pos < map->len) {
-				if (map->len > 1)
-					map->queues[pos] =
-					    map->queues[--map->len];
-				else {
-					RCU_INIT_POINTER(dev_maps->cpu_map[i],
-					    NULL);
-					kfree_rcu(map, rcu);
-					map = NULL;
-				}
-			}
-			if (map)
-				nonempty = 1;
-		}
-
-		if (!nonempty) {
-			RCU_INIT_POINTER(dev->xps_maps, NULL);
-			kfree_rcu(dev_maps, rcu);
-		}
-	}
-
-	mutex_unlock(&xps_map_mutex);
+#ifdef CONFIG_XPS
+	xps_queue_release(queue);
+#endif
 
 	memset(kobj, 0, sizeof(*kobj));
 	dev_put(queue->dev);
 }
-#endif /* CONFIG_XPS */
 
 static struct kobj_type netdev_queue_ktype = {
 	.sysfs_ops = &netdev_queue_sysfs_ops,
-#ifdef CONFIG_XPS
 	.release = netdev_queue_release,
-#endif
 	.default_attrs = netdev_queue_default_attrs,
 };
 
@@ -1123,14 +1247,21 @@ static int netdev_queue_add_kobject(struct net_device *net, int index)
 	kobj->kset = net->queues_kset;
 	error = kobject_init_and_add(kobj, &netdev_queue_ktype, NULL,
 	    "tx-%u", index);
-	if (error) {
-		kobject_put(kobj);
-		return error;
-	}
+	if (error)
+		goto exit;
+
+#ifdef CONFIG_BQL
+	error = sysfs_create_group(kobj, &dql_group);
+	if (error)
+		goto exit;
+#endif
 
 	kobject_uevent(kobj, KOBJ_ADD);
 	dev_hold(queue->dev);
 
+	return 0;
+exit:
+	kobject_put(kobj);
 	return error;
 }
 #endif /* CONFIG_SYSFS */
@@ -1150,8 +1281,14 @@ netdev_queue_update_kobjects(struct net_device *net, int old_num, int new_num)
 		}
 	}
 
-	while (--i >= new_num)
-		kobject_put(&net->_tx[i].kobj);
+	while (--i >= new_num) {
+		struct netdev_queue *queue = net->_tx + i;
+
+#ifdef CONFIG_BQL
+		sysfs_remove_group(&queue->kobj, &dql_group);
+#endif
+		kobject_put(&queue->kobj);
+	}
 
 	return error;
 #else

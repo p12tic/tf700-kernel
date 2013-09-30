@@ -4380,12 +4380,10 @@ static void ksz_update_timer(struct ksz_timer_info *info)
  */
 static int ksz_alloc_soft_desc(struct ksz_desc_info *desc_info, int transmit)
 {
-	desc_info->ring = kmalloc(sizeof(struct ksz_desc) * desc_info->alloc,
-		GFP_KERNEL);
+	desc_info->ring = kzalloc(sizeof(struct ksz_desc) * desc_info->alloc,
+				  GFP_KERNEL);
 	if (!desc_info->ring)
 		return 1;
-	memset((void *) desc_info->ring, 0,
-		sizeof(struct ksz_desc) * desc_info->alloc);
 	hw_init_desc(desc_info, transmit);
 	return 0;
 }
@@ -6609,7 +6607,7 @@ static int netdev_set_features(struct net_device *dev,
 	return 0;
 }
 
-static struct ethtool_ops netdev_ethtool_ops = {
+static const struct ethtool_ops netdev_ethtool_ops = {
 	.get_settings		= netdev_get_settings,
 	.set_settings		= netdev_set_settings,
 	.nway_reset		= netdev_nway_reset,

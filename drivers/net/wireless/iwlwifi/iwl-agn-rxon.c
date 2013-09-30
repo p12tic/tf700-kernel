@@ -60,7 +60,7 @@ static int iwlagn_disable_pan(struct iwl_priv *priv,
 	u8 old_dev_type = send->dev_type;
 	int ret;
 
-	iwlagn_init_notification_wait(priv, &disable_wait,
+	iwl_init_notification_wait(priv->shrd, &disable_wait,
 				      REPLY_WIPAN_DEACTIVATION_COMPLETE,
 				      NULL, NULL);
 
@@ -74,9 +74,9 @@ static int iwlagn_disable_pan(struct iwl_priv *priv,
 
 	if (ret) {
 		IWL_ERR(priv, "Error disabling PAN (%d)\n", ret);
-		iwlagn_remove_notification(priv, &disable_wait);
+		iwl_remove_notification(priv->shrd, &disable_wait);
 	} else {
-		ret = iwlagn_wait_notification(priv, &disable_wait, HZ);
+		ret = iwl_wait_notification(priv->shrd, &disable_wait, HZ);
 		if (ret)
 			IWL_ERR(priv, "Timed out waiting for PAN disable\n");
 	}
@@ -296,9 +296,9 @@ static int iwlagn_rxon_connect(struct iwl_priv *priv,
 	}
 
 	if (ctx->vif && ctx->vif->type == NL80211_IFTYPE_STATION &&
-	    priv->cfg->ht_params && priv->cfg->ht_params->smps_mode)
+	    cfg(priv)->ht_params && cfg(priv)->ht_params->smps_mode)
 		ieee80211_request_smps(ctx->vif,
-				       priv->cfg->ht_params->smps_mode);
+				       cfg(priv)->ht_params->smps_mode);
 
 	return 0;
 }
@@ -445,8 +445,8 @@ int iwlagn_commit_rxon(struct iwl_priv *priv, struct iwl_rxon_context *ctx)
 	 * force CTS-to-self frames protection if RTS-CTS is not preferred
 	 * one aggregation protection method
 	 */
-	if (!(priv->cfg->ht_params &&
-	      priv->cfg->ht_params->use_rts_for_aggregation))
+	if (!(cfg(priv)->ht_params &&
+	      cfg(priv)->ht_params->use_rts_for_aggregation))
 		ctx->staging.flags |= RXON_FLG_SELF_CTS_EN;
 
 	if ((ctx->vif && ctx->vif->bss_conf.use_short_slot) ||

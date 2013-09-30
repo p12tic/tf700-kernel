@@ -57,11 +57,11 @@
 #include "bnx2_fw.h"
 
 #define DRV_MODULE_NAME		"bnx2"
-#define DRV_MODULE_VERSION	"2.1.11"
-#define DRV_MODULE_RELDATE	"July 20, 2011"
-#define FW_MIPS_FILE_06		"bnx2/bnx2-mips-06-6.2.1.fw"
+#define DRV_MODULE_VERSION	"2.2.1"
+#define DRV_MODULE_RELDATE	"Dec 18, 2011"
+#define FW_MIPS_FILE_06		"bnx2/bnx2-mips-06-6.2.3.fw"
 #define FW_RV2P_FILE_06		"bnx2/bnx2-rv2p-06-6.0.15.fw"
-#define FW_MIPS_FILE_09		"bnx2/bnx2-mips-09-6.2.1a.fw"
+#define FW_MIPS_FILE_09		"bnx2/bnx2-mips-09-6.2.1b.fw"
 #define FW_RV2P_FILE_09_Ax	"bnx2/bnx2-rv2p-09ax-6.0.17.fw"
 #define FW_RV2P_FILE_09		"bnx2/bnx2-rv2p-09-6.0.17.fw"
 
@@ -409,7 +409,7 @@ static int bnx2_unregister_cnic(struct net_device *dev)
 	mutex_lock(&bp->cnic_lock);
 	cp->drv_state = 0;
 	bnapi->cnic_present = 0;
-	rcu_assign_pointer(bp->cnic_ops, NULL);
+	RCU_INIT_POINTER(bp->cnic_ops, NULL);
 	mutex_unlock(&bp->cnic_lock);
 	synchronize_rcu();
 	return 0;
@@ -2054,8 +2054,8 @@ __acquires(&bp->phy_lock)
 
 	if (bp->autoneg & AUTONEG_SPEED) {
 		u32 adv_reg, adv1000_reg;
-		u32 new_adv_reg = 0;
-		u32 new_adv1000_reg = 0;
+		u32 new_adv = 0;
+		u32 new_adv1000 = 0;
 
 		bnx2_read_phy(bp, bp->mii_adv, &adv_reg);
 		adv_reg &= (PHY_ALL_10_100_SPEED | ADVERTISE_PAUSE_CAP |
@@ -2064,18 +2064,18 @@ __acquires(&bp->phy_lock)
 		bnx2_read_phy(bp, MII_CTRL1000, &adv1000_reg);
 		adv1000_reg &= PHY_ALL_1000_SPEED;
 
-		new_adv_reg = ethtool_adv_to_mii_100bt(bp->advertising);
-		new_adv_reg |= ADVERTISE_CSMA;
-		new_adv_reg |= bnx2_phy_get_pause_adv(bp);
+		new_adv = ethtool_adv_to_mii_adv_t(bp->advertising);
+		new_adv |= ADVERTISE_CSMA;
+		new_adv |= bnx2_phy_get_pause_adv(bp);
 
-		new_adv1000_reg |= ethtool_adv_to_mii_1000T(bp->advertising);
+		new_adv1000 |= ethtool_adv_to_mii_ctrl1000_t(bp->advertising);
 
-		if ((adv1000_reg != new_adv1000_reg) ||
-			(adv_reg != new_adv_reg) ||
+		if ((adv1000_reg != new_adv1000) ||
+			(adv_reg != new_adv) ||
 			((bmcr & BMCR_ANENABLE) == 0)) {
 
-			bnx2_write_phy(bp, bp->mii_adv, new_adv_reg);
-			bnx2_write_phy(bp, MII_CTRL1000, new_adv1000_reg);
+			bnx2_write_phy(bp, bp->mii_adv, new_adv);
+			bnx2_write_phy(bp, MII_CTRL1000, new_adv1000);
 			bnx2_write_phy(bp, bp->mii_bmcr, BMCR_ANRESTART |
 				BMCR_ANENABLE);
 		}
@@ -2810,6 +2810,7 @@ bnx2_tx_int(struct bnx2 *bp, struct bnx2_napi *bnapi, int budget)
 	struct bnx2_tx_ring_info *txr = &bnapi->tx_ring;
 	u16 hw_cons, sw_cons, sw_ring_cons;
 	int tx_pkt = 0, index;
+	unsigned int tx_bytes = 0;
 	struct netdev_queue *txq;
 
 	index = (bnapi - bp->bnx2_napi);
@@ -2864,6 +2865,7 @@ bnx2_tx_int(struct bnx2 *bp, struct bnx2_napi *bnapi, int budget)
 
 		sw_cons = NEXT_TX_BD(sw_cons);
 
+		tx_bytes += skb->len;
 		dev_kfree_skb(skb);
 		tx_pkt++;
 		if (tx_pkt == budget)
@@ -2873,6 +2875,7 @@ bnx2_tx_int(struct bnx2 *bp, struct bnx2_napi *bnapi, int budget)
 			hw_cons = bnx2_get_hw_tx_cons(bnapi);
 	}
 
+	netdev_tx_completed_queue(txq, tx_pkt, tx_bytes);
 	txr->hw_tx_cons = hw_cons;
 	txr->tx_cons = sw_cons;
 
@@ -5393,6 +5396,7 @@ bnx2_free_tx_skbs(struct bnx2 *bp)
 			}
 			dev_kfree_skb(skb);
 		}
+		netdev_tx_reset_queue(netdev_get_tx_queue(bp->dev, i));
 	}
 }
 
@@ -6545,6 +6549,8 @@ bnx2_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	}
 	txbd->tx_bd_vlan_tag_flags |= TX_BD_FLAGS_END;
+
+	netdev_tx_sent_queue(txq, skb->len);
 
 	prod = NEXT_TX_BD(prod);
 	txr->tx_prod_bseq += skb->len;
