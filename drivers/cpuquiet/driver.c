@@ -62,8 +62,7 @@ static void stats_update(struct cpuquiet_cpu_stat *stat, bool up)
 	bool was_up = stat->up_down_count & 0x1;
 
 	if (was_up)
-		stat->time_up_total = cputime64_add(stat->time_up_total,
-			cputime64_sub(cur_jiffies, stat->last_update));
+		stat->time_up_total += cur_jiffies - stat->last_update;
 
 	if (was_up != up)
 		stat->up_down_count++;
