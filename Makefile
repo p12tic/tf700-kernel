@@ -1,8 +1,8 @@
 VERSION = 3
-PATCHLEVEL = 1
-SUBLEVEL = 10
-EXTRAVERSION =
-NAME = "Divemaster Edition"
+PATCHLEVEL = 2
+SUBLEVEL = 0
+EXTRAVERSION = -rc1
+NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
