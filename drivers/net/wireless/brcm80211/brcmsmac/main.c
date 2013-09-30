@@ -43,16 +43,6 @@
 /* radio monitor timer, in unit of ms */
 #define TIMER_INTERVAL_RADIOCHK		800
 
-/* Max MPC timeout, in unit of watchdog */
-#ifndef BRCMS_MPC_MAX_DELAYCNT
-#define BRCMS_MPC_MAX_DELAYCNT		10
-#endif
-
-/* Min MPC timeout, in unit of watchdog */
-#define BRCMS_MPC_MIN_DELAYCNT		1
-/* MPC count threshold level */
-#define BRCMS_MPC_THRESHOLD		3
-
 /* beacon interval, in unit of 1024TU */
 #define BEACON_INTERVAL_DEFAULT		100
 
@@ -417,20 +407,6 @@ static int brcms_chspec_bw(u16 chanspec)
 		return BRCMS_20_MHZ;
 
 	return BRCMS_10_MHZ;
-}
-
-/*
- * return true if Minimum Power Consumption should
- * be entered, false otherwise
- */
-static bool brcms_c_is_non_delay_mpc(struct brcms_c_info *wlc)
-{
-	return false;
-}
-
-static bool brcms_c_ismpc(struct brcms_c_info *wlc)
-{
-	return (wlc->mpc_delay_off == 0) && (brcms_c_is_non_delay_mpc(wlc));
 }
 
 static void brcms_c_bsscfg_mfree(struct brcms_bss_cfg *cfg)
@@ -2420,6 +2396,7 @@ void brcms_c_intrsrestore(struct brcms_c_info *wlc, u32 macintmask)
 	W_REG(&wlc_hw->regs->macintmask, wlc->macintmask);
 }
 
+/* assumes that the d11 MAC is enabled */
 static void brcms_b_tx_fifo_suspend(struct brcms_hardware *wlc_hw,
 				    uint tx_fifo)
 {
@@ -2476,11 +2453,12 @@ static void brcms_b_tx_fifo_resume(struct brcms_hardware *wlc_hw,
 	}
 }
 
-static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool on, u32 flags)
+/* precondition: requires the mac core to be enabled */
+static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool mute_tx)
 {
 	static const u8 null_ether_addr[ETH_ALEN] = {0, 0, 0, 0, 0, 0};
 
-	if (on) {
+	if (mute_tx) {
 		/* suspend tx fifos */
 		brcms_b_tx_fifo_suspend(wlc_hw, TX_DATA_FIFO);
 		brcms_b_tx_fifo_suspend(wlc_hw, TX_CTL_FIFO);
@@ -2502,12 +2480,18 @@ static void brcms_b_mute(struct brcms_hardware *wlc_hw, bool on, u32 flags)
 				       wlc_hw->etheraddr);
 	}
 
-	wlc_phy_mute_upd(wlc_hw->band->pi, on, flags);
+	wlc_phy_mute_upd(wlc_hw->band->pi, mute_tx, 0);
 
-	if (on)
+	if (mute_tx)
 		brcms_c_ucode_mute_override_set(wlc_hw);
 	else
 		brcms_c_ucode_mute_override_clear(wlc_hw);
+}
+
+void
+brcms_c_mute(struct brcms_c_info *wlc, bool mute_tx)
+{
+	brcms_b_mute(wlc->hw, mute_tx);
 }
 
 /*
@@ -3378,8 +3362,7 @@ static void brcms_b_coreinit(struct brcms_c_info *wlc)
 }
 
 void
-static brcms_b_init(struct brcms_hardware *wlc_hw, u16 chanspec,
-			  bool mute) {
+static brcms_b_init(struct brcms_hardware *wlc_hw, u16 chanspec) {
 	u32 macintmask;
 	bool fastclk;
 	struct brcms_c_info *wlc = wlc_hw->wlc;
@@ -3403,10 +3386,6 @@ static brcms_b_init(struct brcms_hardware *wlc_hw, u16 chanspec,
 
 	/* core-specific initialization */
 	brcms_b_coreinit(wlc);
-
-	/* suspend the tx fifos and mute the phy for preism cac time */
-	if (mute)
-		brcms_b_mute(wlc_hw, ON, PHY_MUTE_FOR_PREISM);
 
 	/* band-specific inits */
 	brcms_b_bsinit(wlc, chanspec);
@@ -3920,7 +3899,7 @@ static void brcms_c_set_home_chanspec(struct brcms_c_info *wlc, u16 chanspec)
 
 void
 brcms_b_set_chanspec(struct brcms_hardware *wlc_hw, u16 chanspec,
-		      bool mute, struct txpwr_limits *txpwr)
+		      bool mute_tx, struct txpwr_limits *txpwr)
 {
 	uint bandunit;
 
@@ -3946,7 +3925,7 @@ brcms_b_set_chanspec(struct brcms_hardware *wlc_hw, u16 chanspec,
 		}
 	}
 
-	wlc_phy_initcal_enable(wlc_hw->band->pi, !mute);
+	wlc_phy_initcal_enable(wlc_hw->band->pi, !mute_tx);
 
 	if (!wlc_hw->up) {
 		if (wlc_hw->clk)
@@ -3958,7 +3937,7 @@ brcms_b_set_chanspec(struct brcms_hardware *wlc_hw, u16 chanspec,
 		wlc_phy_txpower_limit_set(wlc_hw->band->pi, txpwr, chanspec);
 
 		/* Update muting of the channel */
-		brcms_b_mute(wlc_hw, mute, 0);
+		brcms_b_mute(wlc_hw, mute_tx);
 	}
 }
 
@@ -4218,17 +4197,6 @@ static void brcms_c_edcf_setparams(struct brcms_c_info *wlc, bool suspend)
 	}
 }
 
-/* maintain LED behavior in down state */
-static void brcms_c_down_led_upd(struct brcms_c_info *wlc)
-{
-	/*
-	 * maintain LEDs while in down state, turn on sbclk if
-	 * not available yet. Turn on sbclk if necessary
-	 */
-	brcms_b_pllreq(wlc->hw, true, BRCMS_PLLREQ_FLIP);
-	brcms_b_pllreq(wlc->hw, false, BRCMS_PLLREQ_FLIP);
-}
-
 static void brcms_c_radio_monitor_start(struct brcms_c_info *wlc)
 {
 	/* Don't start the timer if HWRADIO feature is disabled */
@@ -4238,28 +4206,6 @@ static void brcms_c_radio_monitor_start(struct brcms_c_info *wlc)
 	wlc->radio_monitor = true;
 	brcms_b_pllreq(wlc->hw, true, BRCMS_PLLREQ_RADIO_MON);
 	brcms_add_timer(wlc->radio_timer, TIMER_INTERVAL_RADIOCHK, true);
-}
-
-static void brcms_c_radio_disable(struct brcms_c_info *wlc)
-{
-	if (!wlc->pub->up) {
-		brcms_c_down_led_upd(wlc);
-		return;
-	}
-
-	brcms_c_radio_monitor_start(wlc);
-	brcms_down(wlc->wl);
-}
-
-static void brcms_c_radio_enable(struct brcms_c_info *wlc)
-{
-	if (wlc->pub->up)
-		return;
-
-	if (brcms_deviceremoved(wlc))
-		return;
-
-	brcms_up(wlc->wl);
 }
 
 static bool brcms_c_radio_monitor_stop(struct brcms_c_info *wlc)
@@ -4284,18 +4230,6 @@ static void brcms_c_radio_hwdisable_upd(struct brcms_c_info *wlc)
 		mboolclr(wlc->pub->radio_disabled, WL_RADIO_HW_DISABLE);
 }
 
-/*
- * centralized radio disable/enable function,
- * invoke radio enable/disable after updating hwradio status
- */
-static void brcms_c_radio_upd(struct brcms_c_info *wlc)
-{
-	if (wlc->pub->radio_disabled)
-		brcms_c_radio_disable(wlc);
-	else
-		brcms_c_radio_enable(wlc);
-}
-
 /* update hwradio status and return it */
 bool brcms_c_check_radio_disabled(struct brcms_c_info *wlc)
 {
@@ -4317,12 +4251,7 @@ static void brcms_c_radio_timer(void *arg)
 		return;
 	}
 
-	/* cap mpc off count */
-	if (wlc->mpc_offcnt < BRCMS_MPC_MAX_DELAYCNT)
-		wlc->mpc_offcnt++;
-
 	brcms_c_radio_hwdisable_upd(wlc);
-	brcms_c_radio_upd(wlc);
 }
 
 /* common low-level watchdog code */
@@ -4348,60 +4277,6 @@ static void brcms_b_watchdog(void *arg)
 	wlc_phy_watchdog(wlc_hw->band->pi);
 }
 
-static void brcms_c_radio_mpc_upd(struct brcms_c_info *wlc)
-{
-	bool mpc_radio, radio_state;
-
-	/*
-	 * Clear the WL_RADIO_MPC_DISABLE bit when mpc feature is disabled
-	 * in case the WL_RADIO_MPC_DISABLE bit was set. Stop the radio
-	 * monitor also when WL_RADIO_MPC_DISABLE is the only reason that
-	 * the radio is going down.
-	 */
-	if (!wlc->mpc) {
-		if (!wlc->pub->radio_disabled)
-			return;
-		mboolclr(wlc->pub->radio_disabled, WL_RADIO_MPC_DISABLE);
-		brcms_c_radio_upd(wlc);
-		if (!wlc->pub->radio_disabled)
-			brcms_c_radio_monitor_stop(wlc);
-		return;
-	}
-
-	/*
-	 * sync ismpc logic with WL_RADIO_MPC_DISABLE bit in
-	 * wlc->pub->radio_disabled to go ON, always call radio_upd
-	 * synchronously to go OFF, postpone radio_upd to later when
-	 * context is safe(e.g. watchdog)
-	 */
-	radio_state =
-	    (mboolisset(wlc->pub->radio_disabled, WL_RADIO_MPC_DISABLE) ? OFF :
-	     ON);
-	mpc_radio = (brcms_c_ismpc(wlc) == true) ? OFF : ON;
-
-	if (radio_state == ON && mpc_radio == OFF)
-		wlc->mpc_delay_off = wlc->mpc_dlycnt;
-	else if (radio_state == OFF && mpc_radio == ON) {
-		mboolclr(wlc->pub->radio_disabled, WL_RADIO_MPC_DISABLE);
-		brcms_c_radio_upd(wlc);
-		if (wlc->mpc_offcnt < BRCMS_MPC_THRESHOLD)
-			wlc->mpc_dlycnt = BRCMS_MPC_MAX_DELAYCNT;
-		else
-			wlc->mpc_dlycnt = BRCMS_MPC_MIN_DELAYCNT;
-	}
-	/*
-	 * Below logic is meant to capture the transition from mpc off
-	 * to mpc on for reasons other than wlc->mpc_delay_off keeping
-	 * the mpc off. In that case reset wlc->mpc_delay_off to
-	 * wlc->mpc_dlycnt, so that we restart the countdown of mpc_delay_off
-	 */
-	if ((wlc->prev_non_delay_mpc == false) &&
-	    (brcms_c_is_non_delay_mpc(wlc) == true) && wlc->mpc_delay_off)
-		wlc->mpc_delay_off = wlc->mpc_dlycnt;
-
-	wlc->prev_non_delay_mpc = brcms_c_is_non_delay_mpc(wlc);
-}
-
 /* common watchdog code */
 static void brcms_c_watchdog(void *arg)
 {
@@ -4422,21 +4297,7 @@ static void brcms_c_watchdog(void *arg)
 	/* increment second count */
 	wlc->pub->now++;
 
-	/* delay radio disable */
-	if (wlc->mpc_delay_off) {
-		if (--wlc->mpc_delay_off == 0) {
-			mboolset(wlc->pub->radio_disabled,
-				 WL_RADIO_MPC_DISABLE);
-			if (wlc->mpc && brcms_c_ismpc(wlc))
-				wlc->mpc_offcnt = 0;
-		}
-	}
-
-	/* mpc sync */
-	brcms_c_radio_mpc_upd(wlc);
-	/* radio sync: sw/hw/mpc --> radio_disable/radio_enable */
 	brcms_c_radio_hwdisable_upd(wlc);
-	brcms_c_radio_upd(wlc);
 	/* if radio is disable, driver may be down, quit here */
 	if (wlc->pub->radio_disabled)
 		return;
@@ -4540,9 +4401,6 @@ static void brcms_c_info_init(struct brcms_c_info *wlc, int unit)
 	/* WME QoS mode is Auto by default */
 	wlc->pub->_ampdu = AMPDU_AGG_HOST;
 	wlc->pub->bcmerror = 0;
-
-	/* initialize mpc delay */
-	wlc->mpc_delay_off = wlc->mpc_dlycnt = BRCMS_MPC_MIN_DELAYCNT;
 }
 
 static uint brcms_c_attach_module(struct brcms_c_info *wlc)
@@ -5200,9 +5058,6 @@ static void brcms_c_ap_upd(struct brcms_c_info *wlc)
 {
 	/* STA-BSS; short capable */
 	wlc->PLCPHdr_override = BRCMS_PLCP_SHORT;
-
-	/* fixup mpc */
-	wlc->mpc = true;
 }
 
 /* Initialize just the hardware when coming out of POR or S3/S5 system states */
@@ -5516,7 +5371,6 @@ uint brcms_c_down(struct brcms_c_info *wlc)
 	if (!wlc->pub->up)
 		return callbacks;
 
-	/* in between, mpc could try to bring down again.. */
 	wlc->going_down = true;
 
 	callbacks += brcms_b_bmac_down_prep(wlc->hw);
@@ -8192,12 +8046,6 @@ int brcms_c_get_tx_power(struct brcms_c_info *wlc)
 	return (int)(qdbm / BRCMS_TXPWR_DB_FACTOR);
 }
 
-void brcms_c_set_radio_mpc(struct brcms_c_info *wlc, bool mpc)
-{
-	wlc->mpc = mpc;
-	brcms_c_radio_mpc_upd(wlc);
-}
-
 /* Process received frames */
 /*
  * Return true if more frames need to be processed. false otherwise.
@@ -8267,21 +8115,17 @@ static bool
 brcms_b_recv(struct brcms_hardware *wlc_hw, uint fifo, bool bound)
 {
 	struct sk_buff *p;
-	struct sk_buff *head = NULL;
-	struct sk_buff *tail = NULL;
+	struct sk_buff *next = NULL;
+	struct sk_buff_head recv_frames;
+
 	uint n = 0;
 	uint bound_limit = bound ? RXBND : -1;
 
 	BCMMSG(wlc_hw->wlc->wiphy, "wl%d\n", wlc_hw->unit);
-	/* gather received frames */
-	while ((p = dma_rx(wlc_hw->di[fifo]))) {
+	skb_queue_head_init(&recv_frames);
 
-		if (!tail)
-			head = tail = p;
-		else {
-			tail->prev = p;
-			tail = p;
-		}
+	/* gather received frames */
+	while (dma_rx(wlc_hw->di[fifo], &recv_frames)) {
 
 		/* !give others some time to run! */
 		if (++n >= bound_limit)
@@ -8292,12 +8136,11 @@ brcms_b_recv(struct brcms_hardware *wlc_hw, uint fifo, bool bound)
 	dma_rxfill(wlc_hw->di[fifo]);
 
 	/* process each frame */
-	while ((p = head) != NULL) {
+	skb_queue_walk_safe(&recv_frames, p, next) {
 		struct d11rxhdr_le *rxh_le;
 		struct d11rxhdr *rxh;
-		head = head->prev;
-		p->prev = NULL;
 
+		skb_unlink(p, &recv_frames);
 		rxh_le = (struct d11rxhdr_le *)p->data;
 		rxh = (struct d11rxhdr *)p->data;
 
@@ -8412,11 +8255,10 @@ bool brcms_c_dpc(struct brcms_c_info *wlc, bool bounded)
 	return wlc->macintstatus != 0;
 }
 
-void brcms_c_init(struct brcms_c_info *wlc)
+void brcms_c_init(struct brcms_c_info *wlc, bool mute_tx)
 {
 	struct d11regs __iomem *regs;
 	u16 chanspec;
-	bool mute = false;
 
 	BCMMSG(wlc->wiphy, "wl%d\n", wlc->pub->unit);
 
@@ -8432,7 +8274,7 @@ void brcms_c_init(struct brcms_c_info *wlc)
 	else
 		chanspec = brcms_c_init_chanspec(wlc);
 
-	brcms_b_init(wlc->hw, chanspec, mute);
+	brcms_b_init(wlc->hw, chanspec);
 
 	/* update beacon listen interval */
 	brcms_c_bcn_li_upd(wlc);
@@ -8498,14 +8340,15 @@ void brcms_c_init(struct brcms_c_info *wlc)
 	/* ..now really unleash hell (allow the MAC out of suspend) */
 	brcms_c_enable_mac(wlc);
 
+	/* suspend the tx fifos and mute the phy for preism cac time */
+	if (mute_tx)
+		brcms_b_mute(wlc->hw, true);
+
 	/* clear tx flow control */
 	brcms_c_txflowcontrol_reset(wlc);
 
 	/* enable the RF Disable Delay timer */
 	W_REG(&wlc->regs->rfdisabledly, RFDISABLE_DEFAULT);
-
-	/* initialize mpc delay */
-	wlc->mpc_delay_off = wlc->mpc_dlycnt = BRCMS_MPC_MIN_DELAYCNT;
 
 	/*
 	 * Initialize WME parameters; if they haven't been set by some other
@@ -8692,8 +8535,6 @@ brcms_c_attach(struct brcms_info *wl, u16 vendor, u16 device, uint unit,
 		brcms_c_ht_update_sgi_rx(wlc, 0);
 	}
 
-	/* initialize radio_mpc_disable according to wlc->mpc */
-	brcms_c_radio_mpc_upd(wlc);
 	brcms_b_antsel_set(wlc->hw, wlc->asi->antsel_avail);
 
 	if (perr)

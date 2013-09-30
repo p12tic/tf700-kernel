@@ -122,8 +122,6 @@
 
 /* For supporting multiple interfaces */
 #define BRCMF_MAX_IFS	16
-#define BRCMF_DEL_IF	-0xe
-#define BRCMF_BAD_IF	-0xf
 
 #define DOT11_BSSTYPE_ANY			2
 #define DOT11_MAX_DEFAULT_KEYS	4
@@ -729,8 +727,7 @@ extern int brcmf_c_host_event(struct brcmf_info *drvr_priv, int *idx,
 extern void brcmf_c_init(void);
 
 extern int brcmf_add_if(struct brcmf_info *drvr_priv, int ifidx,
-			struct net_device *ndev, char *name, u8 *mac_addr,
-			u32 flags, u8 bssidx);
+			char *name, u8 *mac_addr);
 extern void brcmf_del_if(struct brcmf_info *drvr_priv, int ifidx);
 
 /* Send packet to dongle via data channel */
