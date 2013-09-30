@@ -449,9 +449,15 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 		 */
 		if (plen < fn->fn_bit ||
 		    !ipv6_prefix_equal(&key->addr, addr, fn->fn_bit)) {
-			if (!allow_create)
-				printk(KERN_WARNING
-				    "IPv6: NLM_F_CREATE should be set when creating new route\n");
+			if (!allow_create) {
+				if (replace_required) {
+					pr_warn("IPv6: Can't replace route, "
+						"no match found\n");
+					return ERR_PTR(-ENOENT);
+				}
+				pr_warn("IPv6: NLM_F_CREATE should be set "
+					"when creating new route\n");
+			}
 			goto insert_above;
 		}
 
@@ -482,7 +488,7 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 		fn = dir ? fn->right: fn->left;
 	} while (fn);
 
-	if (replace_required && !allow_create) {
+	if (!allow_create) {
 		/* We should not create new node because
 		 * NLM_F_REPLACE was specified without NLM_F_CREATE
 		 * I assume it is safe to require NLM_F_CREATE when
@@ -492,16 +498,17 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 		 * MUST be specified if new route is created.
 		 * That would keep IPv6 consistent with IPv4
 		 */
-		printk(KERN_WARNING
-		    "IPv6: NLM_F_CREATE should be set when creating new route - ignoring request\n");
-		return ERR_PTR(-ENOENT);
+		if (replace_required) {
+			pr_warn("IPv6: Can't replace route, no match found\n");
+			return ERR_PTR(-ENOENT);
+		}
+		pr_warn("IPv6: NLM_F_CREATE should be set "
+			"when creating new route\n");
 	}
 	/*
 	 *	We walked to the bottom of tree.
 	 *	Create new leaf node without children.
 	 */
-	if (!allow_create)
-		printk(KERN_WARNING "IPv6: NLM_F_CREATE should be set when creating new route\n");
 
 	ln = node_alloc();
 
@@ -690,7 +697,7 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt,
 	 */
 	if (!replace) {
 		if (!add)
-			printk(KERN_WARNING "IPv6: NLM_F_CREATE should be set when creating new route\n");
+			pr_warn("IPv6: NLM_F_CREATE should be set when creating new route\n");
 
 add:
 		rt->dst.rt6_next = iter;
@@ -709,7 +716,7 @@ add:
 		if (!found) {
 			if (add)
 				goto add;
-			printk(KERN_WARNING "IPv6: NLM_F_REPLACE set, but no existing node found!\n");
+			pr_warn("IPv6: NLM_F_REPLACE set, but no existing node found!\n");
 			return -ENOENT;
 		}
 		*ins = rt;
@@ -761,7 +768,7 @@ int fib6_add(struct fib6_node *root, struct rt6_info *rt, struct nl_info *info)
 			replace_required = 1;
 	}
 	if (!allow_create && !replace_required)
-		printk(KERN_WARNING "IPv6: RTM_NEWROUTE with no NLM_F_CREATE or NLM_F_REPLACE\n");
+		pr_warn("IPv6: RTM_NEWROUTE with no NLM_F_CREATE or NLM_F_REPLACE\n");
 
 	fn = fib6_add_1(root, &rt->rt6i_dst.addr, sizeof(struct in6_addr),
 		    rt->rt6i_dst.plen, offsetof(struct rt6_info, rt6i_dst),
