@@ -1443,6 +1443,9 @@ struct cfg80211_gtk_rekey_data {
  *
  * @tdls_mgmt: Transmit a TDLS management frame.
  * @tdls_oper: Perform a high-level TDLS operation (e.g. TDLS link setup).
+ *
+ * @probe_client: probe an associated client, must return a cookie that it
+ *	later passes to cfg80211_probe_status().
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -1596,7 +1599,7 @@ struct cfg80211_ops {
 			  enum nl80211_channel_type channel_type,
 			  bool channel_type_valid, unsigned int wait,
 			  const u8 *buf, size_t len, bool no_cck,
-			  u64 *cookie);
+			  bool dont_wait_for_ack, u64 *cookie);
 	int	(*mgmt_tx_cancel_wait)(struct wiphy *wiphy,
 				       struct net_device *dev,
 				       u64 cookie);
@@ -1632,6 +1635,9 @@ struct cfg80211_ops {
 			     u16 status_code, const u8 *buf, size_t len);
 	int	(*tdls_oper)(struct wiphy *wiphy, struct net_device *dev,
 			     u8 *peer, enum nl80211_tdls_operation oper);
+
+	int	(*probe_client)(struct wiphy *wiphy, struct net_device *dev,
+				const u8 *peer, u64 *cookie);
 };
 
 /*
@@ -1690,6 +1696,10 @@ struct cfg80211_ops {
  *	teardown packets should be sent through the @NL80211_CMD_TDLS_MGMT
  *	command. When this flag is not set, @NL80211_CMD_TDLS_OPER should be
  *	used for asking the driver/firmware to perform a TDLS operation.
+ * @WIPHY_FLAG_HAVE_AP_SME: device integrates AP SME
+ * @WIPHY_FLAG_REPORTS_OBSS: the device will report beacons from other BSSes
+ *	when there are virtual interfaces in AP mode by calling
+ *	cfg80211_report_obss_beacon().
  */
 enum wiphy_flags {
 	WIPHY_FLAG_CUSTOM_REGULATORY		= BIT(0),
@@ -1708,6 +1718,8 @@ enum wiphy_flags {
 	WIPHY_FLAG_AP_UAPSD			= BIT(14),
 	WIPHY_FLAG_SUPPORTS_TDLS		= BIT(15),
 	WIPHY_FLAG_TDLS_EXTERNAL_SETUP		= BIT(16),
+	WIPHY_FLAG_HAVE_AP_SME			= BIT(17),
+	WIPHY_FLAG_REPORTS_OBSS			= BIT(18),
 };
 
 /**
@@ -1918,6 +1930,8 @@ struct wiphy_wowlan_support {
  *	may request, if implemented.
  *
  * @wowlan: WoWLAN support information
+ *
+ * @ap_sme_capa: AP SME capabilities, flags from &enum nl80211_ap_sme_features.
  */
 struct wiphy {
 	/* assign these fields before you register the wiphy */
@@ -1940,6 +1954,8 @@ struct wiphy {
 	u16 interface_modes;
 
 	u32 flags;
+
+	u32 ap_sme_capa;
 
 	enum cfg80211_signal_type signal_type;
 
@@ -2193,6 +2209,8 @@ struct wireless_dev {
 	int ps_timeout;
 
 	int beacon_interval;
+
+	u32 ap_unexpected_nlpid;
 
 #ifdef CONFIG_CFG80211_WEXT
 	/* wext data */
@@ -3203,6 +3221,64 @@ void cfg80211_gtk_rekey_notify(struct net_device *dev, const u8 *bssid,
  */
 void cfg80211_pmksa_candidate_notify(struct net_device *dev, int index,
 				     const u8 *bssid, bool preauth, gfp_t gfp);
+
+/**
+ * cfg80211_rx_spurious_frame - inform userspace about a spurious frame
+ * @dev: The device the frame matched to
+ * @addr: the transmitter address
+ * @gfp: context flags
+ *
+ * This function is used in AP mode (only!) to inform userspace that
+ * a spurious class 3 frame was received, to be able to deauth the
+ * sender.
+ * Returns %true if the frame was passed to userspace (or this failed
+ * for a reason other than not having a subscription.)
+ */
+bool cfg80211_rx_spurious_frame(struct net_device *dev,
+				const u8 *addr, gfp_t gfp);
+
+/**
+ * cfg80211_rx_unexpected_4addr_frame - inform about unexpected WDS frame
+ * @dev: The device the frame matched to
+ * @addr: the transmitter address
+ * @gfp: context flags
+ *
+ * This function is used in AP mode (only!) to inform userspace that
+ * an associated station sent a 4addr frame but that wasn't expected.
+ * It is allowed and desirable to send this event only once for each
+ * station to avoid event flooding.
+ * Returns %true if the frame was passed to userspace (or this failed
+ * for a reason other than not having a subscription.)
+ */
+bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
+					const u8 *addr, gfp_t gfp);
+
+/**
+ * cfg80211_probe_status - notify userspace about probe status
+ * @dev: the device the probe was sent on
+ * @addr: the address of the peer
+ * @cookie: the cookie filled in @probe_client previously
+ * @acked: indicates whether probe was acked or not
+ * @gfp: allocation flags
+ */
+void cfg80211_probe_status(struct net_device *dev, const u8 *addr,
+			   u64 cookie, bool acked, gfp_t gfp);
+
+/**
+ * cfg80211_report_obss_beacon - report beacon from other APs
+ * @wiphy: The wiphy that received the beacon
+ * @frame: the frame
+ * @len: length of the frame
+ * @freq: frequency the frame was received on
+ * @gfp: allocation flags
+ *
+ * Use this function to report to userspace when a beacon was
+ * received. It is not useful to call this when there is no
+ * netdev that is in AP/GO mode.
+ */
+void cfg80211_report_obss_beacon(struct wiphy *wiphy,
+				 const u8 *frame, size_t len,
+				 int freq, gfp_t gfp);
 
 /* Logging, debugging and troubleshooting/diagnostic helpers. */
 
