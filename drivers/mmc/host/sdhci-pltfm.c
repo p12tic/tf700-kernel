@@ -196,51 +196,55 @@ int sdhci_pltfm_unregister(struct platform_device *pdev)
 EXPORT_SYMBOL_GPL(sdhci_pltfm_unregister);
 
 #ifdef CONFIG_PM
-int sdhci_pltfm_suspend(struct platform_device *dev, pm_message_t state)
+static int sdhci_pltfm_suspend(struct device *dev)
 {
-	struct sdhci_host *host = platform_get_drvdata(dev);
+	struct sdhci_host *host = dev_get_drvdata(dev);
 	int ret;
 	MMC_printk("%s: ++", mmc_hostname(host->mmc));
 
-	ret = sdhci_suspend_host(host, state);
+	ret = sdhci_suspend_host(host);
 	if (ret) {
-		dev_err(&dev->dev, "suspend failed, error = %d\n", ret);
+		dev_err(dev, "suspend failed, error = %d\n", ret);
 		return ret;
 	}
 
 	if (host->ops && host->ops->suspend)
-		ret = host->ops->suspend(host, state);
+		ret = host->ops->suspend(host);
 	if (ret) {
-		dev_err(&dev->dev, "suspend hook failed, error = %d\n", ret);
+		dev_err(dev, "suspend hook failed, error = %d\n", ret);
 		sdhci_resume_host(host);
 	}
 
 	MMC_printk("%s: --", mmc_hostname(host->mmc));
 	return ret;
 }
-EXPORT_SYMBOL_GPL(sdhci_pltfm_suspend);
 
-int sdhci_pltfm_resume(struct platform_device *dev)
+static int sdhci_pltfm_resume(struct device *dev)
 {
-	struct sdhci_host *host = platform_get_drvdata(dev);
+	struct sdhci_host *host = dev_get_drvdata(dev);
 	int ret = 0;
 	MMC_printk("%s: ++", mmc_hostname(host->mmc));
 
 	if (host->ops && host->ops->resume)
 		ret = host->ops->resume(host);
 	if (ret) {
-		dev_err(&dev->dev, "resume hook failed, error = %d\n", ret);
+		dev_err(dev, "resume hook failed, error = %d\n", ret);
 		return ret;
 	}
 
 	ret = sdhci_resume_host(host);
 	if (ret)
-		dev_err(&dev->dev, "resume failed, error = %d\n", ret);
+		dev_err(dev, "resume failed, error = %d\n", ret);
 
 	MMC_printk("%s: --", mmc_hostname(host->mmc));
 	return ret;
 }
-EXPORT_SYMBOL_GPL(sdhci_pltfm_resume);
+
+const struct dev_pm_ops sdhci_pltfm_pmops = {
+	.suspend	= sdhci_pltfm_suspend,
+	.resume		= sdhci_pltfm_resume,
+};
+EXPORT_SYMBOL_GPL(sdhci_pltfm_pmops);
 #endif	/* CONFIG_PM */
 
 static int __init sdhci_pltfm_drv_init(void)

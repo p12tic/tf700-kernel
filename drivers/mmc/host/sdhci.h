@@ -274,7 +274,7 @@ struct sdhci_ops {
 	void	(*platform_reset_enter)(struct sdhci_host *host, u8 mask);
 	void	(*platform_reset_exit)(struct sdhci_host *host, u8 mask);
 	int	(*set_uhs_signaling)(struct sdhci_host *host, unsigned int uhs);
-	int	(*suspend)(struct sdhci_host *host, pm_message_t state);
+	int	(*suspend)(struct sdhci_host *host);
 	int	(*resume)(struct sdhci_host *host);
 	int	(*switch_signal_voltage)(struct sdhci_host *host,
 				unsigned int signal_voltage);
@@ -381,7 +381,7 @@ extern int sdhci_add_host(struct sdhci_host *host);
 extern void sdhci_remove_host(struct sdhci_host *host, int dead);
 
 #ifdef CONFIG_PM
-extern int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state);
+extern int sdhci_suspend_host(struct sdhci_host *host);
 extern int sdhci_resume_host(struct sdhci_host *host);
 extern void sdhci_enable_irq_wakeups(struct sdhci_host *host);
 #endif
