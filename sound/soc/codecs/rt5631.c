@@ -26,6 +26,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
+#include <sound/tlv.h>
 #include <linux/gpio.h>
 #include <../gpio-names.h>
 #include <mach/board-cardhu-misc.h>
@@ -394,17 +395,32 @@ static const char *rt5631_eq_sel[] = {"NORMAL", "CLUB", "DANCE", "LIVE", "POP",
 
 
 static const struct soc_enum rt5631_enum[] = {
-SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 14, 4, rt5631_spol_source_sel),
-SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 10, 4, rt5631_spor_source_sel),
-SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 6, 3, rt5631_mono_source_sel),
-SOC_ENUM_SINGLE(RT5631_MIC_CTRL_1, 15, 2,  rt5631_input_mode_source_sel),
-SOC_ENUM_SINGLE(RT5631_MIC_CTRL_1, 7, 2,  rt5631_input_mode_source_sel),
-SOC_ENUM_SINGLE(RT5631_MONO_INPUT_VOL, 15, 2, rt5631_input_mode_source_sel),
-SOC_ENUM_SINGLE(RT5631_MIC_CTRL_2, 12, 9, rt5631_mic_boost),
-SOC_ENUM_SINGLE(RT5631_MIC_CTRL_2, 8, 9, rt5631_mic_boost),
-SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 3, 2, rt5631_hpl_source_sel),
-SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 2, 2, rt5631_hpr_source_sel),
-SOC_ENUM_SINGLE(0, 4, 9, rt5631_eq_sel),
+	SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 14, 4, rt5631_spol_source_sel),
+	SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 10, 4, rt5631_spor_source_sel),
+	SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 6, 3, rt5631_mono_source_sel),
+	SOC_ENUM_SINGLE(RT5631_MIC_CTRL_1, 15, 2,  rt5631_input_mode_source_sel),
+	SOC_ENUM_SINGLE(RT5631_MIC_CTRL_1, 7, 2,  rt5631_input_mode_source_sel),
+	SOC_ENUM_SINGLE(RT5631_MONO_INPUT_VOL, 15, 2, rt5631_input_mode_source_sel),
+	SOC_ENUM_SINGLE(RT5631_MIC_CTRL_2, 12, 9, rt5631_mic_boost),
+	SOC_ENUM_SINGLE(RT5631_MIC_CTRL_2, 8, 9, rt5631_mic_boost),
+	SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 3, 2, rt5631_hpl_source_sel),
+	SOC_ENUM_SINGLE(RT5631_SPK_MONO_HP_OUT_CTRL, 2, 2, rt5631_hpr_source_sel),
+	SOC_ENUM_SINGLE(0, 4, 9, rt5631_eq_sel),
+};
+
+static const DECLARE_TLV_DB_SCALE(out_vol_tlv, -4650, 150, 0);
+static const DECLARE_TLV_DB_SCALE(dac_vol_tlv, -95625, 375, 0);
+static const DECLARE_TLV_DB_SCALE(in_vol_tlv, -3450, 150, 0);
+/* {0, +20, +24, +30, +35, +40, +44, +50, +52}dB */
+static unsigned int mic_bst_tlv[] = {
+	TLV_DB_RANGE_HEAD(6),
+	0, 0, TLV_DB_SCALE_ITEM(0, 0, 0),
+	1, 1, TLV_DB_SCALE_ITEM(2000, 0, 0),
+	2, 2, TLV_DB_SCALE_ITEM(2400, 0, 0),
+	3, 5, TLV_DB_SCALE_ITEM(3000, 500, 0),
+	6, 6, TLV_DB_SCALE_ITEM(4400, 0, 0),
+	7, 7, TLV_DB_SCALE_ITEM(5000, 0, 0),
+	8, 8, TLV_DB_SCALE_ITEM(5200, 0, 0),
 };
 
 static int rt5631_dmic_get(struct snd_kcontrol *kcontrol,
