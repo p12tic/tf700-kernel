@@ -261,6 +261,7 @@ config ARCH_INTEGRATOR
 	select ARCH_HAS_CPUFREQ
 	select CLKDEV_LOOKUP
 	select HAVE_MACH_CLKDEV
+	select HAVE_TCM
 	select ICST
 	select GENERIC_CLOCKEVENTS
 	select PLAT_VERSATILE
@@ -1132,6 +1133,11 @@ config ARM_TIMER_SP804
 
 source arch/arm/mm/Kconfig
 
+config ARM_NR_BANKS
+	int
+	default 16 if ARCH_EP93XX
+	default 8
+
 config IWMMXT
 	bool "Enable iWMMXt support"
 	depends on CPU_XSCALE || CPU_XSC3 || CPU_MOHAWK || CPU_PJ4
@@ -1641,6 +1647,8 @@ config LOCAL_TIMERS
 config ARCH_NR_GPIO
 	int
 	default 512 if ARCH_TEGRA
+	default 1024 if ARCH_SHMOBILE
+	default 350 if ARCH_U8500
 	default 0
 	help
 	  Maximum number of GPIOs in the system.
