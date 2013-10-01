@@ -140,8 +140,7 @@ static int tegra_wm8903_hw_params(struct snd_pcm_substream *substream,
 
 	/* Use DSP mode for mono on Tegra20 */
 	if ((params_channels(params) != 2) &&
-		(machine_is_ventana() || machine_is_harmony() ||
-		machine_is_kaen() || machine_is_aebl())) {
+		(machine_is_kaen() || machine_is_aebl())) {
 		i2s_daifmt |= SND_SOC_DAIFMT_DSP_A;
 	} else {
 		switch (pdata->i2s_param[HIFI_CODEC].i2s_mode) {
@@ -575,7 +574,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 
 	machine->bias_level = SND_SOC_BIAS_STANDBY;
 
-	if (machine_is_cardhu() || machine_is_ventana()) {
+	if (machine_is_cardhu()) {
 		ret = snd_soc_add_controls(codec, cardhu_controls,
 				ARRAY_SIZE(cardhu_controls));
 		if (ret < 0)

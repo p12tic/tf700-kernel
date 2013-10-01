@@ -84,8 +84,7 @@ static int tegra_rt5631_hw_params(struct snd_pcm_substream *substream,
 
 	/* Use DSP mode for mono on Tegra20 */
 	if ((params_channels(params) != 2) &&
-	    (machine_is_ventana() || machine_is_harmony() ||
-	    machine_is_kaen() || machine_is_aebl()))
+	    (machine_is_kaen() || machine_is_aebl()))
 		i2s_daifmt |= SND_SOC_DAIFMT_DSP_A;
 	else
 		i2s_daifmt |= SND_SOC_DAIFMT_I2S;
@@ -167,7 +166,7 @@ static int tegra_rt5631_init(struct snd_soc_pcm_runtime *rtd)
 
 	int ret;
 	printk("%s+\n", __func__);
-	if (machine_is_cardhu() || machine_is_ventana()) {
+	if (machine_is_cardhu()) {
 		ret = snd_soc_add_controls(codec, cardhu_controls,
 				ARRAY_SIZE(cardhu_controls));
 		if (ret < 0)
@@ -333,7 +332,7 @@ static int __init tegra_rt5631_modinit(void)
 	}
 
 	ret = platform_driver_register(&tegra_rt5631_driver);
-	audio_dock_init();	
+	audio_dock_init();
 
 	printk(KERN_INFO "%s- #####\n", __func__);
 	return ret;
