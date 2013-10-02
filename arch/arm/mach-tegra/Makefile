@@ -112,7 +112,7 @@ obj-$(CONFIG_TEGRA_DYNAMIC_PWRDET)      += powerdetect.o
 obj-$(CONFIG_TEGRA_USB_MODEM_POWER)     += tegra_usb_modem_power.o
 obj-$(CONFIG_TEGRA_PCI)                 += pcie.o
 
-obj-$(CONFIG_MACH_TEGRA_DT)             += board-dt.o
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-dt-tegra20.o
 obj-$(CONFIG_MACH_TEGRA_DT)             += board-harmony-pinmux.o
 
 obj-$(CONFIG_MACH_TEGRA_DT)             += board-seaboard-pinmux.o
