@@ -18,7 +18,6 @@
 #include <linux/device.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
-#include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <sound/core.h>
@@ -1362,7 +1361,8 @@ static __devinit int wm9081_i2c_probe(struct i2c_client *i2c,
 	unsigned int reg;
 	int ret;
 
-	wm9081 = kzalloc(sizeof(struct wm9081_priv), GFP_KERNEL);
+	wm9081 = devm_kzalloc(&i2c->dev, sizeof(struct wm9081_priv),
+			      GFP_KERNEL);
 	if (wm9081 == NULL)
 		return -ENOMEM;
 
@@ -1406,7 +1406,6 @@ static __devinit int wm9081_i2c_probe(struct i2c_client *i2c,
 err_regmap:
 	regmap_exit(wm9081->regmap);
 err:
-	kfree(wm9081);
 
 	return ret;
 }
@@ -1417,7 +1416,6 @@ static __devexit int wm9081_i2c_remove(struct i2c_client *client)
 
 	snd_soc_unregister_codec(&client->dev);
 	regmap_exit(wm9081->regmap);
-	kfree(i2c_get_clientdata(client));
 	return 0;
 }
 

@@ -24,7 +24,6 @@
 #include <linux/delay.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
-#include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
@@ -265,7 +264,7 @@ static int sta32x_coefficient_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-int sta32x_sync_coef_shadow(struct snd_soc_codec *codec)
+static int sta32x_sync_coef_shadow(struct snd_soc_codec *codec)
 {
 	struct sta32x_priv *sta32x = snd_soc_codec_get_drvdata(codec);
 	unsigned int cfud;
@@ -290,7 +289,7 @@ int sta32x_sync_coef_shadow(struct snd_soc_codec *codec)
 	return 0;
 }
 
-int sta32x_cache_sync(struct snd_soc_codec *codec)
+static int sta32x_cache_sync(struct snd_soc_codec *codec)
 {
 	unsigned int mute;
 	int rc;
