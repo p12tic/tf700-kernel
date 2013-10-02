@@ -115,26 +115,26 @@ obj-$(CONFIG_TEGRA_DYNAMIC_PWRDET)      += powerdetect.o
 obj-$(CONFIG_TEGRA_USB_MODEM_POWER)     += tegra_usb_modem_power.o
 obj-$(CONFIG_TEGRA_PCI)                 += pcie.o
 
-obj-${CONFIG_MACH_TEGRA_DT}             += board-dt.o
-obj-${CONFIG_MACH_TEGRA_DT}             += board-harmony-pinmux.o
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-dt.o
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-harmony-pinmux.o
 
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-kbc.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-irda.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-panel.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-pinmux.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-power.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-pm298-power-rails.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-pm299-power-rails.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sdhci.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-sensors.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-memory.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-powermon.o
-obj-${CONFIG_MACH_CARDHU}               += board-cardhu-misc.o
-obj-${CONFIG_MACH_CARDHU}               += vibrator.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-kbc.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-irda.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-panel.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-pinmux.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-power.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-pm298-power-rails.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-pm299-power-rails.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-sdhci.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-sensors.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-memory.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-powermon.o
+obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-misc.o
+obj-$(CONFIG_MACH_CARDHU)               += vibrator.o
 
 obj-y                                   += board-touch-raydium_spi.o
 
-obj-${CONFIG_TEGRA_BB_XMM_POWER}        += baseband-xmm-power.o
-obj-${CONFIG_TEGRA_BB_XMM_POWER2}       += baseband-xmm-power2.o
+obj-$(CONFIG_TEGRA_BB_XMM_POWER)        += baseband-xmm-power.o
+obj-$(CONFIG_TEGRA_BB_XMM_POWER2)       += baseband-xmm-power2.o
 
