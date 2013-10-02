@@ -695,17 +695,19 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	machine = kzalloc(sizeof(struct tegra_wm8903), GFP_KERNEL);
+	machine = devm_kzalloc(&pdev->dev, sizeof(struct tegra_wm8903),
+			       GFP_KERNEL);
 	if (!machine) {
 		dev_err(&pdev->dev, "Can't allocate tegra_wm8903 struct\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err;
 	}
 
 	machine->pdata = pdata;
 
 	ret = tegra_asoc_utils_init(&machine->util_data, &pdev->dev, card);
 	if (ret)
-		goto err_free_machine;
+		goto err;
 
 	if (machine_is_cardhu()) {
 		tegra_wm8903_dai[0].codec_name = "wm8903.4-001a",
@@ -750,8 +752,7 @@ err_unregister_card:
 	snd_soc_unregister_card(card);
 err_fini_utils:
 	tegra_asoc_utils_fini(&machine->util_data);
-err_free_machine:
-	kfree(machine);
+err:
 	return ret;
 }
 
@@ -783,8 +784,6 @@ static int __devexit tegra_wm8903_driver_remove(struct platform_device *pdev)
 	snd_soc_unregister_card(card);
 
 	tegra_asoc_utils_fini(&machine->util_data);
-
-	kfree(machine);
 
 	return 0;
 }
