@@ -46,6 +46,4 @@ void tegra_gic_affinity_to_cpu0(void);
 #endif
 #endif
 
-void __init tegra_gic_init(void);
-
 #endif /* _MACH_TEGRA_GIC_H_ */
