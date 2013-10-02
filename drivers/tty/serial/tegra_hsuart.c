@@ -37,6 +37,7 @@
 #include <linux/serial_8250.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
+#include <linux/tty_flip.h>
 #include <linux/workqueue.h>
 #include <linux/tegra_uart.h>
 
