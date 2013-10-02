@@ -47,8 +47,10 @@
 #include "devices.h"
 
 void harmony_pinmux_init(void);
+void paz00_pinmux_init(void);
 void seaboard_pinmux_init(void);
-
+void trimslice_pinmux_init(void);
+void ventana_pinmux_init(void);
 
 struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-sdhci", TEGRA_SDMMC1_BASE, "sdhci-tegra.0", NULL),
@@ -60,7 +62,7 @@ struct of_dev_auxdata tegra20_auxdata_lookup[] __initdata = {
 	OF_DEV_AUXDATA("nvidia,tegra20-i2c", TEGRA_I2C3_BASE, "tegra-i2c.2", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-i2c", TEGRA_DVC_BASE, "tegra-i2c.3", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-i2s", TEGRA_I2S1_BASE, "tegra-i2s.0", NULL),
-	OF_DEV_AUXDATA("nvidia,tegra20-i2s", TEGRA_I2S1_BASE, "tegra-i2s.1", NULL),
+	OF_DEV_AUXDATA("nvidia,tegra20-i2s", TEGRA_I2S2_BASE, "tegra-i2s.1", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-das", TEGRA_APB_MISC_DAS_BASE, "tegra-das", NULL),
 	OF_DEV_AUXDATA("nvidia,tegra20-ehci", TEGRA_USB_BASE, "tegra-ehci.0",
 		       &tegra_ehci1_device.dev.platform_data),
@@ -77,6 +79,11 @@ static __initdata struct tegra_clk_init_table tegra_dt_clk_init_table[] = {
 	{ "usbd",	"clk_m",	12000000,	false },
 	{ "usb2",	"clk_m",	12000000,	false },
 	{ "usb3",	"clk_m",	12000000,	false },
+	{ "pll_a",      "pll_p_out1",   56448000,       true },
+	{ "pll_a_out0", "pll_a",        11289600,       true },
+	{ "cdev1",      NULL,           0,              true },
+	{ "i2s1",       "pll_a_out0",   11289600,       false},
+	{ "i2s2",       "pll_a_out0",   11289600,       false},
 	{ NULL,		NULL,		0,		0},
 };
 
@@ -90,6 +97,30 @@ static struct of_device_id tegra_dt_gic_match[] __initdata = {
 	{}
 };
 
+<<<<<<< HEAD
+||||||| merged common ancestors
+static struct {
+	char *machine;
+	void (*init)(void);
+} pinmux_configs[] = {
+	{ "nvidia,harmony", harmony_pinmux_init },
+	{ "nvidia,seaboard", seaboard_pinmux_init },
+	{ "nvidia,ventana", ventana_pinmux_init },
+};
+
+=======
+static struct {
+	char *machine;
+	void (*init)(void);
+} pinmux_configs[] = {
+	{ "compulab,trimslice", trimslice_pinmux_init },
+	{ "nvidia,harmony", harmony_pinmux_init },
+	{ "compal,paz00", paz00_pinmux_init },
+	{ "nvidia,seaboard", seaboard_pinmux_init },
+	{ "nvidia,ventana", ventana_pinmux_init },
+};
+
+>>>>>>> 1292c129597ce42a75d9e97cd312c3242e10a6f3
 static void __init tegra_dt_init(void)
 {
 	struct device_node *node;
@@ -125,7 +156,9 @@ static void __init tegra_dt_init(void)
 }
 
 static const char * tegra_dt_board_compat[] = {
+	"compulab,trimslice",
 	"nvidia,harmony",
+	"compal,paz00",
 	"nvidia,seaboard",
 	NULL
 };

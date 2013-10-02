@@ -118,6 +118,10 @@ obj-$(CONFIG_TEGRA_PCI)                 += pcie.o
 obj-$(CONFIG_MACH_TEGRA_DT)             += board-dt.o
 obj-$(CONFIG_MACH_TEGRA_DT)             += board-harmony-pinmux.o
 
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-seaboard-pinmux.o
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-paz00-pinmux.o
+obj-$(CONFIG_MACH_TEGRA_DT)             += board-trimslice-pinmux.o
+
 obj-$(CONFIG_MACH_CARDHU)               += board-cardhu.o
 obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-kbc.o
 obj-$(CONFIG_MACH_CARDHU)               += board-cardhu-irda.o

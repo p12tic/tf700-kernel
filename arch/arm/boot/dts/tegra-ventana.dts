@@ -3,11 +3,10 @@
 /include/ "tegra20.dtsi"
 
 / {
-	model = "NVIDIA Seaboard";
-	compatible = "nvidia,seaboard", "nvidia,tegra20";
+	model = "NVIDIA Tegra2 Ventana evaluation board";
+	compatible = "nvidia,ventana", "nvidia,tegra20";
 
 	memory {
-		device_type = "memory";
 		reg = < 0x00000000 0x40000000 >;
 	};
 
@@ -63,9 +62,5 @@
 
 	sdhci@c8000600 {
 		support-8bit;
-	};
-
-	usb@c5000000 {
-		nvidia,vbus-gpio = <&gpio 24 0>; /* PD0 */
 	};
 };
