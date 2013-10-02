@@ -1682,7 +1682,7 @@ static int tegra_udc_setup_gadget_dev(struct tegra_udc *udc)
 {
 	/* Setup gadget structure */
 	udc->gadget.ops = &tegra_gadget_ops;
-	udc->gadget.is_dualspeed = 1;
+	udc->gadget.max_speed = USB_SPEED_HIGH;
 	udc->gadget.ep0 = &udc->eps[0].ep;
 	INIT_LIST_HEAD(&udc->gadget.ep_list);
 	udc->gadget.speed = USB_SPEED_UNKNOWN;
@@ -2574,8 +2574,8 @@ static int tegra_udc_start(struct usb_gadget_driver *driver,
 	if (!udc)
 		return -ENODEV;
 
-	if (!driver || (driver->speed != USB_SPEED_FULL
-				&& driver->speed != USB_SPEED_HIGH)
+	if (!driver || (driver->max_speed != USB_SPEED_FULL
+				&& driver->max_speed != USB_SPEED_HIGH)
 			|| !bind || !driver->disconnect
 			|| !driver->setup)
 		return -EINVAL;
