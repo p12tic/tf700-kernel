@@ -2556,7 +2556,8 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 	struct wm8903_priv *wm8903;
 	int ret;
 
-	wm8903 = kzalloc(sizeof(struct wm8903_priv), GFP_KERNEL);
+	wm8903 = devm_kzalloc(&i2c->dev,  sizeof(struct wm8903_priv),
+			      GFP_KERNEL);
 	if (wm8903 == NULL)
 		return -ENOMEM;
 
@@ -2565,8 +2566,6 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 
 	ret = snd_soc_register_codec(&i2c->dev,
 			&soc_codec_dev_wm8903, &wm8903_dai, 1);
-	if (ret < 0)
-		kfree(wm8903);
 
 	//if(factory_mode)
 		//attrs.attrs  = factory_audio_codec_attr;
@@ -2599,7 +2598,6 @@ static int wm8903_i2c_shutdown(struct i2c_client *client)
 static __devexit int wm8903_i2c_remove(struct i2c_client *client)
 {
 	snd_soc_unregister_codec(&client->dev);
-	kfree(i2c_get_clientdata(client));
 	return 0;
 }
 
