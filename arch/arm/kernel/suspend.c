@@ -1,5 +1,6 @@
 #include <linux/init.h>
 
+#include <asm/idmap.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/memory.h>
