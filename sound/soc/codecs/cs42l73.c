@@ -42,7 +42,7 @@ struct  cs42l73_private {
 	u32 mclk;
 };
 
-struct reg_default cs42l73_reg_defaults[] = {
+static const struct reg_default cs42l73_reg_defaults[] = {
 	{ 1, 0x42 },	/* r01	- Device ID A&B */
 	{ 2, 0xA7 },	/* r02	- Device ID C&D */
 	{ 3, 0x30 },	/* r03	- Device ID E */
@@ -979,7 +979,7 @@ static int cs42l73_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct cs42l73_private *priv = snd_soc_codec_get_drvdata(codec);
 	u8 id = codec_dai->id;
-	u8 inv, format;
+	unsigned int inv, format;
 	u8 spc, mmcc;
 
 	spc = snd_soc_read(codec, CS42L73_SPC(id));
@@ -1028,13 +1028,13 @@ static int cs42l73_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		switch (format) {
 		case SND_SOC_DAIFMT_DSP_B:
 			if (inv == SND_SOC_DAIFMT_IB_IF)
-				spc |= (PCM_MODE0 << 4);
+				spc |= PCM_MODE0;
 			if (inv == SND_SOC_DAIFMT_IB_NF)
-				spc |= (PCM_MODE1 << 4);
+				spc |= PCM_MODE1;
 		break;
 		case SND_SOC_DAIFMT_DSP_A:
 			if (inv == SND_SOC_DAIFMT_IB_IF)
-				spc |= (PCM_MODE1 << 4);
+				spc |= PCM_MODE1;
 			break;
 		default:
 			return -EINVAL;
@@ -1270,10 +1270,6 @@ static int cs42l73_suspend(struct snd_soc_codec *codec, pm_message_t state)
 
 static int cs42l73_resume(struct snd_soc_codec *codec)
 {
-
-	struct cs42l73_private *cs42l73 = snd_soc_codec_get_drvdata(codec);
-	regcache_sync(cs42l73->regmap);
-
 	cs42l73_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	return 0;
 }
@@ -1369,6 +1365,7 @@ static __devinit int cs42l73_i2c_probe(struct i2c_client *i2c_client,
 
 
 	if (devid != CS42L73_DEVID) {
+		ret = -ENODEV;
 		dev_err(&i2c_client->dev,
 			"CS42L73 Device ID (%X). Expected %X\n",
 			devid, CS42L73_DEVID);
@@ -1382,7 +1379,7 @@ static __devinit int cs42l73_i2c_probe(struct i2c_client *i2c_client,
 	}
 
 	dev_info(&i2c_client->dev,
-		 "Cirrus Logic CS42L73, Revision: %02X\n", ret & 0xFF);
+		 "Cirrus Logic CS42L73, Revision: %02X\n", reg & 0xFF);
 
 	regcache_cache_only(cs42l73->regmap, true);
 
