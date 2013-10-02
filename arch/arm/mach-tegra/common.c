@@ -107,6 +107,8 @@ static enum power_supply_type pow_supply_type = POWER_SUPPLY_TYPE_MAINS;
 
 #define NEVER_RESET 0
 
+void (*arch_reset)(char mode, const char *cmd) = tegra_assert_system_reset;
+
 void tegra_assert_system_reset(char mode, const char *cmd)
 {
 #if NEVER_RESET
