@@ -82,7 +82,8 @@ config ARCH_TEGRA_HAS_SATA
 	bool
 
 config TEGRA_PCI
-	bool "PCIe host controller driver"
+	bool "PCI Express support"
+	depends on ARCH_TEGRA_2x_SOC
 	select PCI
 	depends on ARCH_TEGRA_HAS_PCIE
 	help
@@ -98,6 +99,13 @@ config TEGRA_IRDA
 
 comment "Tegra board type"
 
+config MACH_HARMONY
+       bool "Harmony board"
+       depends on ARCH_TEGRA_2x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       help
+         Support for nVidia Harmony development platform
+
 config MACH_KAEN
        bool "Kaen board"
        depends on ARCH_TEGRA_2x_SOC
@@ -105,6 +113,12 @@ config MACH_KAEN
        select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
        help
          Support for the Kaen version of Seaboard
+
+config MACH_PAZ00
+       bool "Paz00 board"
+       depends on ARCH_TEGRA_2x_SOC
+       help
+         Support for the Toshiba AC100/Dynabook AZ netbook
 
 config MACH_SEABOARD
        bool "Seaboard board"
@@ -121,12 +135,24 @@ config MACH_TEGRA_DT
 	help
 	  Support for generic nVidia Tegra boards using Flattened Device Tree
 
+config MACH_TRIMSLICE
+       bool "TrimSlice board"
+       depends on ARCH_TEGRA_2x_SOC
+       select TEGRA_PCI
+       help
+         Support for CompuLab TrimSlice platform
+
 config MACH_WARIO
        bool "Wario board"
        depends on ARCH_TEGRA_2x_SOC
        select MACH_SEABOARD
        help
          Support for the Wario version of Seaboard
+
+config MACH_VENTANA
+       bool "Ventana board"
+       depends on ARCH_TEGRA_2x_SOC
+       select MACH_TEGRA_DT
 
 config MACH_CARDHU
        bool "Cardhu board"
@@ -137,6 +163,7 @@ config MACH_CARDHU
        select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
        help
          Support for NVIDIA Cardhu development platform
+
 
 choice
        prompt "Tegra platform type"
