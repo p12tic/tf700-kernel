@@ -27,6 +27,7 @@
 #define IRQ_LOCALTIMER                  29
 
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
+
 /* Primary Interrupt Controller */
 #define INT_PRI_BASE			(INT_GIC_BASE + 32)
 #define INT_TMR1			(INT_PRI_BASE + 0)

@@ -17,7 +17,7 @@ if ARCH_TEGRA
 comment "NVIDIA Tegra options"
 
 config ARCH_TEGRA_2x_SOC
-	bool "Tegra 2 family SOC"
+	bool "Enable support for Tegra20 family"
 	default y
 	depends on !ARCH_TEGRA_3x_SOC
 	select ARCH_TEGRA_HAS_PCIE

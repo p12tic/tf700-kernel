@@ -994,3 +994,10 @@ void cpufreq_restore_default_gov(void)
 	}
 }
 #endif /* CONFIG_TEGRA_CONVSERVATIVE_GOV_ON_EARLYSUPSEND */
+
+#ifdef CONFIG_ARCH_TEGRA_3x_SOC
+void __init tegra30_init_early(void)
+{
+	//tegra_init_cache(0x441, 0x551); TODO
+}
+#endif
