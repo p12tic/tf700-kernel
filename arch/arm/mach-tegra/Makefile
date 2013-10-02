@@ -32,6 +32,7 @@ obj-y                                   += gic.o
 
 obj-y                                   += sleep.o
 
+
 plus_sec := $(call as-instr,.arch_extension sec,+sec)
 AFLAGS_sleep.o :=-Wa,-march=armv7-a$(plus_sec)
 
@@ -69,7 +70,7 @@ obj-y                                   += wakeups.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += pm-t2.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += pm-t3.o
 
-obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += pinmux-t2-tables.o
+obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += pinmux-tegra20-tables.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += pinmux-t3-tables.o
 obj-$(CONFIG_LOCAL_TIMERS)              += localtimer.o
 obj-$(CONFIG_SMP)                       += platsmp.o

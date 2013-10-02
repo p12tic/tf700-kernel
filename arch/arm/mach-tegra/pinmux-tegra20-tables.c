@@ -1,7 +1,7 @@
 /*
- * linux/arch/arm/mach-tegra/pinmux-t2-tables.c
+ * linux/arch/arm/mach-tegra/pinmux-tegra20-tables.c
  *
- * Common pinmux configurations for Tegra 2 SoCs
+ * Common pinmux configurations for Tegra20 SoCs
  *
  * Copyright (C) 2010 NVIDIA Corporation
  *
@@ -30,7 +30,14 @@
 
 #include <mach/iomap.h>
 #include <mach/pinmux.h>
+<<<<<<< HEAD:arch/arm/mach-tegra/pinmux-t2-tables.c
 #include "gpio-names.h"
+||||||| merged common ancestors
+#include <mach/suspend.h>
+=======
+#include <mach/pinmux-tegra20.h>
+#include <mach/suspend.h>
+>>>>>>> 57be3bdb402afbf71b0490ccf229c3b9cf784ce1:arch/arm/mach-tegra/pinmux-tegra20-tables.c
 
 #define SET_DRIVE_PINGROUP(pg_name, r, drv_down_offset, drv_down_mask, drv_up_offset, drv_up_mask,	\
 	slew_rise_offset, slew_rise_mask, slew_fall_offset, slew_fall_mask)	\
