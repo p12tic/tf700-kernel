@@ -372,7 +372,7 @@ static const struct attribute_group tps62360_i2c_group = {
  struct workqueue_struct *tps62360_strees_work_queue=NULL;
 
 void tps62360_read_stress_test(struct work_struct *work)
-{ 
+{
 	int ret;
 	unsigned int chip_id = 0;
 	ret = regmap_read(temp_tps62360->regmap, REG_CHIPID, &chip_id);
@@ -534,7 +534,7 @@ static int __devinit tps62360_probe(struct i2c_client *client,
 
 	/* Register the regulators */
 	rdev = regulator_register(&tps->desc, &client->dev,
-				&pdata->reg_init_data, tps);
+				&pdata->reg_init_data, tps, NULL);
 	if (IS_ERR(rdev)) {
 		dev_err(tps->dev,
 			"%s(): regulator register failed with err %s\n",
