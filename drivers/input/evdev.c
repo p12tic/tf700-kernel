@@ -411,7 +411,8 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 
 	if (!(file->f_flags & O_NONBLOCK)) {
 		retval = wait_event_interruptible(evdev->wait,
-			 client->packet_head != client->tail || !evdev->exist);
+				client->packet_head != client->tail ||
+				!evdev->exist);
 		if (retval)
 			return retval;
 	}
@@ -428,8 +429,9 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 		retval += input_event_size();
 	}
 
-	if (retval == 0 && file->f_flags & O_NONBLOCK)
-		retval = -EAGAIN;
+	if (retval == 0 && (file->f_flags & O_NONBLOCK))
+		return -EAGAIN;
+
 	return retval;
 }
 
