@@ -22,6 +22,7 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
+#include <linux/regmap.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -34,47 +35,59 @@
 /*
  * ALC5632 register cache
  */
-static const u16 alc5632_reg_defaults[] = {
-	0x59B4, 0x0000, 0x8080, 0x0000, /* 0 */
-	0x8080, 0x0000, 0x8080, 0x0000, /* 4 */
-	0xC800, 0x0000, 0xE808, 0x0000, /* 8 */
-	0x1010, 0x0000, 0x0808, 0x0000, /* 12 */
-	0xEE0F, 0x0000, 0xCBCB, 0x0000, /* 16 */
-	0x7F7F, 0x0000, 0x0000, 0x0000, /* 20 */
-	0xE010, 0x0000, 0x0000, 0x0000, /* 24 */
-	0x8008, 0x0000, 0x0000, 0x0000, /* 28 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 32 */
-	0x00C0, 0x0000, 0xEF00, 0x0000, /* 36 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 40 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 44 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 48 */
-	0x8000, 0x0000, 0x0000, 0x0000, /* 52 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 56 */
-	0x0000, 0x0000, 0x8000, 0x0000, /* 60 */
-	0x0C0A, 0x0000, 0x0000, 0x0000, /* 64 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 68 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 72 */
-	0xBE3E, 0x0000, 0xBE3E, 0x0000, /* 76 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 80 */
-	0x803A, 0x0000, 0x0000, 0x0000, /* 84 */
-	0x0000, 0x0000, 0x0009, 0x0000, /* 88 */
-	0x0000, 0x0000, 0x3000, 0x0000, /* 92 */
-	0x3075, 0x0000, 0x1010, 0x0000, /* 96 */
-	0x3110, 0x0000, 0x0000, 0x0000, /* 100 */
-	0x0553, 0x0000, 0x0000, 0x0000, /* 104 */
-	0x0000, 0x0000, 0x0000, 0x0000, /* 108 */
+static struct reg_default  alc5632_reg_defaults[] = {
+	{   2, 0x8080 },	/* R2   - Speaker Output Volume */
+	{   4, 0x8080 },	/* R4   - Headphone Output Volume */
+	{   6, 0x8080 },	/* R6   - AUXOUT Volume */
+	{   8, 0xC800 },	/* R8   - Phone Input */
+	{  10, 0xE808 },	/* R10  - LINE_IN Volume */
+	{  12, 0x1010 },	/* R12  - STEREO DAC Input Volume */
+	{  14, 0x0808 },	/* R14  - MIC Input Volume */
+	{  16, 0xEE0F },	/* R16  - Stereo DAC and MIC Routing Control */
+	{  18, 0xCBCB },	/* R18  - ADC Record Gain */
+	{  20, 0x7F7F },	/* R20  - ADC Record Mixer Control */
+	{  24, 0xE010 },	/* R24  - Voice DAC Volume */
+	{  28, 0x8008 },	/* R28  - Output Mixer Control */
+	{  34, 0x0000 },	/* R34  - Microphone Control */
+	{  36, 0x00C0 },    /* R36  - Codec Digital MIC/Digital Boost
+						   Control */
+	{  46, 0x0000 },	/* R46  - Stereo DAC/Voice DAC/Stereo ADC
+						   Function Select */
+	{  52, 0x8000 },	/* R52  - Main Serial Data Port Control
+						   (Stereo I2S) */
+	{  54, 0x0000 },	/* R54  - Extend Serial Data Port Control
+						   (VoDAC_I2S/PCM) */
+	{  58, 0x0000 },	/* R58  - Power Management Addition 1 */
+	{  60, 0x0000 },	/* R60  - Power Management Addition 2 */
+	{  62, 0x8000 },	/* R62  - Power Management Addition 3 */
+	{  64, 0x0C0A },	/* R64  - General Purpose Control Register 1 */
+	{  66, 0x0000 },	/* R66  - General Purpose Control Register 2 */
+	{  68, 0x0000 },	/* R68  - PLL1 Control */
+	{  70, 0x0000 },	/* R70  - PLL2 Control */
+	{  76, 0xBE3E },	/* R76  - GPIO Pin Configuration */
+	{  78, 0xBE3E },	/* R78  - GPIO Pin Polarity */
+	{  80, 0x0000 },	/* R80  - GPIO Pin Sticky */
+	{  82, 0x0000 },	/* R82  - GPIO Pin Wake Up */
+	{  86, 0x0000 },	/* R86  - Pin Sharing */
+	{  90, 0x0009 },	/* R90  - Soft Volume Control Setting */
+	{  92, 0x0000 },	/* R92  - GPIO_Output Pin Control */
+	{  94, 0x3000 },	/* R94  - MISC Control */
+	{  96, 0x3075 },	/* R96  - Stereo DAC Clock Control_1 */
+	{  98, 0x1010 },	/* R98  - Stereo DAC Clock Control_2 */
+	{ 100, 0x3110 },	/* R100 - VoDAC_PCM Clock Control_1 */
+	{ 104, 0x0553 },	/* R104 - Pseudo Stereo and Spatial Effect
+						   Block Control */
+	{ 106, 0x0000 },	/* R106 - Private Register Address */
 };
 
 /* codec private data */
 struct alc5632_priv {
-	enum snd_soc_control_type control_type;
-	void *control_data;
-	struct mutex mutex;
+	struct regmap *regmap;
 	u8 id;
 	unsigned int sysclk;
 };
 
-static int alc5632_volatile_register(struct snd_soc_codec *codec,
+static bool alc5632_volatile_register(struct device *dev,
 							unsigned int reg)
 {
 	switch (reg) {
@@ -84,19 +97,20 @@ static int alc5632_volatile_register(struct snd_soc_codec *codec,
 	case ALC5632_OVER_CURR_STATUS:
 	case ALC5632_HID_CTRL_DATA:
 	case ALC5632_EQ_CTRL:
-		return 1;
+	case ALC5632_VENDOR_ID1:
+	case ALC5632_VENDOR_ID2:
+		return true;
 
 	default:
 		break;
 	}
 
-	return 0;
+	return false;
 }
 
-static inline int alc5632_reset(struct snd_soc_codec *codec)
+static inline int alc5632_reset(struct regmap *map)
 {
-	snd_soc_write(codec, ALC5632_RESET, 0);
-	return snd_soc_read(codec, ALC5632_RESET);
+	return regmap_write(map, ALC5632_RESET, 0x59B4);
 }
 
 static int amp_mixer_event(struct snd_soc_dapm_widget *w,
@@ -144,10 +158,10 @@ static const DECLARE_TLV_DB_SCALE(vdac_tlv, -3525, 075, 0);
 static const struct snd_kcontrol_new alc5632_vol_snd_controls[] = {
 	/* left starts at bit 8, right at bit 0 */
 	/* 31 steps (5 bit), -46.5db scale */
-	SOC_DOUBLE_TLV("Line Playback Volume",
+	SOC_DOUBLE_TLV("Speaker Playback Volume",
 			ALC5632_SPK_OUT_VOL, 8, 0, 31, 1, hp_tlv),
 	/* bit 15 mutes left, bit 7 right */
-	SOC_DOUBLE("Line Playback Switch",
+	SOC_DOUBLE("Speaker Playback Switch",
 			ALC5632_SPK_OUT_VOL, 15, 7, 1, 1),
 	SOC_DOUBLE_TLV("Headphone Playback Volume",
 			ALC5632_HP_OUT_VOL, 8, 0, 31, 1, hp_tlv),
@@ -166,9 +180,9 @@ static const struct snd_kcontrol_new alc5632_snd_controls[] = {
 			ALC5632_PHONE_IN_VOL, 8, 31, 1, vol_tlv),
 	SOC_DOUBLE_TLV("LineIn Capture Volume",
 			ALC5632_LINE_IN_VOL, 8, 0, 31, 1, vol_tlv),
-	SOC_DOUBLE_TLV("Stereo DAC Playback Volume",
+	SOC_DOUBLE_TLV("Master Playback Volume",
 			ALC5632_STEREO_DAC_IN_VOL, 8, 0, 63, 1, vdac_tlv),
-	SOC_DOUBLE("Stereo DAC Playback Switch",
+	SOC_DOUBLE("Master Playback Switch",
 			ALC5632_STEREO_DAC_IN_VOL, 15, 7, 1, 1),
 	SOC_SINGLE_TLV("Mic1 Capture Volume",
 			ALC5632_MIC_VOL, 8, 31, 1, vol_tlv),
@@ -811,7 +825,7 @@ static int alc5632_pcm_hw_params(struct snd_pcm_substream *substream,
 static int alc5632_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	u16 hp_mute = ALC5632_MISC_HP_DEPOP_MUTE_L \
+	u16 hp_mute = ALC5632_MISC_HP_DEPOP_MUTE_L
 						|ALC5632_MISC_HP_DEPOP_MUTE_R;
 	u16 mute_reg = snd_soc_read(codec, ALC5632_MISC_CTRL) & ~hp_mute;
 
@@ -941,6 +955,7 @@ static struct snd_soc_dai_driver alc5632_dai = {
 	.symmetric_rates = 1,
 };
 
+#ifdef CONFIG_PM
 static int alc5632_suspend(struct snd_soc_codec *codec, pm_message_t mesg)
 {
 	alc5632_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -949,54 +964,30 @@ static int alc5632_suspend(struct snd_soc_codec *codec, pm_message_t mesg)
 
 static int alc5632_resume(struct snd_soc_codec *codec)
 {
-	int ret;
+	struct alc5632_priv *alc5632 = snd_soc_codec_get_drvdata(codec);
 
-	/* mark cache as needed to sync */
-	codec->cache_sync = 1;
-
-	ret = snd_soc_cache_sync(codec);
-	if (ret != 0) {
-		dev_err(codec->dev, "Failed to sync cache: %d\n", ret);
-		return ret;
-	}
+	regcache_sync(alc5632->regmap);
 
 	alc5632_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 	return 0;
 }
-
-#define ALC5632_REC_UNMUTE (ALC5632_ADC_REC_MIC2 \
-		| ALC5632_ADC_REC_LINE_IN | ALC5632_ADC_REC_AUX \
-		| ALC5632_ADC_REC_HP | ALC5632_ADC_REC_SPK \
-		| ALC5632_ADC_REC_MONOMIX)
-
-#define ALC5632_MIC_ROUTE (ALC5632_MIC_ROUTE_HP \
-		| ALC5632_MIC_ROUTE_SPK \
-		| ALC5632_MIC_ROUTE_MONOMIX)
-
-#define ALC5632_PWR_DEFAULT (ALC5632_PWR_ADC_STATUS \
-		| ALC5632_PWR_DAC_STATUS \
-		| ALC5632_PWR_AMIX_STATUS \
-		| ALC5632_PWR_VREF_STATUS)
-
-#define ALC5632_ADC_REC_GAIN_COMP(x) (int)((x - ALC5632_ADC_REC_GAIN_BASE) \
-		/ ALC5632_ADC_REC_GAIN_STEP)
-
-#define ALC5632_MIC_BOOST_COMP(x) (int)(x / ALC5632_MIC_BOOST_STEP)
-
-#define ALC5632_SPK_OUT_VOL_COMP(x) (int)(x / ALC5632_SPK_OUT_VOL_STEP)
+#else
+#define	alc5632_suspend	NULL
+#define	alc5632_resume	NULL
+#endif
 
 static int alc5632_probe(struct snd_soc_codec *codec)
 {
 	struct alc5632_priv *alc5632 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
-	ret = snd_soc_codec_set_cache_io(codec, 8, 16, alc5632->control_type);
-	if (ret < 0) {
+	codec->control_data = alc5632->regmap;
+
+	ret = snd_soc_codec_set_cache_io(codec, 8, 16, SND_SOC_REGMAP);
+	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
 		return ret;
 	}
-
-	alc5632_reset(codec);
 
 	/* power on device  */
 	alc5632_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
@@ -1026,11 +1017,6 @@ static struct snd_soc_codec_driver soc_codec_device_alc5632 = {
 	.suspend = alc5632_suspend,
 	.resume = alc5632_resume,
 	.set_bias_level = alc5632_set_bias_level,
-	.reg_word_size = sizeof(u16),
-	.reg_cache_step = 2,
-	.reg_cache_default = alc5632_reg_defaults,
-	.reg_cache_size = ARRAY_SIZE(alc5632_reg_defaults),
-	.volatile_register = alc5632_volatile_register,
 	.controls = alc5632_snd_controls,
 	.num_controls = ARRAY_SIZE(alc5632_snd_controls),
 	.dapm_widgets = alc5632_dapm_widgets,
@@ -1039,48 +1025,68 @@ static struct snd_soc_codec_driver soc_codec_device_alc5632 = {
 	.num_dapm_routes = ARRAY_SIZE(alc5632_dapm_routes),
 };
 
+static struct regmap_config alc5632_regmap = {
+	.reg_bits = 8,
+	.val_bits = 16,
+
+	.max_register = ALC5632_MAX_REGISTER,
+	.reg_defaults = alc5632_reg_defaults,
+	.num_reg_defaults = ARRAY_SIZE(alc5632_reg_defaults),
+	.volatile_reg = alc5632_volatile_register,
+	.cache_type = REGCACHE_RBTREE,
+};
+
 /*
  * alc5632 2 wire address is determined by A1 pin
  * state during powerup.
  *    low  = 0x1a
  *    high = 0x1b
  */
-static int alc5632_i2c_probe(struct i2c_client *client,
+static __devinit int alc5632_i2c_probe(struct i2c_client *client,
 				const struct i2c_device_id *id)
 {
 	struct alc5632_priv *alc5632;
-	int ret, vid1, vid2;
-
-	vid1 = i2c_smbus_read_word_data(client, ALC5632_VENDOR_ID1);
-	if (vid1 < 0) {
-		dev_err(&client->dev, "failed to read I2C\n");
-		return -EIO;
-	} else {
-		dev_info(&client->dev, "got vid1: %x\n", vid1);
-	}
-	vid1 = ((vid1 & 0xff) << 8) | (vid1 >> 8);
-
-	vid2 = i2c_smbus_read_word_data(client, ALC5632_VENDOR_ID2);
-	if (vid2 < 0) {
-		dev_err(&client->dev, "failed to read I2C\n");
-		return -EIO;
-	} else {
-		dev_info(&client->dev, "got vid2: %x\n", vid2);
-	}
-	vid2 = (vid2 & 0xff);
-
-	if ((vid1 != 0x10ec) || (vid2 != id->driver_data)) {
-		dev_err(&client->dev, "unknown or wrong codec\n");
-		dev_err(&client->dev, "Expected %x:%lx, got %x:%x\n",
-				0x10ec, id->driver_data,
-				vid1, vid2);
-		return -ENODEV;
-	}
+	int ret, ret1, ret2;
+	unsigned int vid1, vid2;
 
 	alc5632 = devm_kzalloc(&client->dev,
 			 sizeof(struct alc5632_priv), GFP_KERNEL);
 	if (alc5632 == NULL)
 		return -ENOMEM;
+
+	i2c_set_clientdata(client, alc5632);
+
+	alc5632->regmap = regmap_init_i2c(client, &alc5632_regmap);
+	if (IS_ERR(alc5632->regmap)) {
+		ret = PTR_ERR(alc5632->regmap);
+		dev_err(&client->dev, "regmap_init() failed: %d\n", ret);
+		return ret;
+	}
+
+	ret1 = regmap_read(alc5632->regmap, ALC5632_VENDOR_ID1, &vid1);
+	ret2 = regmap_read(alc5632->regmap, ALC5632_VENDOR_ID2, &vid2);
+	if (ret1 != 0 || ret2 != 0) {
+		dev_err(&client->dev,
+		"Failed to read chip ID: ret1=%d, ret2=%d\n", ret1, ret2);
+		regmap_exit(alc5632->regmap);
+		return -EIO;
+	}
+
+	vid2 >>= 8;
+
+	if ((vid1 != 0x10EC) || (vid2 != id->driver_data)) {
+		dev_err(&client->dev,
+		"Device is not a ALC5632: VID1=0x%x, VID2=0x%x\n", vid1, vid2);
+		regmap_exit(alc5632->regmap);
+		return -EINVAL;
+	}
+
+	ret = alc5632_reset(alc5632->regmap);
+	if (ret < 0) {
+		dev_err(&client->dev, "Failed to issue reset\n");
+		regmap_exit(alc5632->regmap);
+		return ret;
+	}
 
 	alc5632->id = vid2;
 	switch (alc5632->id) {
@@ -1091,23 +1097,23 @@ static int alc5632_i2c_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 
-	i2c_set_clientdata(client, alc5632);
-	alc5632->control_data = client;
-	alc5632->control_type = SND_SOC_I2C;
-	mutex_init(&alc5632->mutex);
-
-	ret =  snd_soc_register_codec(&client->dev,
+	ret = snd_soc_register_codec(&client->dev,
 		&soc_codec_device_alc5632, &alc5632_dai, 1);
-	if (ret != 0)
+
+	if (ret < 0) {
 		dev_err(&client->dev, "Failed to register codec: %d\n", ret);
+		regmap_exit(alc5632->regmap);
+		return ret;
+	}
 
 	return ret;
 }
 
 static int alc5632_i2c_remove(struct i2c_client *client)
 {
+	struct alc5632_priv *alc5632 = i2c_get_clientdata(client);
 	snd_soc_unregister_codec(&client->dev);
-
+	regmap_exit(alc5632->regmap);
 	return 0;
 }
 
