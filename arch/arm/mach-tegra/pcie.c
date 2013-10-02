@@ -560,9 +560,62 @@ static int tegra_pcie_setup(int nr, struct pci_sys_data *sys)
 	pp = tegra_pcie.port + nr;
 	pp->root_bus_nr = sys->busnr;
 
-	sys->resource[0] = &pcie_io_space;
-	sys->resource[1] = &pcie_mem_space;
-	sys->resource[2] = &pcie_prefetch_mem_space;
+	/*
+	 * IORESOURCE_IO
+	 */
+	snprintf(pp->io_space_name, sizeof(pp->io_space_name),
+		 "PCIe %d I/O", pp->index);
+	pp->io_space_name[sizeof(pp->io_space_name) - 1] = 0;
+	pp->res[0].name = pp->io_space_name;
+	if (pp->index == 0) {
+		pp->res[0].start = PCIBIOS_MIN_IO;
+		pp->res[0].end = pp->res[0].start + SZ_32K - 1;
+	} else {
+		pp->res[0].start = PCIBIOS_MIN_IO + SZ_32K;
+		pp->res[0].end = IO_SPACE_LIMIT;
+	}
+	pp->res[0].flags = IORESOURCE_IO;
+	if (request_resource(&ioport_resource, &pp->res[0]))
+		panic("Request PCIe IO resource failed\n");
+	pci_add_resource(&sys->resources, &pp->res[0]);
+
+	/*
+	 * IORESOURCE_MEM
+	 */
+	snprintf(pp->mem_space_name, sizeof(pp->mem_space_name),
+		 "PCIe %d MEM", pp->index);
+	pp->mem_space_name[sizeof(pp->mem_space_name) - 1] = 0;
+	pp->res[1].name = pp->mem_space_name;
+	if (pp->index == 0) {
+		pp->res[1].start = MEM_BASE_0;
+		pp->res[1].end = pp->res[1].start + MEM_SIZE_0 - 1;
+	} else {
+		pp->res[1].start = MEM_BASE_1;
+		pp->res[1].end = pp->res[1].start + MEM_SIZE_1 - 1;
+	}
+	pp->res[1].flags = IORESOURCE_MEM;
+	if (request_resource(&iomem_resource, &pp->res[1]))
+		panic("Request PCIe Memory resource failed\n");
+	pci_add_resource(&sys->resources, &pp->res[1]);
+
+	/*
+	 * IORESOURCE_MEM | IORESOURCE_PREFETCH
+	 */
+	snprintf(pp->prefetch_space_name, sizeof(pp->prefetch_space_name),
+		 "PCIe %d PREFETCH MEM", pp->index);
+	pp->prefetch_space_name[sizeof(pp->prefetch_space_name) - 1] = 0;
+	pp->res[2].name = pp->prefetch_space_name;
+	if (pp->index == 0) {
+		pp->res[2].start = PREFETCH_MEM_BASE_0;
+		pp->res[2].end = pp->res[2].start + PREFETCH_MEM_SIZE_0 - 1;
+	} else {
+		pp->res[2].start = PREFETCH_MEM_BASE_1;
+		pp->res[2].end = pp->res[2].start + PREFETCH_MEM_SIZE_1 - 1;
+	}
+	pp->res[2].flags = IORESOURCE_MEM | IORESOURCE_PREFETCH;
+	if (request_resource(&iomem_resource, &pp->res[2]))
+		panic("Request PCIe Prefetch Memory resource failed\n");
+	pci_add_resource(&sys->resources, &pp->res[2]);
 
 	return 1;
 }
@@ -583,7 +636,8 @@ static struct pci_bus *tegra_pcie_scan_bus(int nr,
 	pp = tegra_pcie.port + nr;
 	pp->root_bus_nr = sys->busnr;
 
-	return pci_scan_bus(sys->busnr, &tegra_pcie_ops, sys);
+	return pci_scan_root_bus(NULL, sys->busnr, &tegra_pcie_ops, sys,
+				 &sys->resources);
 }
 
 static struct hw_pci tegra_pcie_hw = {
