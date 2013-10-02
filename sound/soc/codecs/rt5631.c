@@ -2434,7 +2434,7 @@ static DEVICE_ATTR(rt_codec_reg, S_IRUGO, rt5631_codec_reg_show, rt5631_codec_re
 			SNDRV_PCM_FMTBIT_S8)
 
 
-struct snd_soc_dai_ops rt5631_ops = {
+static struct snd_soc_dai_ops rt5631_ops = {
 	.hw_params = rt5631_hifi_pcm_params,
 	.set_fmt = rt5631_hifi_codec_set_dai_fmt,
 	.set_sysclk = rt5631_hifi_codec_set_dai_sysclk,
