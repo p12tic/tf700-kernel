@@ -133,7 +133,7 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
 	}
 	writel_relaxed(reg, reset + PMC_SCRATCH0);
-	/* use *_related to avoid spinlock since caches are off */
+
 	reg = readl_relaxed(reset);
 	reg |= 0x10;
 	writel_relaxed(reg, reset);
