@@ -215,7 +215,7 @@ enum tegra_vddio {
 };
 
 struct tegra_pingroup_config {
-	enum tegra_pingroup	pingroup;
+	int pingroup;
 	enum tegra_mux_func	func;
 	enum tegra_pullupdown	pupd;
 	enum tegra_tristate	tristate;
@@ -303,7 +303,7 @@ enum tegra_schmitt {
 };
 
 struct tegra_drive_pingroup_config {
-	enum tegra_drive_pingroup pingroup;
+	int pingroup;
 	enum tegra_hsm hsm;
 	enum tegra_schmitt schmitt;
 	enum tegra_drive drive;
@@ -348,13 +348,13 @@ extern const struct tegra_pingroup_desc tegra_soc_pingroups[];
 extern const struct tegra_drive_pingroup_desc tegra_soc_drive_pingroups[];
 extern const int gpio_to_pingroup[];
 
-int tegra_pinmux_get_func(enum tegra_pingroup pg);
-int tegra_pinmux_set_tristate(enum tegra_pingroup pg,
+int tegra_pinmux_get_func(int pg);
+int tegra_pinmux_set_tristate(int pg,
 	enum tegra_tristate tristate);
-int tegra_pinmux_set_io(enum tegra_pingroup pg,
+int tegra_pinmux_set_io(int pg,
 	enum tegra_pin_io input);
 int tegra_pinmux_get_pingroup(int gpio_nr);
-int tegra_pinmux_set_pullupdown(enum tegra_pingroup pg,
+int tegra_pinmux_set_pullupdown(int pg,
 	enum tegra_pullupdown pupd);
 
 void tegra_pinmux_config_table(const struct tegra_pingroup_config *config,
