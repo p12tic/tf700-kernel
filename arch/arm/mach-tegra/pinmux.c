@@ -879,8 +879,16 @@ static int __devinit tegra_pinmux_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void tegra20_pinmux_init() {} //TODO
+static void tegra30_pinmux_init() {}
+
 static struct of_device_id tegra_pinmux_of_match[] __devinitdata = {
-	{ .compatible = "nvidia,tegra20-pinmux", },
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+	{ .compatible = "nvidia,tegra20-pinmux", tegra20_pinmux_init },
+#endif
+#ifdef CONFIG_ARCH_TEGRA_3x_SOC
+	{ .compatible = "nvidia,tegra30-pinmux", tegra30_pinmux_init },
+#endif
 	{ },
 };
 

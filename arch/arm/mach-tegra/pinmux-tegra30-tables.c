@@ -1,14 +1,13 @@
 /*
- * linux/arch/arm/mach-tegra/pinmux-t3-tables.c
+ * linux/arch/arm/mach-tegra/pinmux-tegra30-tables.c
  *
- * Common pinmux configurations for Tegra 3 SoCs
+ * Common pinmux configurations for Tegra30 SoCs
  *
- * Copyright (c) 2010-2012, NVIDIA Corporation. All rights reserved.
+ * Copyright (C) 2010,2011 NVIDIA Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
+ * the Free Software Foundation; either version 2 of the License.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -538,3 +537,4 @@ void __init tegra_init_pinmux(void)
 		tegra_pinmux_config_table(cardhu_pcbid_pinmux,
 					ARRAY_SIZE(cardhu_pcbid_pinmux));
 }
+
