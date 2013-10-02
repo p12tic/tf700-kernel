@@ -150,6 +150,7 @@ static bool pm_suspending(void)
 {
 	return false;
 }
+#endif /* CONFIG_PM_SLEEP */
 
 bool pm_suspended_storage(void)
 {
@@ -157,7 +158,6 @@ bool pm_suspended_storage(void)
 		return false;
 	return true;
 }
-#endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 int pageblock_order __read_mostly;
