@@ -1474,10 +1474,6 @@ static void tegra_dsi_set_dc_clk(struct tegra_dc *dc,
 	/* Get the corresponding register value of shift_clk_div. */
 	shift_clk_div_register = dsi->shift_clk_div * 2 - 2;
 
-#ifndef CONFIG_TEGRA_SILICON_PLATFORM
-	shift_clk_div_register = 1;
-#endif
-
 	/* TODO: find out if PCD3 option is required */
 	val = PIXEL_CLK_DIVIDER_PCD1 |
 		SHIFT_CLK_DIVIDER(shift_clk_div_register);

@@ -1926,9 +1926,7 @@ static int tegra3_plle_configure(struct clk *c, bool force_training)
 #if USE_PLLE_SS
 	/* configure spread spectrum coefficients */
 	/* FIXME: coefficients for 216MHZ input? */
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
 	if (input_rate == 12000000)
-#endif
 	{
 		val = clk_readl(PLLE_SS_CTRL);
 		val &= ~(PLLE_SS_COEFFICIENTS_MASK | PLLE_SS_DISABLE);
@@ -3718,9 +3716,6 @@ static struct clk_pll_freq_table tegra_pll_e_freq_table[] = {
 	/* PLLE special case: use cpcon field to store cml divider value */
 	{ 12000000,  100000000, 150, 1,  18, 11},
 	{ 216000000, 100000000, 200, 18, 24, 13},
-#ifndef CONFIG_TEGRA_SILICON_PLATFORM
-	{ 13000000,  100000000, 200, 1,  26, 13},
-#endif
 	{ 0, 0, 0, 0, 0, 0 },
 };
 

@@ -30,8 +30,6 @@ u32 tegra_fuse_readl(unsigned long offset);
 void tegra_fuse_writel(u32 value, unsigned long offset);
 const char *tegra_get_revision_name(void);
 
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
-
 int tegra_cpu_process_id(void);
 int tegra_core_process_id(void);
 int tegra_soc_speedo_id(void);
@@ -51,15 +49,3 @@ static inline int tegra_cpu_speedo_mv(void) { return 1000; }
 static inline int tegra_core_speedo_mv(void) { return 1200; }
 #endif
 
-#else
-
-static inline int tegra_cpu_process_id(void) { return 0; }
-static inline int tegra_core_process_id(void) { return 0; }
-static inline int tegra_cpu_speedo_id(void) { return 0; }
-static inline int tegra_soc_speedo_id(void) { return 0; }
-static inline int tegra_package_id(void) { return -1; }
-static inline int tegra_cpu_speedo_mv(void) { return 1000; }
-static inline int tegra_core_speedo_mv(void) { return 1200; }
-static inline void tegra_init_speedo_data(void) { }
-
-#endif

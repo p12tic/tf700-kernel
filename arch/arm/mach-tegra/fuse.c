@@ -366,7 +366,6 @@ static enum tegra_revision tegra_decode_revision(const struct tegra_id *id)
 {
 	enum tegra_revision revision = TEGRA_REVISION_UNKNOWN;
 
-#if defined(CONFIG_TEGRA_SILICON_PLATFORM)
 	int i ;
 	char prime;
 
@@ -385,7 +384,6 @@ static enum tegra_revision tegra_decode_revision(const struct tegra_id *id)
 		revision = tegra_chip_revisions[i].revision;
 		break;
 	}
-#endif
 
 	return revision;
 }

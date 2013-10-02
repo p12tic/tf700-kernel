@@ -1510,10 +1510,8 @@ static bool _tegra_dc_controller_reset_enable(struct tegra_dc *dc)
 	msleep(5);
 	tegra_periph_reset_assert(dc->clk);
 	msleep(2);
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
 	tegra_periph_reset_deassert(dc->clk);
 	msleep(1);
-#endif
 
 	if (dc->ndev->id == 0 && tegra_dcs[1] != NULL) {
 		enable_dc_irq(tegra_dcs[1]->irq);

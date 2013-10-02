@@ -345,11 +345,7 @@ static inline void tegra_dc_mask_interrupt(struct tegra_dc *dc, u32 int_val)
 
 static inline unsigned long tegra_dc_clk_get_rate(struct tegra_dc *dc)
 {
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
 	return clk_get_rate(dc->clk);
-#else
-	return dc->mode.pclk;
-#endif
 }
 
 extern struct tegra_dc_out_ops tegra_dc_rgb_ops;
