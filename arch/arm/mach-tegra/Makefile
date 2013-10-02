@@ -3,6 +3,7 @@ GCOV_PROFILE := y
 
 obj-y                                   += ahb.o
 obj-y                                   += apbio.o
+obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= board-pinmux.o
 obj-y                                   += common.o
 obj-y                                   += board-info.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += common-t2.o
