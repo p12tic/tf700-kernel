@@ -2816,7 +2816,7 @@ static int rt5631_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static int rt5631_suspend(struct snd_soc_codec *codec, pm_message_t state)
+static int rt5631_suspend(struct snd_soc_codec *codec)
 {
 	printk(KERN_INFO "%s+ #####\n", __func__);
 	rt5631_set_bias_level(codec, SND_SOC_BIAS_OFF);

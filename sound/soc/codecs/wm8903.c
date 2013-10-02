@@ -2218,7 +2218,7 @@ static struct snd_soc_dai_driver wm8903_dai = {
 	.symmetric_rates = 1,
 };
 
-static int wm8903_suspend(struct snd_soc_codec *codec, pm_message_t state)
+static int wm8903_suspend(struct snd_soc_codec *codec)
 {
 	struct wm8903_priv *wm8903 = snd_soc_codec_get_drvdata(codec);
 

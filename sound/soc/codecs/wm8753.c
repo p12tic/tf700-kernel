@@ -1393,7 +1393,7 @@ static void wm8753_work(struct work_struct *work)
 	wm8753_set_bias_level(codec, dapm->bias_level);
 }
 
-static int wm8753_suspend(struct snd_soc_codec *codec, pm_message_t state)
+static int wm8753_suspend(struct snd_soc_codec *codec)
 {
 	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
 
