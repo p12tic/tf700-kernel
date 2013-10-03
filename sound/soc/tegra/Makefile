@@ -35,6 +35,7 @@ snd-soc-tegra-rt5640-objs := tegra_rt5640.o
 snd-soc-tegra-rt5642-objs := tegra_rt5640.o
 snd-soc-tegra-max98095-objs := tegra_max98095.o
 snd-soc-tegra-vcm-objs := tegra_vcm.o
+snd-soc-tegra-alc5632-objs := tegra_alc5632.o
 
 obj-$(CONFIG_SND_SOC_TEGRA_RT5631) += snd-soc-tegra-rt5631.o
 obj-$(CONFIG_SND_SOC_TEGRA_WM8903) += snd-soc-tegra-wm8903.o
@@ -50,3 +51,4 @@ obj-$(CONFIG_SND_SOC_TEGRA_MAX98095) += snd-soc-tegra-max98095.o
 obj-$(CONFIG_SND_SOC_TEGRA_P1852) += snd-soc-tegra-vcm.o
 obj-$(CONFIG_SND_SOC_TEGRA_P852) += snd-soc-tegra-vcm.o
 obj-$(CONFIG_AUDIO_DOCK) += audio_dock.o
+obj-$(CONFIG_SND_SOC_TEGRA_ALC5632) += snd-soc-tegra-alc5632.o
