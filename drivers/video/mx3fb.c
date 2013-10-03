@@ -333,8 +333,16 @@ static void sdc_enable_channel(struct mx3fb_info *mx3_fbi)
 
 	/* This enables the channel */
 	if (mx3_fbi->cookie < 0) {
+<<<<<<< HEAD
 		mx3_fbi->txd = dmaengine_prep_slave_sg(dma_chan,
 		      &mx3_fbi->sg[0], 1, DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT);
+||||||| merged common ancestors
+		mx3_fbi->txd = dma_chan->device->device_prep_slave_sg(dma_chan,
+		      &mx3_fbi->sg[0], 1, DMA_TO_DEVICE, DMA_PREP_INTERRUPT);
+=======
+		mx3_fbi->txd = dma_chan->device->device_prep_slave_sg(dma_chan,
+		      &mx3_fbi->sg[0], 1, DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT);
+>>>>>>> e0d23ef29ed637dc6bd739f590985746d9ad9caa
 		if (!mx3_fbi->txd) {
 			dev_err(mx3fb->dev, "Cannot allocate descriptor on %d\n",
 				dma_chan->chan_id);
@@ -1116,8 +1124,16 @@ static int mx3fb_pan_display(struct fb_var_screeninfo *var,
 	if (mx3_fbi->txd)
 		async_tx_ack(mx3_fbi->txd);
 
+<<<<<<< HEAD
 	txd = dmaengine_prep_slave_sg(dma_chan, sg +
 		mx3_fbi->cur_ipu_buf, 1, DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT);
+||||||| merged common ancestors
+	txd = dma_chan->device->device_prep_slave_sg(dma_chan, sg +
+		mx3_fbi->cur_ipu_buf, 1, DMA_TO_DEVICE, DMA_PREP_INTERRUPT);
+=======
+	txd = dma_chan->device->device_prep_slave_sg(dma_chan, sg +
+		mx3_fbi->cur_ipu_buf, 1, DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT);
+>>>>>>> e0d23ef29ed637dc6bd739f590985746d9ad9caa
 	if (!txd) {
 		dev_err(fbi->device,
 			"Error preparing a DMA transaction descriptor.\n");

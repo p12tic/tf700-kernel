@@ -218,6 +218,7 @@ static int mxcmci_setup_data(struct mxcmci_host *host, struct mmc_data *data)
 	unsigned int blksz = data->blksz;
 	unsigned int datasize = nob * blksz;
 	struct scatterlist *sg;
+	enum dma_transfer_direction slave_dirn;
 	int i, nents;
 
 	if (data->flags & MMC_DATA_STREAM)
@@ -240,17 +241,20 @@ static int mxcmci_setup_data(struct mxcmci_host *host, struct mmc_data *data)
 		}
 	}
 
-	if (data->flags & MMC_DATA_READ)
+	if (data->flags & MMC_DATA_READ) {
 		host->dma_dir = DMA_FROM_DEVICE;
-	else
+		slave_dirn = DMA_DEV_TO_MEM;
+	} else {
 		host->dma_dir = DMA_TO_DEVICE;
+		slave_dirn = DMA_MEM_TO_DEV;
+	}
 
 	nents = dma_map_sg(host->dma->device->dev, data->sg,
 				     data->sg_len,  host->dma_dir);
 	if (nents != data->sg_len)
 		return -EINVAL;
 
-	host->desc = dmaengine_prep_slave_sg(host->dma,
+	host->desc = host->dma->device->device_prep_slave_sg(host->dma,
 		data->sg, data->sg_len, slave_dirn,
 		DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
 
@@ -732,7 +736,6 @@ static void mxcmci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				"failed to config DMA channel. Falling back to PIO\n");
 			dma_release_channel(host->dma);
 			host->do_dma = 0;
-			host->dma = NULL;
 		}
 	}
 
@@ -1047,7 +1050,18 @@ static struct platform_driver mxcmci_driver = {
 	}
 };
 
-module_platform_driver(mxcmci_driver);
+static int __init mxcmci_init(void)
+{
+	return platform_driver_register(&mxcmci_driver);
+}
+
+static void __exit mxcmci_exit(void)
+{
+	platform_driver_unregister(&mxcmci_driver);
+}
+
+module_init(mxcmci_init);
+module_exit(mxcmci_exit);
 
 MODULE_DESCRIPTION("i.MX Multimedia Card Interface Driver");
 MODULE_AUTHOR("Sascha Hauer, Pengutronix");
