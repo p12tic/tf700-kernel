@@ -356,7 +356,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 				part_size = ext_csd[EXT_CSD_BOOT_MULT] << 17;
 				mmc_part_add(card, part_size,
 					EXT_CSD_PART_CONFIG_ACC_BOOT0 + idx,
-					"boot%d", idx, true);
+					"boot%d", idx, true,
+					MMC_BLK_DATA_AREA_BOOT);
 			}
 		}
 	}
@@ -443,7 +444,8 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 					hc_wp_grp_sz);
 				mmc_part_add(card, part_size << 19,
 					EXT_CSD_PART_CONFIG_ACC_GP0 + idx,
-					"gp%d", idx, false);
+					"gp%d", idx, false,
+					MMC_BLK_DATA_AREA_GP);
 			}
 		}
 		card->ext_csd.sec_trim_mult =
@@ -454,6 +456,14 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			ext_csd[EXT_CSD_SEC_FEATURE_SUPPORT];
 		card->ext_csd.trim_timeout = 300 *
 			ext_csd[EXT_CSD_TRIM_MULT];
+
+		/*
+		 * Note that the call to mmc_part_add above defaults to read
+		 * only. If this default assumption is changed, the call must
+		 * take into account the value of boot_locked below.
+		 */
+		card->ext_csd.boot_ro_lock = ext_csd[EXT_CSD_BOOT_WP];
+		card->ext_csd.boot_ro_lockable = true;
 	}
 
 	card->ext_csd.raw_erased_mem_count = ext_csd[EXT_CSD_ERASED_MEM_CONT];
