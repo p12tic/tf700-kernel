@@ -59,8 +59,6 @@ struct cfcnfg *get_cfcnfg(struct net *net)
 {
 	struct caif_net *caifn;
 	caifn = net_generic(net, caif_net_id);
-	if (!caifn)
-		return NULL;
 	return caifn->cfg;
 }
 EXPORT_SYMBOL(get_cfcnfg);
@@ -69,8 +67,6 @@ static struct caif_device_entry_list *caif_device_list(struct net *net)
 {
 	struct caif_net *caifn;
 	caifn = net_generic(net, caif_net_id);
-	if (!caifn)
-		return NULL;
 	return &caifn->caifdevs;
 }
 
@@ -99,8 +95,6 @@ static struct caif_device_entry *caif_device_alloc(struct net_device *dev)
 	struct caif_device_entry *caifd;
 
 	caifdevs = caif_device_list(dev_net(dev));
-	if (!caifdevs)
-		return NULL;
 
 	caifd = kzalloc(sizeof(*caifd), GFP_KERNEL);
 	if (!caifd)
@@ -120,8 +114,6 @@ static struct caif_device_entry *caif_get(struct net_device *dev)
 	struct caif_device_entry_list *caifdevs =
 	    caif_device_list(dev_net(dev));
 	struct caif_device_entry *caifd;
-	if (!caifdevs)
-		return NULL;
 
 	list_for_each_entry_rcu(caifd, &caifdevs->list, list) {
 		if (caifd->netdev == dev)
@@ -321,8 +313,6 @@ void caif_enroll_dev(struct net_device *dev, struct caif_dev_common *caifdev,
 	struct caif_device_entry_list *caifdevs;
 
 	caifdevs = caif_device_list(dev_net(dev));
-	if (!cfg || !caifdevs)
-		return;
 	caifd = caif_device_alloc(dev);
 	if (!caifd)
 		return;
@@ -374,8 +364,6 @@ static int caif_device_notify(struct notifier_block *me, unsigned long what,
 
 	cfg = get_cfcnfg(dev_net(dev));
 	caifdevs = caif_device_list(dev_net(dev));
-	if (!cfg || !caifdevs)
-		return 0;
 
 	caifd = caif_get(dev);
 	if (caifd == NULL && dev->type != ARPHRD_CAIF)
@@ -508,9 +496,6 @@ static int caif_init_net(struct net *net)
 {
 	struct caif_net *caifn = net_generic(net, caif_net_id);
 
-	if (WARN_ON(!caifn))
-		return -EINVAL;
-
 	INIT_LIST_HEAD(&caifn->caifdevs.list);
 	mutex_init(&caifn->caifdevs.lock);
 
@@ -527,9 +512,6 @@ static void caif_exit_net(struct net *net)
 	struct caif_device_entry_list *caifdevs =
 	    caif_device_list(net);
 	struct cfcnfg *cfg =  get_cfcnfg(net);
-
-	if (!cfg || !caifdevs)
-		return;
 
 	rtnl_lock();
 	mutex_lock(&caifdevs->lock);
