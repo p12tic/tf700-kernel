@@ -2518,9 +2518,6 @@ static int wm8903_probe(struct snd_soc_codec *codec)
 	snd_soc_update_bits(codec, WM8903_DAC_DIGITAL_1,
 			    WM8903_DAC_MUTEMODE | WM8903_DAC_MUTE,
 			    WM8903_DAC_MUTEMODE | WM8903_DAC_MUTE);
-
-	snd_soc_add_controls(codec, wm8903_snd_controls,
-				ARRAY_SIZE(wm8903_snd_controls));
 	wm8903_add_widgets(codec);
 
 	wm8903_init_gpio(codec);
@@ -2547,6 +2544,8 @@ static struct snd_soc_codec_driver soc_codec_dev_wm8903 = {
 	.reg_cache_default = wm8903_reg_defaults,
 	.volatile_register = wm8903_volatile_register,
 	.seq_notifier = wm8903_seq_notifier,
+	.controls = wm8903_snd_controls,
+	.num_controls = ARRAY_SIZE(wm8903_snd_controls),
 };
 
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
