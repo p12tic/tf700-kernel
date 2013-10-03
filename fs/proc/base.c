@@ -770,10 +770,6 @@ static ssize_t mem_read(struct file * file, char __user * buf,
 	return ret;
 }
 
-#define mem_write NULL
-
-#ifndef mem_write
-/* This is a security hazard */
 static ssize_t mem_write(struct file * file, const char __user *buf,
 			 size_t count, loff_t *ppos)
 {
@@ -814,7 +810,6 @@ static ssize_t mem_write(struct file * file, const char __user *buf,
 	free_page((unsigned long) page);
 	return copied;
 }
-#endif
 
 loff_t mem_lseek(struct file *file, loff_t offset, int orig)
 {
