@@ -3878,13 +3878,17 @@ static int wm8962_gpio_direction_out(struct gpio_chip *chip,
 {
 	struct wm8962_priv *wm8962 = gpio_to_wm8962(chip);
 	struct snd_soc_codec *codec = wm8962->codec;
-	int val;
+	int ret, val;
 
 	/* Force function 1 (logic output) */
 	val = (1 << WM8962_GP2_FN_SHIFT) | (value << WM8962_GP2_LVL_SHIFT);
 
-	return snd_soc_update_bits(codec, WM8962_GPIO_BASE + offset,
-				   WM8962_GP2_FN_MASK | WM8962_GP2_LVL, val);
+	ret = snd_soc_update_bits(codec, WM8962_GPIO_BASE + offset,
+				  WM8962_GP2_FN_MASK | WM8962_GP2_LVL, val);
+	if (ret < 0)
+		return ret;
+
+	return 0;
 }
 
 static struct gpio_chip wm8962_template_chip = {
@@ -4123,11 +4127,20 @@ static int wm8962_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static int wm8962_soc_volatile(struct snd_soc_codec *codec,
+			       unsigned int reg)
+{
+	return true;
+}
+
+
 static struct snd_soc_codec_driver soc_codec_dev_wm8962 = {
 	.probe =	wm8962_probe,
 	.remove =	wm8962_remove,
 	.set_bias_level = wm8962_set_bias_level,
 	.set_pll = wm8962_set_fll,
+	.reg_cache_size	= WM8962_MAX_REGISTER,
+	.volatile_register = wm8962_soc_volatile,
 };
 
 static const struct regmap_config wm8962_regmap = {
