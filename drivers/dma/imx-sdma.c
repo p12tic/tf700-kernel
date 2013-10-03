@@ -268,6 +268,8 @@ struct sdma_channel {
 	struct dma_async_tx_descriptor	desc;
 	dma_cookie_t			last_completed;
 	enum dma_status			status;
+	unsigned int			chn_count;
+	unsigned int			chn_real_count;
 };
 
 #define IMX_DMA_SG_LOOP		(1 << 0)
@@ -503,6 +505,7 @@ static void mxc_sdma_handle_channel_normal(struct sdma_channel *sdmac)
 	struct sdma_buffer_descriptor *bd;
 	int i, error = 0;
 
+	sdmac->chn_real_count = 0;
 	/*
 	 * non loop mode. Iterate over all descriptors, collect
 	 * errors and call callback function
@@ -512,6 +515,7 @@ static void mxc_sdma_handle_channel_normal(struct sdma_channel *sdmac)
 
 		 if (bd->mode.status & (BD_DONE | BD_RROR))
 			error = -EIO;
+		 sdmac->chn_real_count += bd->mode.count;
 	}
 
 	if (error)
@@ -519,9 +523,9 @@ static void mxc_sdma_handle_channel_normal(struct sdma_channel *sdmac)
 	else
 		sdmac->status = DMA_SUCCESS;
 
+	sdmac->last_completed = sdmac->desc.cookie;
 	if (sdmac->desc.callback)
 		sdmac->desc.callback(sdmac->desc.callback_param);
-	sdmac->last_completed = sdmac->desc.cookie;
 }
 
 static void mxc_sdma_handle_channel(struct sdma_channel *sdmac)
@@ -832,17 +836,18 @@ static struct sdma_channel *to_sdma_chan(struct dma_chan *chan)
 
 static dma_cookie_t sdma_tx_submit(struct dma_async_tx_descriptor *tx)
 {
+	unsigned long flags;
 	struct sdma_channel *sdmac = to_sdma_chan(tx->chan);
 	struct sdma_engine *sdma = sdmac->sdma;
 	dma_cookie_t cookie;
 
-	spin_lock_irq(&sdmac->lock);
+	spin_lock_irqsave(&sdmac->lock, flags);
 
 	cookie = sdma_assign_cookie(sdmac);
 
 	sdma_enable_channel(sdma, sdmac->channel);
 
-	spin_unlock_irq(&sdmac->lock);
+	spin_unlock_irqrestore(&sdmac->lock, flags);
 
 	return cookie;
 }
@@ -941,6 +946,7 @@ static struct dma_async_tx_descriptor *sdma_prep_slave_sg(
 		goto err_out;
 	}
 
+	sdmac->chn_count = 0;
 	for_each_sg(sgl, sg, sg_len, i) {
 		struct sdma_buffer_descriptor *bd = &sdmac->bd[i];
 		int param;
@@ -957,6 +963,7 @@ static struct dma_async_tx_descriptor *sdma_prep_slave_sg(
 		}
 
 		bd->mode.count = count;
+		sdmac->chn_count += count;
 
 		if (sdmac->word_size > DMA_SLAVE_BUSWIDTH_4_BYTES) {
 			ret =  -EINVAL;
@@ -1102,6 +1109,7 @@ static int sdma_control(struct dma_chan *chan, enum dma_ctrl_cmd cmd,
 			sdmac->watermark_level = dmaengine_cfg->dst_maxburst;
 			sdmac->word_size = dmaengine_cfg->dst_addr_width;
 		}
+		sdmac->direction = dmaengine_cfg->direction;
 		return sdma_config_channel(sdmac);
 	default:
 		return -ENOSYS;
@@ -1119,7 +1127,8 @@ static enum dma_status sdma_tx_status(struct dma_chan *chan,
 
 	last_used = chan->cookie;
 
-	dma_set_tx_state(txstate, sdmac->last_completed, last_used, 0);
+	dma_set_tx_state(txstate, sdmac->last_completed, last_used,
+			sdmac->chn_count - sdmac->chn_real_count);
 
 	return sdmac->status;
 }

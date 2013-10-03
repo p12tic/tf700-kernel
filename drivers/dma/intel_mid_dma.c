@@ -280,7 +280,8 @@ static void midc_dostart(struct intel_mid_dma_chan *midc,
  * callbacks but must be called with the lock held.
  */
 static void midc_descriptor_complete(struct intel_mid_dma_chan *midc,
-	       struct intel_mid_dma_desc *desc)
+		struct intel_mid_dma_desc *desc)
+		__releases(&midc->lock) __acquires(&midc->lock)
 {
 	struct dma_async_tx_descriptor	*txd = &desc->txd;
 	dma_async_tx_callback callback_txd = NULL;
@@ -311,6 +312,7 @@ static void midc_descriptor_complete(struct intel_mid_dma_chan *midc,
 			pci_pool_free(desc->lli_pool, desc->lli,
 						desc->lli_phys);
 			pci_pool_destroy(desc->lli_pool);
+			desc->lli = NULL;
 		}
 		list_move(&desc->desc_node, &midc->free_list);
 		midc->busy = false;
@@ -490,7 +492,9 @@ static enum dma_status intel_mid_dma_tx_status(struct dma_chan *chan,
 
 	ret = dma_async_is_complete(cookie, last_complete, last_used);
 	if (ret != DMA_SUCCESS) {
+		spin_lock_bh(&midc->lock);
 		midc_scan_descriptors(to_middma_device(chan->device), midc);
+		spin_unlock_bh(&midc->lock);
 
 		last_complete = midc->completed;
 		last_used = chan->cookie;
@@ -566,6 +570,7 @@ static int intel_mid_dma_device_control(struct dma_chan *chan,
 			pci_pool_free(desc->lli_pool, desc->lli,
 						desc->lli_phys);
 			pci_pool_destroy(desc->lli_pool);
+			desc->lli = NULL;
 		}
 		list_move(&desc->desc_node, &midc->free_list);
 	}
@@ -868,7 +873,7 @@ static int intel_mid_dma_alloc_chan_resources(struct dma_chan *chan)
 	pm_runtime_get_sync(&mid->pdev->dev);
 
 	if (mid->state == SUSPENDED) {
-		if (dma_resume(mid->pdev)) {
+		if (dma_resume(&mid->pdev->dev)) {
 			pr_err("ERR_MDMA: resume failed");
 			return -EFAULT;
 		}
@@ -1099,7 +1104,8 @@ static int mid_setup_dma(struct pci_dev *pdev)
 					LNW_PERIPHRAL_MASK_SIZE);
 		if (dma->mask_reg == NULL) {
 			pr_err("ERR_MDMA:Can't map periphral intr space !!\n");
-			return -ENOMEM;
+			err = -ENOMEM;
+			goto err_ioremap;
 		}
 	} else
 		dma->mask_reg = NULL;
@@ -1196,6 +1202,9 @@ static int mid_setup_dma(struct pci_dev *pdev)
 err_engine:
 	free_irq(pdev->irq, dma);
 err_irq:
+	if (dma->mask_reg)
+		iounmap(dma->mask_reg);
+err_ioremap:
 	pci_pool_destroy(dma->dma_pool);
 err_dma_pool:
 	pr_err("ERR_MDMA:setup_dma failed: %d\n", err);
@@ -1337,8 +1346,9 @@ static void __devexit intel_mid_dma_remove(struct pci_dev *pdev)
 *
 * This function is called by OS when a power event occurs
 */
-int dma_suspend(struct pci_dev *pci, pm_message_t state)
+static int dma_suspend(struct device *dev)
 {
+	struct pci_dev *pci = to_pci_dev(dev);
 	int i;
 	struct middma_device *device = pci_get_drvdata(pci);
 	pr_debug("MDMA: dma_suspend called\n");
@@ -1362,8 +1372,9 @@ int dma_suspend(struct pci_dev *pci, pm_message_t state)
 *
 * This function is called by OS when a power event occurs
 */
-int dma_resume(struct pci_dev *pci)
+int dma_resume(struct device *dev)
 {
+	struct pci_dev *pci = to_pci_dev(dev);
 	int ret;
 	struct middma_device *device = pci_get_drvdata(pci);
 
@@ -1429,6 +1440,8 @@ static const struct dev_pm_ops intel_mid_dma_pm = {
 	.runtime_suspend = dma_runtime_suspend,
 	.runtime_resume = dma_runtime_resume,
 	.runtime_idle = dma_runtime_idle,
+	.suspend = dma_suspend,
+	.resume = dma_resume,
 };
 
 static struct pci_driver intel_mid_dma_pci_driver = {
@@ -1437,8 +1450,6 @@ static struct pci_driver intel_mid_dma_pci_driver = {
 	.probe		=	intel_mid_dma_probe,
 	.remove		=	__devexit_p(intel_mid_dma_remove),
 #ifdef CONFIG_PM
-	.suspend = dma_suspend,
-	.resume = dma_resume,
 	.driver = {
 		.pm = &intel_mid_dma_pm,
 	},

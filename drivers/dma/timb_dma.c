@@ -166,10 +166,10 @@ static void __td_unmap_desc(struct timb_dma_chan *td_chan, const u8 *dma_desc,
 
 	if (single)
 		dma_unmap_single(chan2dev(&td_chan->chan), addr, len,
-			td_chan->direction);
+			DMA_TO_DEVICE);
 	else
 		dma_unmap_page(chan2dev(&td_chan->chan), addr, len,
-			td_chan->direction);
+			DMA_TO_DEVICE);
 }
 
 static void __td_unmap_descs(struct timb_dma_desc *td_desc, bool single)
@@ -398,7 +398,7 @@ static struct timb_dma_desc *td_alloc_init_desc(struct timb_dma_chan *td_chan)
 	td_desc->txd.flags = DMA_CTRL_ACK;
 
 	td_desc->txd.phys = dma_map_single(chan2dmadev(chan),
-		td_desc->desc_list, td_desc->desc_list_len, DMA_MEM_TO_DEV);
+		td_desc->desc_list, td_desc->desc_list_len, DMA_TO_DEVICE);
 
 	err = dma_mapping_error(chan2dmadev(chan), td_desc->txd.phys);
 	if (err) {
@@ -419,7 +419,7 @@ static void td_free_desc(struct timb_dma_desc *td_desc)
 {
 	dev_dbg(chan2dev(td_desc->txd.chan), "Freeing desc: %p\n", td_desc);
 	dma_unmap_single(chan2dmadev(td_desc->txd.chan), td_desc->txd.phys,
-		td_desc->desc_list_len, DMA_MEM_TO_DEV);
+		td_desc->desc_list_len, DMA_TO_DEVICE);
 
 	kfree(td_desc->desc_list);
 	kfree(td_desc);
@@ -841,17 +841,7 @@ static struct platform_driver td_driver = {
 	.remove	= __exit_p(td_remove),
 };
 
-static int __init td_init(void)
-{
-	return platform_driver_register(&td_driver);
-}
-module_init(td_init);
-
-static void __exit td_exit(void)
-{
-	platform_driver_unregister(&td_driver);
-}
-module_exit(td_exit);
+module_platform_driver(td_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Timberdale DMA controller driver");
