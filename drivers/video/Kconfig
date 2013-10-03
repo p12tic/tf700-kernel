@@ -2416,7 +2416,6 @@ source "drivers/video/omap2/Kconfig"
 source "drivers/video/tegra/Kconfig"
 
 source "drivers/video/backlight/Kconfig"
-source "drivers/video/display/Kconfig"
 
 if VT
 	source "drivers/video/console/Kconfig"
