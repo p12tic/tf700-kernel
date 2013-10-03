@@ -228,9 +228,9 @@ struct mmc_card {
 #define MMC_CARD_SDXC		(1<<6)		/* card is SDXC */
 #define MMC_CARD_REMOVED	(1<<7)		/* card has been removed */
 #define MMC_STATE_HIGHSPEED_200	(1<<8)		/* card is in HS200 mode */
-#define MMC_STATE_DOING_BKOPS	(1<<9)		/* Card doing bkops */
-#define MMC_STATE_NEED_BKOPS	(1<<10)		/* Card needs to do bkops */
-#define MMC_STATE_SLEEP		(1<<11)		/* card is in sleep state */
+#define MMC_STATE_SLEEP		(1<<9)		/* card is in sleep state */
+#define MMC_STATE_DOING_BKOPS	(1<<10)		/* Card doing bkops */
+#define MMC_STATE_NEED_BKOPS	(1<<11)		/* Card needs to do bkops */
 
 	unsigned int		quirks; 	/* card quirks */
 #define MMC_QUIRK_LENIENT_FN0	(1<<0)		/* allow SDIO FN0 writes outside of the VS CCCR range */
