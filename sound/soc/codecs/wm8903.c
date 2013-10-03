@@ -39,7 +39,6 @@
 
 #include <../board-cardhu.h>
 
-static int codec_wm8903_status = 0;
 static struct attribute_group attrs;
 
 struct snd_soc_codec *wm8903_codec;
@@ -187,15 +186,6 @@ static ssize_t wm8903_no_force_headphone(struct device *dev,
 
 
 static DEVICE_ATTR(no_force_headphone, S_IRUGO, wm8903_no_force_headphone, NULL);
-
-
-
-static ssize_t read_audio_codec_status(struct device *dev, struct device_attribute *devattr, char *buf)
-{
-	return sprintf(buf, "%d\n",codec_wm8903_status);
-}
-
-static DEVICE_ATTR(audio_codec_status, S_IRUGO, read_audio_codec_status, NULL);
 
 static struct attribute *audio_codec_attr[] = {
 	&dev_attr_audio_codec_status.attr,
@@ -465,11 +455,6 @@ static bool wm8903_volatile_register(struct device *dev, unsigned int reg)
 	default:
 		return 0;
 	}
-}
-
-static void wm8903_reset(struct snd_soc_codec *codec)
-{
-	snd_soc_write(codec, WM8903_SW_RESET_AND_ID, 0);
 }
 
 /*
@@ -2376,20 +2361,6 @@ static int wm8903_probe(struct snd_soc_codec *codec)
 		return ret;
 	}
 
-	val = snd_soc_read(codec, WM8903_SW_RESET_AND_ID);
-	if (val != 0x8903) {
-		dev_err(codec->dev,
-			"Device with ID register %x is not a WM8903\n", val);
-		return -ENODEV;
-	}else
-		codec_wm8903_status = 1;
-
-	val = snd_soc_read(codec, WM8903_REVISION_NUMBER);
-	dev_info(codec->dev, "WM8903 revision %c\n",
-		 (val & WM8903_CHIP_REV_MASK) + 'A');
-
-	wm8903_reset(codec);
-
 	/* Set up GPIOs and microphone detection */
 	if (pdata) {
 		bool mic_gpio = false;
@@ -2535,6 +2506,7 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 				      const struct i2c_device_id *id)
 {
 	struct wm8903_priv *wm8903;
+	unsigned int val;
 	int ret;
 
 	wm8903 = devm_kzalloc(&i2c->dev,  sizeof(struct wm8903_priv),
@@ -2552,6 +2524,28 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 
 	i2c_set_clientdata(i2c, wm8903);
 	wm8903->irq = i2c->irq;
+
+	ret = regmap_read(wm8903->regmap, WM8903_SW_RESET_AND_ID, &val);
+	if (ret != 0) {
+		dev_err(&i2c->dev, "Failed to read chip ID: %d\n", ret);
+		goto err;
+	}
+	if (val != 0x8903) {
+		dev_err(&i2c->dev, "Device with ID %x is not a WM8903\n", val);
+		ret = -ENODEV;
+		goto err;
+	}
+
+	ret = regmap_read(wm8903->regmap, WM8903_REVISION_NUMBER, &val);
+	if (ret != 0) {
+		dev_err(&i2c->dev, "Failed to read chip revision: %d\n", ret);
+		goto err;
+	}
+	dev_info(&i2c->dev, "WM8903 revision %c\n",
+		 (val & WM8903_CHIP_REV_MASK) + 'A');
+
+	/* Reset the device */
+	regmap_write(wm8903->regmap, WM8903_SW_RESET_AND_ID, 0x8903);
 
 	ret = snd_soc_register_codec(&i2c->dev,
 			&soc_codec_dev_wm8903, &wm8903_dai, 1);
