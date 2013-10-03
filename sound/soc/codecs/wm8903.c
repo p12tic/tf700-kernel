@@ -25,6 +25,7 @@
 #include <linux/i2c.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/irq.h>
 #include <sound/core.h>
 #include <sound/jack.h>
 #include <sound/pcm.h>
@@ -2491,6 +2492,78 @@ static const struct regmap_config wm8903_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(wm8903_reg_defaults),
 };
 
+static int wm8903_set_pdata_irq_trigger(struct i2c_client *i2c,
+					struct wm8903_platform_data *pdata)
+{
+	struct irq_data *irq_data = irq_get_irq_data(i2c->irq);
+	if (!irq_data) {
+		dev_err(&i2c->dev, "Invalid IRQ: %d\n",
+			i2c->irq);
+		return -EINVAL;
+	}
+
+	switch (irqd_get_trigger_type(irq_data)) {
+	case IRQ_TYPE_NONE:
+	default:
+		/*
+		* We assume the controller imposes no restrictions,
+		* so we are able to select active-high
+		*/
+		/* Fall-through */
+	case IRQ_TYPE_LEVEL_HIGH:
+		pdata->irq_active_low = false;
+		break;
+	case IRQ_TYPE_LEVEL_LOW:
+		pdata->irq_active_low = true;
+		break;
+	}
+
+	return 0;
+}
+
+static int wm8903_set_pdata_from_of(struct i2c_client *i2c,
+				    struct wm8903_platform_data *pdata)
+{
+	const struct device_node *np = i2c->dev.of_node;
+	u32 val32;
+	int i;
+
+	if (of_property_read_u32(np, "micdet-cfg", &val32) >= 0)
+		pdata->micdet_cfg = val32;
+
+	if (of_property_read_u32(np, "micdet-delay", &val32) >= 0)
+		pdata->micdet_delay = val32;
+
+	if (of_property_read_u32_array(np, "gpio-cfg", pdata->gpio_cfg,
+				       ARRAY_SIZE(pdata->gpio_cfg)) >= 0) {
+		/*
+		 * In device tree: 0 means "write 0",
+		 * 0xffffffff means "don't touch".
+		 *
+		 * In platform data: 0 means "don't touch",
+		 * 0x8000 means "write 0".
+		 *
+		 * Note: WM8903_GPIO_CONFIG_ZERO == 0x8000.
+		 *
+		 *  Convert from DT to pdata representation here,
+		 * so no other code needs to change.
+		 */
+		for (i = 0; i < ARRAY_SIZE(pdata->gpio_cfg); i++) {
+			if (pdata->gpio_cfg[i] == 0) {
+				pdata->gpio_cfg[i] = WM8903_GPIO_CONFIG_ZERO;
+			} else if (pdata->gpio_cfg[i] == 0xffffffff) {
+				pdata->gpio_cfg[i] = 0;
+			} else if (pdata->gpio_cfg[i] > 0x7fff) {
+				dev_err(&i2c->dev, "Invalid gpio-cfg[%d] %x\n",
+					i, pdata->gpio_cfg[i]);
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
 static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 				      const struct i2c_device_id *id)
 {
@@ -2525,6 +2598,18 @@ static __devinit int wm8903_i2c_probe(struct i2c_client *i2c,
 		if (wm8903->pdata == NULL) {
 			dev_err(&i2c->dev, "Failed to allocate pdata\n");
 			return -ENOMEM;
+		}
+
+		if (i2c->irq) {
+			ret = wm8903_set_pdata_irq_trigger(i2c, wm8903->pdata);
+			if (ret != 0)
+				return ret;
+		}
+
+		if (i2c->dev.of_node) {
+			ret = wm8903_set_pdata_from_of(i2c, wm8903->pdata);
+			if (ret != 0)
+				return ret;
 		}
 	}
 
@@ -2591,6 +2676,12 @@ static __devexit int wm8903_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
+static const struct of_device_id wm8903_of_match[] = {
+	{ .compatible = "wlf,wm8903", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, wm8903_of_match);
+
 static const struct i2c_device_id wm8903_i2c_id[] = {
 	{ "wm8903", 0 },
 	{ }
@@ -2601,6 +2692,7 @@ static struct i2c_driver wm8903_i2c_driver = {
 	.driver = {
 		.name = "wm8903",
 		.owner = THIS_MODULE,
+		.of_match_table = wm8903_of_match,
 	},
 	.probe =    wm8903_i2c_probe,
 	.remove =   __devexit_p(wm8903_i2c_remove),
