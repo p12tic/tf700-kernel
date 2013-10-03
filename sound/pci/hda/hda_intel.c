@@ -31,7 +31,7 @@
  *  CHANGES:
  *
  *  2004.12.01	Major rewrite by tiwai, merged the work of pshou
- *
+ * 
  */
 
 #include <linux/delay.h>
@@ -45,7 +45,6 @@
 #include <linux/pci.h>
 #include <linux/mutex.h>
 #include <linux/reboot.h>
-#include <linux/clk.h>
 #include <linux/io.h>
 #ifdef CONFIG_X86
 /* for snoop control */
@@ -59,13 +58,13 @@
 
 static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
-static int enable[SNDRV_CARDS] = SNDRV_DEFAULT_ENABLE_PNP;
+static bool enable[SNDRV_CARDS] = SNDRV_DEFAULT_ENABLE_PNP;
 static char *model[SNDRV_CARDS];
 static int position_fix[SNDRV_CARDS];
 static int bdl_pos_adj[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS-1)] = -1};
 static int probe_mask[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS-1)] = -1};
 static int probe_only[SNDRV_CARDS];
-static int single_cmd;
+static bool single_cmd;
 static int enable_msi = -1;
 #ifdef CONFIG_SND_HDA_PATCH_LOADER
 static char *patch[SNDRV_CARDS];
@@ -117,12 +116,12 @@ MODULE_PARM_DESC(power_save, "Automatic power-saving timeout "
  * this may give more power-saving, but will take longer time to
  * wake up.
  */
-static int power_save_controller = 1;
+static bool power_save_controller = 1;
 module_param(power_save_controller, bool, 0644);
 MODULE_PARM_DESC(power_save_controller, "Reset controller in power save mode.");
 #endif
 
-static int align_buffer_size = 1;
+static bool align_buffer_size = 1;
 module_param(align_buffer_size, bool, 0644);
 MODULE_PARM_DESC(align_buffer_size,
 		"Force buffer and period sizes to be multiple of 128 bytes.");
@@ -343,32 +342,6 @@ enum {
 #define NVIDIA_HDA_OSTRM_COH          0x4c
 #define NVIDIA_HDA_ENABLE_COHBIT      0x01
 
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-/* Defines for Nvidia Tegra HDA support */
-#define NVIDIA_TEGRA_HDA_BAR0_OFFSET           0x8000
-
-#define NVIDIA_TEGRA_HDA_CFG_CMD_OFFSET        0x1004
-#define NVIDIA_TEGRA_HDA_CFG_BAR0_OFFSET       0x1010
-
-#define NVIDIA_TEGRA_HDA_ENABLE_IO_SPACE       (1 << 0)
-#define NVIDIA_TEGRA_HDA_ENABLE_MEM_SPACE      (1 << 1)
-#define NVIDIA_TEGRA_HDA_ENABLE_BUS_MASTER     (1 << 2)
-#define NVIDIA_TEGRA_HDA_ENABLE_SERR           (1 << 8)
-#define NVIDIA_TEGRA_HDA_DISABLE_INTR          (1 << 10)
-#define NVIDIA_TEGRA_HDA_BAR0_INIT_PROGRAM     0xFFFFFFFF
-#define NVIDIA_TEGRA_HDA_BAR0_FINAL_PROGRAM    (1 << 14)
-
-/* IPFS */
-#define NVIDIA_TEGRA_HDA_IPFS_CONFIG           0x180
-#define NVIDIA_TEGRA_HDA_IPFS_EN_FPCI          0x1
-
-#define NVIDIA_TEGRA_HDA_IPFS_FPCI_BAR0        0x80
-#define NVIDIA_TEGRA_HDA_FPCI_BAR0_START       0x40
-
-#define NVIDIA_TEGRA_HDA_IPFS_INTR_MASK        0x188
-#define NVIDIA_TEGRA_HDA_IPFS_EN_INTR          (1 << 16)
-#endif /* CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA */
-
 /* Defines for Intel SCH HDA snoop control */
 #define INTEL_SCH_HDA_DEVC      0x78
 #define INTEL_SCH_HDA_DEVC_NOSNOOP       (0x1<<11)
@@ -434,12 +407,17 @@ struct azx_rb {
 	u32 res[AZX_MAX_CODECS];	/* last read value */
 };
 
+struct azx_pcm {
+	struct azx *chip;
+	struct snd_pcm *pcm;
+	struct hda_codec *codec;
+	struct hda_pcm_stream *hinfo[2];
+	struct list_head list;
+};
+
 struct azx {
 	struct snd_card *card;
 	struct pci_dev *pci;
-	struct platform_device *pdev;
-	struct device *dev;
-	int irq_id;
 	int dev_index;
 
 	/* chip type specific */
@@ -454,17 +432,7 @@ struct azx {
 	/* pci resources */
 	unsigned long addr;
 	void __iomem *remap_addr;
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-	void __iomem *remap_config_addr;
-#endif
 	int irq;
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	/* platform driver clocks */
-	struct clk **platform_clks;
-	int platform_clk_count;
-	int platform_clk_enable;
-#endif
 
 	/* locks */
 	spinlock_t reg_lock;
@@ -474,7 +442,7 @@ struct azx {
 	struct azx_dev *azx_dev;
 
 	/* PCM */
-	struct snd_pcm *pcm[HDA_MAX_PCMS];
+	struct list_head pcm_list; /* azx_pcm list */
 
 	/* HD codec */
 	unsigned short codec_mask;
@@ -519,11 +487,11 @@ enum {
 	AZX_DRIVER_SCH,
 	AZX_DRIVER_ATI,
 	AZX_DRIVER_ATIHDMI,
+	AZX_DRIVER_ATIHDMI_NS,
 	AZX_DRIVER_VIA,
 	AZX_DRIVER_SIS,
 	AZX_DRIVER_ULI,
 	AZX_DRIVER_NVIDIA,
-	AZX_DRIVER_NVIDIA_TEGRA,
 	AZX_DRIVER_TERA,
 	AZX_DRIVER_CTX,
 	AZX_DRIVER_GENERIC,
@@ -566,61 +534,19 @@ static char *driver_short_names[] __devinitdata = {
 	[AZX_DRIVER_SCH] = "HDA Intel MID",
 	[AZX_DRIVER_ATI] = "HDA ATI SB",
 	[AZX_DRIVER_ATIHDMI] = "HDA ATI HDMI",
+	[AZX_DRIVER_ATIHDMI_NS] = "HDA ATI HDMI",
 	[AZX_DRIVER_VIA] = "HDA VIA VT82xx",
 	[AZX_DRIVER_SIS] = "HDA SIS966",
 	[AZX_DRIVER_ULI] = "HDA ULI M5461",
 	[AZX_DRIVER_NVIDIA] = "HDA NVidia",
-	[AZX_DRIVER_NVIDIA_TEGRA] = "HDA NVIDIA Tegra",
-	[AZX_DRIVER_TERA] = "HDA Teradici",
-	[AZX_DRIVER_CTX] = "HDA Creative",
+	[AZX_DRIVER_TERA] = "HDA Teradici", 
+	[AZX_DRIVER_CTX] = "HDA Creative", 
 	[AZX_DRIVER_GENERIC] = "HD-Audio Generic",
 };
 
 /*
  * macros for easy use
  */
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-#define MASK_LONG_ALIGN		0x3UL
-#define SHIFT_BYTE		3
-#define SHIFT_BITS(reg)		((reg & MASK_LONG_ALIGN) << SHIFT_BYTE)
-#define ADDR_ALIGN_L(base, reg)	(base + (reg & ~MASK_LONG_ALIGN))
-#define MASK(bits)		(BIT(bits) - 1)
-#define MASK_REG(reg, bits)	(MASK(bits) << SHIFT_BITS(reg))
-
-#define tegra_write(base, reg, val, bits) \
-	writel((readl(ADDR_ALIGN_L(base, reg)) & ~MASK_REG(reg, bits)) | \
-	       ((val) << SHIFT_BITS(reg)), ADDR_ALIGN_L(base, reg))
-
-#define tegra_read(base, reg, bits) \
-	((readl(ADDR_ALIGN_L(base, reg)) >> SHIFT_BITS(reg)) & MASK(bits))
-
-#define azx_writel(chip, reg, value) \
-	writel(value, (chip)->remap_addr + ICH6_REG_##reg)
-#define azx_readl(chip, reg) \
-	readl((chip)->remap_addr + ICH6_REG_##reg)
-#define azx_writew(chip, reg, value) \
-	tegra_write((chip)->remap_addr, ICH6_REG_##reg, value, 16)
-#define azx_readw(chip, reg) \
-	tegra_read((chip)->remap_addr, ICH6_REG_##reg, 16)
-#define azx_writeb(chip, reg, value) \
-	tegra_write((chip)->remap_addr, ICH6_REG_##reg, value, 8)
-#define azx_readb(chip, reg) \
-	tegra_read((chip)->remap_addr, ICH6_REG_##reg, 8)
-
-#define azx_sd_writel(dev, reg, value) \
-	writel(value, (dev)->sd_addr + ICH6_REG_##reg)
-#define azx_sd_readl(dev, reg) \
-	readl((dev)->sd_addr + ICH6_REG_##reg)
-#define azx_sd_writew(dev, reg, value) \
-	tegra_write((dev)->sd_addr, ICH6_REG_##reg, value, 16)
-#define azx_sd_readw(dev, reg) \
-	tegra_read((dev)->sd_addr, ICH6_REG_##reg, 16)
-#define azx_sd_writeb(dev, reg, value) \
-	tegra_write((dev)->sd_addr, ICH6_REG_##reg, value, 8)
-#define azx_sd_readb(dev, reg) \
-	tegra_read((dev)->sd_addr, ICH6_REG_##reg, 8)
-
-#else /* CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA */
 #define azx_writel(chip,reg,value) \
 	writel(value, (chip)->remap_addr + ICH6_REG_##reg)
 #define azx_readl(chip,reg) \
@@ -646,8 +572,6 @@ static char *driver_short_names[] __devinitdata = {
 	writeb(value, (dev)->sd_addr + ICH6_REG_##reg)
 #define azx_sd_readb(dev,reg) \
 	readb((dev)->sd_addr + ICH6_REG_##reg)
-
-#endif /* CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA */
 
 /* for pcm support */
 #define get_azx_dev(substream) (substream->runtime->private_data)
@@ -706,7 +630,7 @@ static int azx_alloc_cmd_io(struct azx *chip)
 
 	/* single page (at least 4096 bytes) must suffice for both ringbuffes */
 	err = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV,
-				  chip->dev,
+				  snd_dma_pci_data(chip->pci),
 				  PAGE_SIZE, &chip->rb);
 	if (err < 0) {
 		snd_printk(KERN_ERR SFX "cannot allocate CORB/RIRB\n");
@@ -1060,22 +984,22 @@ static int azx_reset(struct azx *chip, int full_reset)
 
 	count = 50;
 	while (azx_readb(chip, GCTL) && --count)
-		mdelay(1);
+		msleep(1);
 
 	/* delay for >= 100us for codec PLL to settle per spec
 	 * Rev 0.9 section 5.5.1
 	 */
-	mdelay(1);
+	msleep(1);
 
 	/* Bring controller out of reset */
 	azx_writeb(chip, GCTL, azx_readb(chip, GCTL) | ICH6_GCTL_RESET);
 
 	count = 50;
 	while (!azx_readb(chip, GCTL) && --count)
-		mdelay(1);
+		msleep(1);
 
 	/* Brent Chartrand said to wait >= 540us for codecs to initialize */
-	mdelay(1);
+	msleep(1);
 
       __skip:
 	/* check to see if controller is ready */
@@ -1101,7 +1025,7 @@ static int azx_reset(struct azx *chip, int full_reset)
 
 /*
  * Lowlevel interface
- */
+ */  
 
 /* enable interrupts */
 static void azx_int_enable(struct azx *chip)
@@ -1229,16 +1153,6 @@ static void update_pci_byte(struct pci_dev *pci, unsigned int reg,
 
 static void azx_init_pci(struct azx *chip)
 {
-	/* force to non-snoop mode for a new VIA controller when BIOS is set */
-	if (chip->snoop && chip->driver_type == AZX_DRIVER_VIA) {
-		u8 snoop;
-		pci_read_config_byte(chip->pci, 0x42, &snoop);
-		if (!(snoop & 0x80) && chip->pci->revision == 0x30) {
-			chip->snoop = 0;
-			snd_printdd(SFX "Force to non-snoop mode\n");
-		}
-	}
-
 	/* Clear bits 0-2 of PCI register TCSEL (at offset 0x44)
 	 * TCSEL == Traffic Class Select Register, which sets PCI express QOS
 	 * Ensuring these bits are 0 clears playback static on some HD Audio
@@ -1293,83 +1207,6 @@ static void azx_init_pci(struct azx *chip)
         }
 }
 
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-/*
- * initialize the platform specific registers
- */
-static void reg_update_bits(void __iomem *base, unsigned int reg,
-			    unsigned int mask, unsigned int val)
-{
-	unsigned int data;
-
-	data = readl(base + reg);
-	data &= ~mask;
-	data |= (val & mask);
-	writel(data, base + reg);
-}
-
-static void azx_init_platform(struct azx *chip)
-{
-	switch (chip->driver_type) {
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-	case AZX_DRIVER_NVIDIA_TEGRA:
-		/*Enable the PCI access */
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_IPFS_CONFIG,
-				NVIDIA_TEGRA_HDA_IPFS_EN_FPCI,
-				NVIDIA_TEGRA_HDA_IPFS_EN_FPCI);
-		/* Enable MEM/IO space and bus master */
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_CFG_CMD_OFFSET, 0x507,
-				NVIDIA_TEGRA_HDA_ENABLE_MEM_SPACE |
-				NVIDIA_TEGRA_HDA_ENABLE_IO_SPACE |
-				NVIDIA_TEGRA_HDA_ENABLE_BUS_MASTER |
-				NVIDIA_TEGRA_HDA_ENABLE_SERR);
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_CFG_BAR0_OFFSET, 0xFFFFFFFF,
-				NVIDIA_TEGRA_HDA_BAR0_INIT_PROGRAM);
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_CFG_BAR0_OFFSET, 0xFFFFFFFF,
-				NVIDIA_TEGRA_HDA_BAR0_FINAL_PROGRAM);
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_IPFS_FPCI_BAR0, 0xFFFFFFFF,
-				NVIDIA_TEGRA_HDA_FPCI_BAR0_START);
-		reg_update_bits(chip->remap_config_addr,
-				NVIDIA_TEGRA_HDA_IPFS_INTR_MASK,
-				NVIDIA_TEGRA_HDA_IPFS_EN_INTR,
-				NVIDIA_TEGRA_HDA_IPFS_EN_INTR);
-		break;
-#endif
-	default:
-		break;
-	}
-
-	return;
-}
-
-static void azx_platform_enable_clocks(struct azx *chip)
-{
-	int i;
-
-	for (i = 0; i < chip->platform_clk_count; i++)
-		clk_enable(chip->platform_clks[i]);
-
-	chip->platform_clk_enable++;
-}
-
-static void azx_platform_disable_clocks(struct azx *chip)
-{
-	int i;
-
-	if (!chip->platform_clk_enable)
-		return;
-
-	for (i = 0; i < chip->platform_clk_count; i++)
-		clk_disable(chip->platform_clks[i]);
-
-	chip->platform_clk_enable--;
-}
-#endif /* CONFIG_SND_HDA_PLATFORM_DRIVER */
 
 static int azx_position_ok(struct azx *chip, struct azx_dev *azx_dev);
 
@@ -1391,7 +1228,7 @@ static irqreturn_t azx_interrupt(int irq, void *dev_id)
 		spin_unlock(&chip->reg_lock);
 		return IRQ_NONE;
 	}
-
+	
 	for (i = 0; i < chip->num_streams; i++) {
 		azx_dev = &chip->azx_dev[i];
 		if (status & azx_dev->sd_int_sta_mask) {
@@ -1433,7 +1270,7 @@ static irqreturn_t azx_interrupt(int irq, void *dev_id)
 		azx_writeb(chip, STATESTS, 0x04);
 #endif
 	spin_unlock(&chip->reg_lock);
-
+	
 	return IRQ_HANDLED;
 }
 
@@ -1649,10 +1486,9 @@ static void azx_bus_reset(struct hda_bus *bus)
 	azx_init_chip(chip, 1);
 #ifdef CONFIG_PM
 	if (chip->initialized) {
-		int i;
-
-		for (i = 0; i < HDA_MAX_PCMS; i++)
-			snd_pcm_suspend_all(chip->pcm[i]);
+		struct azx_pcm *p;
+		list_for_each_entry(p, &chip->pcm_list, list)
+			snd_pcm_suspend_all(p->pcm);
 		snd_hda_suspend(chip->bus);
 		snd_hda_resume(chip->bus);
 	}
@@ -1680,7 +1516,6 @@ static int __devinit azx_codec_create(struct azx *chip, const char *model)
 	bus_temp.private_data = chip;
 	bus_temp.modelname = model;
 	bus_temp.pci = chip->pci;
-	bus_temp.pdev = chip->pdev;
 	bus_temp.ops.command = azx_send_cmd;
 	bus_temp.ops.get_response = azx_get_response;
 	bus_temp.ops.attach_pcm = azx_attach_pcm_stream;
@@ -1829,12 +1664,6 @@ static struct snd_pcm_hardware azx_pcm_hw = {
 	.periods_min =		2,
 	.periods_max =		AZX_MAX_FRAG,
 	.fifo_size =		0,
-};
-
-struct azx_pcm {
-	struct azx *chip;
-	struct hda_codec *codec;
-	struct hda_pcm_stream *hinfo[2];
 };
 
 static int azx_pcm_open(struct snd_pcm_substream *substream)
@@ -2361,7 +2190,7 @@ static void azx_pcm_free(struct snd_pcm *pcm)
 {
 	struct azx_pcm *apcm = pcm->private_data;
 	if (apcm) {
-		apcm->chip->pcm[pcm->device] = NULL;
+		list_del(&apcm->list);
 		kfree(apcm);
 	}
 }
@@ -2379,14 +2208,11 @@ azx_attach_pcm_stream(struct hda_bus *bus, struct hda_codec *codec,
 	unsigned int size;
 	int s, err;
 
-	if (pcm_dev >= HDA_MAX_PCMS) {
-		snd_printk(KERN_ERR SFX "Invalid PCM device number %d\n",
-			   pcm_dev);
-		return -EINVAL;
-	}
-	if (chip->pcm[pcm_dev]) {
-		snd_printk(KERN_ERR SFX "PCM %d already exists\n", pcm_dev);
-		return -EBUSY;
+	list_for_each_entry(apcm, &chip->pcm_list, list) {
+		if (apcm->pcm->device == pcm_dev) {
+			snd_printk(KERN_ERR SFX "PCM %d already exists\n", pcm_dev);
+			return -EBUSY;
+		}
 	}
 	err = snd_pcm_new(chip->card, cpcm->name, pcm_dev,
 			  cpcm->stream[SNDRV_PCM_STREAM_PLAYBACK].substreams,
@@ -2399,12 +2225,13 @@ azx_attach_pcm_stream(struct hda_bus *bus, struct hda_codec *codec,
 	if (apcm == NULL)
 		return -ENOMEM;
 	apcm->chip = chip;
+	apcm->pcm = pcm;
 	apcm->codec = codec;
 	pcm->private_data = apcm;
 	pcm->private_free = azx_pcm_free;
 	if (cpcm->pcm_type == HDA_PCM_TYPE_MODEM)
 		pcm->dev_class = SNDRV_PCM_CLASS_MODEM;
-	chip->pcm[pcm_dev] = pcm;
+	list_add_tail(&apcm->list, &chip->pcm_list);
 	cpcm->pcm = pcm;
 	for (s = 0; s < 2; s++) {
 		apcm->hinfo[s] = &cpcm->stream[s];
@@ -2416,7 +2243,7 @@ azx_attach_pcm_stream(struct hda_bus *bus, struct hda_codec *codec,
 	if (size > MAX_PREALLOC_SIZE)
 		size = MAX_PREALLOC_SIZE;
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV_SG,
-					      chip->dev,
+					      snd_dma_pci_data(chip->pci),
 					      size, MAX_PREALLOC_SIZE);
 	return 0;
 }
@@ -2458,19 +2285,17 @@ static int __devinit azx_init_stream(struct azx *chip)
 
 static int azx_acquire_irq(struct azx *chip, int do_disconnect)
 {
-	if (request_irq(chip->irq_id, azx_interrupt,
+	if (request_irq(chip->pci->irq, azx_interrupt,
 			chip->msi ? 0 : IRQF_SHARED,
 			KBUILD_MODNAME, chip)) {
 		printk(KERN_ERR "hda-intel: unable to grab IRQ %d, "
-		       "disabling device\n", chip->irq_id);
+		       "disabling device\n", chip->pci->irq);
 		if (do_disconnect)
 			snd_card_disconnect(chip->card);
 		return -1;
 	}
-	chip->irq = chip->irq_id;
-	if (chip->pci)
-		pci_intx(chip->pci, !chip->msi);
-
+	chip->irq = chip->pci->irq;
+	pci_intx(chip->pci, !chip->msi);
 	return 0;
 }
 
@@ -2508,19 +2333,11 @@ static void azx_power_notify(struct hda_bus *bus)
 			break;
 		}
 	}
-	if (power_on) {
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-		azx_platform_enable_clocks(chip);
-#endif
+	if (power_on)
 		azx_init_chip(chip, 1);
-	}
 	else if (chip->running && power_save_controller &&
-		 !bus->power_keep_link_on) {
+		 !bus->power_keep_link_on)
 		azx_stop_chip(chip);
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-		azx_platform_disable_clocks(chip);
-#endif
-	}
 }
 #endif /* CONFIG_SND_HDA_POWER_SAVE */
 
@@ -2540,21 +2357,16 @@ static int snd_hda_codecs_inuse(struct hda_bus *bus)
 	return 0;
 }
 
-static int azx_suspend(struct azx *chip, pm_message_t state)
+static int azx_suspend(struct pci_dev *pci, pm_message_t state)
 {
-	struct snd_card *card = chip->card;
-	int i;
-
-#if defined(CONFIG_SND_HDA_PLATFORM_DRIVER) && \
-	defined(CONFIG_SND_HDA_POWER_SAVE)
-	if (chip->pdev)
-		azx_platform_enable_clocks(chip);
-#endif
+	struct snd_card *card = pci_get_drvdata(pci);
+	struct azx *chip = card->private_data;
+	struct azx_pcm *p;
 
 	snd_power_change_state(card, SNDRV_CTL_POWER_D3hot);
 	azx_clear_irq_pending(chip);
-	for (i = 0; i < HDA_MAX_PCMS; i++)
-		snd_pcm_suspend_all(chip->pcm[i]);
+	list_for_each_entry(p, &chip->pcm_list, list)
+		snd_pcm_suspend_all(p->pcm);
 	if (chip->initialized)
 		snd_hda_suspend(chip->bus);
 	azx_stop_chip(chip);
@@ -2562,111 +2374,42 @@ static int azx_suspend(struct azx *chip, pm_message_t state)
 		free_irq(chip->irq, chip);
 		chip->irq = -1;
 	}
-
-	if (chip->pci) {
-		if (chip->msi)
-			pci_disable_msi(chip->pci);
-		pci_disable_device(chip->pci);
-		pci_save_state(chip->pci);
-		pci_set_power_state(chip->pci,
-				    pci_choose_state(chip->pci, state));
-	}
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	if (chip->pdev) {
-		/* Disable all clk references */
-		while (chip->platform_clk_enable)
-			azx_platform_disable_clocks(chip);
-	}
-#endif
-
+	if (chip->msi)
+		pci_disable_msi(chip->pci);
+	pci_disable_device(pci);
+	pci_save_state(pci);
+	pci_set_power_state(pci, pci_choose_state(pci, state));
 	return 0;
 }
 
-static int azx_resume(struct azx *chip)
+static int azx_resume(struct pci_dev *pci)
 {
-	struct snd_card *card = chip->card;
+	struct snd_card *card = pci_get_drvdata(pci);
+	struct azx *chip = card->private_data;
 
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	if (chip->pdev)
-		azx_platform_enable_clocks(chip);
-#endif
-
-	if (chip->pci) {
-		pci_set_power_state(chip->pci, PCI_D0);
-		pci_restore_state(chip->pci);
-		if (pci_enable_device(chip->pci) < 0) {
-			printk(KERN_ERR "hda-intel: pci_enable_device failed, "
-			       "disabling device\n");
-			snd_card_disconnect(card);
-			return -EIO;
-		}
-		pci_set_master(chip->pci);
-		if (chip->msi)
-			if (pci_enable_msi(chip->pci) < 0)
-				chip->msi = 0;
+	pci_set_power_state(pci, PCI_D0);
+	pci_restore_state(pci);
+	if (pci_enable_device(pci) < 0) {
+		printk(KERN_ERR "hda-intel: pci_enable_device failed, "
+		       "disabling device\n");
+		snd_card_disconnect(card);
+		return -EIO;
 	}
-
+	pci_set_master(pci);
+	if (chip->msi)
+		if (pci_enable_msi(pci) < 0)
+			chip->msi = 0;
 	if (azx_acquire_irq(chip, 1) < 0)
 		return -EIO;
-
-	if (chip->pci)
-		azx_init_pci(chip);
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	if (chip->pdev)
-		azx_init_platform(chip);
-#endif
+	azx_init_pci(chip);
 
 	if (snd_hda_codecs_inuse(chip->bus))
 		azx_init_chip(chip, 1);
 
 	snd_hda_resume(chip->bus);
 	snd_power_change_state(card, SNDRV_CTL_POWER_D0);
-
-#if defined(CONFIG_SND_HDA_PLATFORM_DRIVER) && \
-	defined(CONFIG_SND_HDA_POWER_SAVE)
-	if (chip->pdev)
-		azx_platform_disable_clocks(chip);
-#endif
-
 	return 0;
 }
-
-static int azx_suspend_pci(struct pci_dev *pci, pm_message_t state)
-{
-	struct snd_card *card = pci_get_drvdata(pci);
-	struct azx *chip = card->private_data;
-
-	return azx_suspend(chip, state);
-}
-
-static int azx_resume_pci(struct pci_dev *pci)
-{
-	struct snd_card *card = pci_get_drvdata(pci);
-	struct azx *chip = card->private_data;
-
-	return azx_resume(chip);
-}
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-static int azx_suspend_platform(struct platform_device *pdev,
-				pm_message_t state)
-{
-	struct snd_card *card = dev_get_drvdata(&pdev->dev);
-	struct azx *chip = card->private_data;
-
-	return azx_suspend(chip, state);
-}
-
-static int azx_resume_platform(struct platform_device *pdev)
-{
-	struct snd_card *card = dev_get_drvdata(&pdev->dev);
-	struct azx *chip = card->private_data;
-
-	return azx_resume(chip);
-}
-#endif /* CONFIG_SND_HDA_PLATFORM_DRIVER */
 #endif /* CONFIG_PM */
 
 
@@ -2676,22 +2419,8 @@ static int azx_resume_platform(struct platform_device *pdev)
 static int azx_halt(struct notifier_block *nb, unsigned long event, void *buf)
 {
 	struct azx *chip = container_of(nb, struct azx, reboot_notifier);
-
-#if defined(CONFIG_SND_HDA_PLATFORM_DRIVER) && \
-	defined(CONFIG_SND_HDA_POWER_SAVE)
-	if (chip->pdev)
-		azx_platform_enable_clocks(chip);
-#endif
-
 	snd_hda_bus_reboot_notify(chip->bus);
 	azx_stop_chip(chip);
-
-#if defined(CONFIG_SND_HDA_PLATFORM_DRIVER) && \
-	defined(CONFIG_SND_HDA_POWER_SAVE)
-	if (chip->pdev)
-		azx_platform_disable_clocks(chip);
-#endif
-
 	return NOTIFY_OK;
 }
 
@@ -2723,15 +2452,9 @@ static int azx_free(struct azx *chip)
 		azx_stop_chip(chip);
 	}
 
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	azx_platform_disable_clocks(chip);
-	for (i = 0; i < chip->platform_clk_count; i++)
-		clk_put(chip->platform_clks[i]);
-#endif
-
 	if (chip->irq >= 0)
 		free_irq(chip->irq, (void*)chip);
-	if (chip->pci && chip->msi)
+	if (chip->msi)
 		pci_disable_msi(chip->pci);
 	if (chip->remap_addr)
 		iounmap(chip->remap_addr);
@@ -2751,10 +2474,8 @@ static int azx_free(struct azx *chip)
 		mark_pages_wc(chip, &chip->posbuf, false);
 		snd_dma_free_pages(&chip->posbuf);
 	}
-	if (chip->pci) {
-		pci_release_regions(chip->pci);
-		pci_disable_device(chip->pci);
-	}
+	pci_release_regions(chip->pci);
+	pci_disable_device(chip->pci);
 	kfree(chip->azx_dev);
 	kfree(chip);
 
@@ -2772,12 +2493,10 @@ static int azx_dev_free(struct snd_device *device)
 static struct snd_pci_quirk position_fix_list[] __devinitdata = {
 	SND_PCI_QUIRK(0x1028, 0x01cc, "Dell D820", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1028, 0x01de, "Dell Precision 390", POS_FIX_LPIB),
-	SND_PCI_QUIRK(0x1028, 0x02c6, "Dell Inspiron 1010", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x103c, 0x306d, "HP dv3", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1043, 0x813d, "ASUS P5AD2", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1043, 0x81b3, "ASUS", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1043, 0x81e7, "ASUS M2V", POS_FIX_LPIB),
-	SND_PCI_QUIRK(0x1043, 0x83ce, "ASUS 1101HA", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x104d, 0x9069, "Sony VPCS11V9E", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1297, 0x3166, "Shuttle", POS_FIX_LPIB),
 	SND_PCI_QUIRK(0x1458, 0xa022, "ga-ma770-ud3", POS_FIX_LPIB),
@@ -2799,15 +2518,13 @@ static int __devinit check_position_fix(struct azx *chip, int fix)
 		return fix;
 	}
 
-	if (chip->pci) {
-		q = snd_pci_quirk_lookup(chip->pci, position_fix_list);
-		if (q) {
-			printk(KERN_INFO
-			       "hda_intel: position_fix set to %d "
-			       "for device %04x:%04x\n",
-			       q->value, q->subvendor, q->subdevice);
-			return q->value;
-		}
+	q = snd_pci_quirk_lookup(chip->pci, position_fix_list);
+	if (q) {
+		printk(KERN_INFO
+		       "hda_intel: position_fix set to %d "
+		       "for device %04x:%04x\n",
+		       q->value, q->subvendor, q->subdevice);
+		return q->value;
 	}
 
 	/* Check VIA/ATI HD Audio Controller exist */
@@ -2849,7 +2566,7 @@ static void __devinit check_probe_mask(struct azx *chip, int dev)
 	const struct snd_pci_quirk *q;
 
 	chip->codec_probe_mask = probe_mask[dev];
-	if (chip->pci && (chip->codec_probe_mask == -1)) {
+	if (chip->codec_probe_mask == -1) {
 		q = snd_pci_quirk_lookup(chip->pci, probe_mask_list);
 		if (q) {
 			printk(KERN_INFO
@@ -2885,12 +2602,6 @@ static void __devinit check_msi(struct azx *chip)
 {
 	const struct snd_pci_quirk *q;
 
-	/* Disable MSI if chip is not a pci device */
-	if (!chip->pci) {
-		chip->msi = 0;
-		return;
-	}
-
 	if (enable_msi >= 0) {
 		chip->msi = !!enable_msi;
 		return;
@@ -2912,25 +2623,45 @@ static void __devinit check_msi(struct azx *chip)
 	}
 }
 
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-static const char *tegra_clk_names[] __devinitdata = {
-	"hda",
-	"hda2codec",
-	"hda2hdmi",
-};
-static struct clk *tegra_clks[ARRAY_SIZE(tegra_clk_names)];
-#endif
+/* check the snoop mode availability */
+static void __devinit azx_check_snoop_available(struct azx *chip)
+{
+	bool snoop = chip->snoop;
+
+	switch (chip->driver_type) {
+	case AZX_DRIVER_VIA:
+		/* force to non-snoop mode for a new VIA controller
+		 * when BIOS is set
+		 */
+		if (snoop) {
+			u8 val;
+			pci_read_config_byte(chip->pci, 0x42, &val);
+			if (!(val & 0x80) && chip->pci->revision == 0x30)
+				snoop = false;
+		}
+		break;
+	case AZX_DRIVER_ATIHDMI_NS:
+		/* new ATI HDMI requires non-snoop */
+		snoop = false;
+		break;
+	}
+
+	if (snoop != chip->snoop) {
+		snd_printk(KERN_INFO SFX "Force to %s mode\n",
+			   snoop ? "snoop" : "non-snoop");
+		chip->snoop = snoop;
+	}
+}
 
 /*
  * constructor
  */
 static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
-				struct platform_device *pdev,
 				int dev, unsigned int driver_caps,
 				struct azx **rchip)
 {
 	struct azx *chip;
-	int i, err = 0;
+	int i, err;
 	unsigned short gcap;
 	static struct snd_device_ops ops = {
 		.dev_free = azx_dev_free,
@@ -2938,17 +2669,14 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 
 	*rchip = NULL;
 
-	if (pci) {
-		err = pci_enable_device(pci);
-		if (err < 0)
-			return err;
-	}
+	err = pci_enable_device(pci);
+	if (err < 0)
+		return err;
 
 	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip) {
 		snd_printk(KERN_ERR SFX "cannot allocate chip\n");
-		if (pci)
-			pci_disable_device(pci);
+		pci_disable_device(pci);
 		return -ENOMEM;
 	}
 
@@ -2956,15 +2684,13 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	mutex_init(&chip->open_mutex);
 	chip->card = card;
 	chip->pci = pci;
-	chip->pdev = pdev;
-	chip->dev = pci ? snd_dma_pci_data(pci) : &pdev->dev;
-	chip->irq_id = pci ? pci->irq : platform_get_irq(pdev, 0);
 	chip->irq = -1;
 	chip->driver_caps = driver_caps;
 	chip->driver_type = driver_caps & 0xff;
 	check_msi(chip);
 	chip->dev_index = dev;
 	INIT_WORK(&chip->irq_pending_work, azx_irq_pending_work);
+	INIT_LIST_HEAD(&chip->pcm_list);
 
 	chip->position_fix[0] = chip->position_fix[1] =
 		check_position_fix(chip, position_fix[dev]);
@@ -2972,6 +2698,7 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 
 	chip->single_cmd = single_cmd;
 	chip->snoop = hda_snoop;
+	azx_check_snoop_available(chip);
 
 	if (bdl_pos_adj[dev] < 0) {
 		switch (chip->driver_type) {
@@ -2995,105 +2722,38 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	}
 #endif
 
-	if (chip->pci) {
-		err = pci_request_regions(pci, "ICH HD audio");
-		if (err < 0) {
-			kfree(chip);
-			pci_disable_device(pci);
-			return err;
-		}
-
-		chip->addr = pci_resource_start(pci, 0);
-		chip->remap_addr = pci_ioremap_bar(pci, 0);
-		if (chip->remap_addr == NULL) {
-			snd_printk(KERN_ERR SFX "ioremap error\n");
-			err = -ENXIO;
-			goto errout;
-		}
-
-		if (chip->msi)
-			if (pci_enable_msi(pci) < 0)
-				chip->msi = 0;
+	err = pci_request_regions(pci, "ICH HD audio");
+	if (err < 0) {
+		kfree(chip);
+		pci_disable_device(pci);
+		return err;
 	}
 
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	if (chip->pdev) {
-		struct resource *res, *region;
-
-		/* Do platform specific initialization */
-		switch (chip->driver_type) {
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-		case AZX_DRIVER_NVIDIA_TEGRA:
-			chip->platform_clk_count = ARRAY_SIZE(tegra_clk_names);
-			for (i = 0; i < chip->platform_clk_count; i++) {
-				tegra_clks[i] = clk_get(&pdev->dev,
-							tegra_clk_names[i]);
-				if (IS_ERR_OR_NULL(tegra_clks[i])) {
-					err = PTR_ERR(tegra_clks[i]);
-					goto errout;
-				}
-			}
-			chip->platform_clks = tegra_clks;
-			break;
-#endif
-		default:
-			break;
-		}
-
-		azx_platform_enable_clocks(chip);
-
-		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-		if (res == NULL) {
-			err = EINVAL;
-			goto errout;
-		}
-
-		region = devm_request_mem_region(chip->dev, res->start,
-						 resource_size(res),
-						 pdev->name);
-		if (!region) {
-			snd_printk(KERN_ERR SFX "Mem region already claimed\n");
-			err = -EINVAL;
-			goto errout;
-		}
-
-		chip->addr = res->start;
-		chip->remap_addr = devm_ioremap(chip->dev,
-						res->start,
-						resource_size(res));
-		if (chip->remap_addr == NULL) {
-			snd_printk(KERN_ERR SFX "ioremap error\n");
-			err = -ENXIO;
-			goto errout;
-		}
-
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-		if (chip->driver_type == AZX_DRIVER_NVIDIA_TEGRA) {
-			chip->remap_config_addr = chip->remap_addr;
-			chip->remap_addr += NVIDIA_TEGRA_HDA_BAR0_OFFSET;
-			chip->addr += NVIDIA_TEGRA_HDA_BAR0_OFFSET;
-		}
-#endif
-
-		azx_init_platform(chip);
+	chip->addr = pci_resource_start(pci, 0);
+	chip->remap_addr = pci_ioremap_bar(pci, 0);
+	if (chip->remap_addr == NULL) {
+		snd_printk(KERN_ERR SFX "ioremap error\n");
+		err = -ENXIO;
+		goto errout;
 	}
-#endif /* CONFIG_SND_HDA_PLATFORM_DRIVER */
+
+	if (chip->msi)
+		if (pci_enable_msi(pci) < 0)
+			chip->msi = 0;
 
 	if (azx_acquire_irq(chip, 0) < 0) {
 		err = -EBUSY;
 		goto errout;
 	}
 
-	if (chip->pci)
-		pci_set_master(pci);
-
+	pci_set_master(pci);
 	synchronize_irq(chip->irq);
 
 	gcap = azx_readw(chip, GCAP);
 	snd_printdd(SFX "chipset global capabilities = 0x%x\n", gcap);
 
 	/* disable SB600 64bit support for safety */
-	if (chip->pci && chip->pci->vendor == PCI_VENDOR_ID_ATI) {
+	if (chip->pci->vendor == PCI_VENDOR_ID_ATI) {
 		struct pci_dev *p_smbus;
 		p_smbus = pci_get_device(PCI_VENDOR_ID_ATI,
 					 PCI_DEVICE_ID_ATI_SBX00_SMBUS,
@@ -3115,14 +2775,12 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	if (chip->driver_caps & AZX_DCAPS_BUFSIZE)
 		align_buffer_size = 0;
 
-	if (chip->pci) {
-		/* allow 64bit DMA address if supported by H/W */
-		if ((gcap & ICH6_GCAP_64OK) && !pci_set_dma_mask(pci, DMA_BIT_MASK(64)))
-			pci_set_consistent_dma_mask(pci, DMA_BIT_MASK(64));
-		else {
-			pci_set_dma_mask(pci, DMA_BIT_MASK(32));
-			pci_set_consistent_dma_mask(pci, DMA_BIT_MASK(32));
-		}
+	/* allow 64bit DMA address if supported by H/W */
+	if ((gcap & ICH6_GCAP_64OK) && !pci_set_dma_mask(pci, DMA_BIT_MASK(64)))
+		pci_set_consistent_dma_mask(pci, DMA_BIT_MASK(64));
+	else {
+		pci_set_dma_mask(pci, DMA_BIT_MASK(32));
+		pci_set_consistent_dma_mask(pci, DMA_BIT_MASK(32));
 	}
 
 	/* read number of streams from GCAP register instead of using
@@ -3139,6 +2797,7 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 			chip->capture_streams = ULI_NUM_CAPTURE;
 			break;
 		case AZX_DRIVER_ATIHDMI:
+		case AZX_DRIVER_ATIHDMI_NS:
 			chip->playback_streams = ATIHDMI_NUM_PLAYBACK;
 			chip->capture_streams = ATIHDMI_NUM_CAPTURE;
 			break;
@@ -3162,7 +2821,7 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	for (i = 0; i < chip->num_streams; i++) {
 		/* allocate memory for the BDL for each stream */
 		err = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV,
-					  chip->dev,
+					  snd_dma_pci_data(chip->pci),
 					  BDL_SIZE, &chip->azx_dev[i].bdl);
 		if (err < 0) {
 			snd_printk(KERN_ERR SFX "cannot allocate BDL\n");
@@ -3172,7 +2831,7 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	}
 	/* allocate memory for the position buffer */
 	err = snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV,
-				  chip->dev,
+				  snd_dma_pci_data(chip->pci),
 				  chip->num_streams * 8, &chip->posbuf);
 	if (err < 0) {
 		snd_printk(KERN_ERR SFX "cannot allocate posbuf\n");
@@ -3188,8 +2847,7 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 	azx_init_stream(chip);
 
 	/* initialize chip */
-	if (chip->pci)
-		azx_init_pci(chip);
+	azx_init_pci(chip);
 	azx_init_chip(chip, (probe_only[dev] & 2) == 0);
 
 	/* codec detection */
@@ -3234,13 +2892,11 @@ static void power_down_all_codecs(struct azx *chip)
 }
 
 static int __devinit azx_probe(struct pci_dev *pci,
-			       struct platform_device *pdev,
-			       int driver_data)
+			       const struct pci_device_id *pci_id)
 {
 	static int dev;
 	struct snd_card *card;
 	struct azx *chip;
-	struct device *azx_dev = pci ? &pci->dev : &pdev->dev;
 	int err;
 
 	if (dev >= SNDRV_CARDS)
@@ -3257,9 +2913,9 @@ static int __devinit azx_probe(struct pci_dev *pci,
 	}
 
 	/* set this here since it's referred in snd_hda_load_patch() */
-	snd_card_set_dev(card, azx_dev);
+	snd_card_set_dev(card, &pci->dev);
 
-	err = azx_create(card, pci, pdev, dev, driver_data, &chip);
+	err = azx_create(card, pci, dev, pci_id->driver_data, &chip);
 	if (err < 0)
 		goto out_free;
 	card->private_data = chip;
@@ -3301,11 +2957,7 @@ static int __devinit azx_probe(struct pci_dev *pci,
 	if (err < 0)
 		goto out_free;
 
-	if (pci)
-		pci_set_drvdata(pci, card);
-	else
-		dev_set_drvdata(&pdev->dev, card);
-
+	pci_set_drvdata(pci, card);
 	chip->running = 1;
 	power_down_all_codecs(chip);
 	azx_notifier_register(chip);
@@ -3317,20 +2969,14 @@ out_free:
 	return err;
 }
 
-static int __devinit azx_probe_pci(struct pci_dev *pci,
-				   const struct pci_device_id *pci_id)
-{
-	return azx_probe(pci, NULL, pci_id->driver_data);
-}
-
-static void __devexit azx_remove_pci(struct pci_dev *pci)
+static void __devexit azx_remove(struct pci_dev *pci)
 {
 	snd_card_free(pci_get_drvdata(pci));
 	pci_set_drvdata(pci, NULL);
 }
 
 /* PCI IDs */
-static DEFINE_PCI_DEVICE_TABLE(azx_pci_ids) = {
+static DEFINE_PCI_DEVICE_TABLE(azx_ids) = {
 	/* CPT */
 	{ PCI_DEVICE(0x8086, 0x1c20),
 	  .driver_data = AZX_DRIVER_PCH | AZX_DCAPS_SCH_SNOOP |
@@ -3347,6 +2993,9 @@ static DEFINE_PCI_DEVICE_TABLE(azx_pci_ids) = {
 	{ PCI_DEVICE(0x8086, 0x811b),
 	  .driver_data = AZX_DRIVER_SCH | AZX_DCAPS_SCH_SNOOP |
 	  AZX_DCAPS_BUFSIZE | AZX_DCAPS_POSFIX_LPIB }, /* Poulsbo */
+	{ PCI_DEVICE(0x8086, 0x080a),
+	  .driver_data = AZX_DRIVER_SCH | AZX_DCAPS_SCH_SNOOP |
+	  AZX_DCAPS_BUFSIZE | AZX_DCAPS_POSFIX_LPIB }, /* Oaktrail */
 	/* ICH */
 	{ PCI_DEVICE(0x8086, 0x2668),
 	  .driver_data = AZX_DRIVER_ICH | AZX_DCAPS_OLD_SSYNC |
@@ -3414,6 +3063,14 @@ static DEFINE_PCI_DEVICE_TABLE(azx_pci_ids) = {
 	  .driver_data = AZX_DRIVER_ATIHDMI | AZX_DCAPS_PRESET_ATI_HDMI },
 	{ PCI_DEVICE(0x1002, 0xaa48),
 	  .driver_data = AZX_DRIVER_ATIHDMI | AZX_DCAPS_PRESET_ATI_HDMI },
+	{ PCI_DEVICE(0x1002, 0x9902),
+	  .driver_data = AZX_DRIVER_ATIHDMI_NS | AZX_DCAPS_PRESET_ATI_HDMI },
+	{ PCI_DEVICE(0x1002, 0xaaa0),
+	  .driver_data = AZX_DRIVER_ATIHDMI_NS | AZX_DCAPS_PRESET_ATI_HDMI },
+	{ PCI_DEVICE(0x1002, 0xaaa8),
+	  .driver_data = AZX_DRIVER_ATIHDMI_NS | AZX_DCAPS_PRESET_ATI_HDMI },
+	{ PCI_DEVICE(0x1002, 0xaab0),
+	  .driver_data = AZX_DRIVER_ATIHDMI_NS | AZX_DCAPS_PRESET_ATI_HDMI },
 	/* VIA VT8251/VT8237A */
 	{ PCI_DEVICE(0x1106, 0x3288),
 	  .driver_data = AZX_DRIVER_VIA | AZX_DCAPS_POSFIX_VIA },
@@ -3461,85 +3118,27 @@ static DEFINE_PCI_DEVICE_TABLE(azx_pci_ids) = {
 	  .driver_data = AZX_DRIVER_GENERIC | AZX_DCAPS_PRESET_ATI_HDMI },
 	{ 0, }
 };
-MODULE_DEVICE_TABLE(pci, azx_pci_ids);
+MODULE_DEVICE_TABLE(pci, azx_ids);
 
 /* pci_driver definition */
 static struct pci_driver driver = {
 	.name = KBUILD_MODNAME,
-	.id_table = azx_pci_ids,
-	.probe = azx_probe_pci,
-	.remove = __devexit_p(azx_remove_pci),
+	.id_table = azx_ids,
+	.probe = azx_probe,
+	.remove = __devexit_p(azx_remove),
 #ifdef CONFIG_PM
-	.suspend = azx_suspend_pci,
-	.resume = azx_resume_pci,
+	.suspend = azx_suspend,
+	.resume = azx_resume,
 #endif
 };
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-static int __devinit azx_probe_platform(struct platform_device *pdev)
-{
-	const struct platform_device_id *pdev_id = platform_get_device_id(pdev);
-
-	return azx_probe(NULL, pdev, pdev_id->driver_data);
-}
-
-static int __devexit azx_remove_platform(struct platform_device *pdev)
-{
-	return snd_card_free(dev_get_drvdata(&pdev->dev));
-}
-
-static const struct platform_device_id azx_platform_ids[] = {
-#ifdef CONFIG_SND_HDA_PLATFORM_NVIDIA_TEGRA
-	{ "tegra30-hda",
-	  .driver_data = AZX_DRIVER_NVIDIA_TEGRA | AZX_DCAPS_RIRB_DELAY },
-#endif
-	{ },
-};
-MODULE_DEVICE_TABLE(platform, azx_platform_ids);
-
-/* platform_driver definition */
-static struct platform_driver hda_platform_driver = {
-	.driver = {
-		.name = "hda-platform"
-	},
-	.probe = azx_probe_platform,
-	.remove = __devexit_p(azx_remove_platform),
-	.id_table = azx_platform_ids,
-#ifdef CONFIG_PM
-	.suspend = azx_suspend_platform,
-	.resume = azx_resume_platform,
-#endif
-};
-#endif /* CONFIG_SND_HDA_PLATFORM_DRIVER */
 
 static int __init alsa_card_azx_init(void)
 {
-	int err = 0;
-
-	err = pci_register_driver(&driver);
-	if (err < 0) {
-		snd_printk(KERN_ERR SFX "Failed to register pci driver\n");
-		return err;
-	}
-
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	err = platform_driver_register(&hda_platform_driver);
-	if (err < 0) {
-		snd_printk(KERN_ERR SFX "Failed to register platform driver\n");
-		pci_unregister_driver(&driver);
-		return err;
-	}
-#endif
-
-	return 0;
+	return pci_register_driver(&driver);
 }
 
 static void __exit alsa_card_azx_exit(void)
 {
-#ifdef CONFIG_SND_HDA_PLATFORM_DRIVER
-	platform_driver_unregister(&hda_platform_driver);
-#endif
-
 	pci_unregister_driver(&driver);
 }
 
