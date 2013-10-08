@@ -55,6 +55,15 @@ unsigned int VFP_arch;
 union vfp_state *vfp_current_hw_state[NR_CPUS];
 
 /*
+ * Is 'thread's most up to date state stored in this CPUs hardware?
+ * Must be called from non-preemptible context.
+ */
+static bool vfp_state_in_hw(unsigned int cpu, struct thread_info *thread)
+{
+	return vfp_current_hw_state[cpu] == &thread->vfpstate;
+}
+
+/*
  * Force a reload of the VFP context from the thread structure.  We do
  * this by ensuring that access to the VFP hardware is disabled, and
  * clear last_VFP_context.  Must be called from non-preemptible context.
@@ -65,7 +74,7 @@ static void vfp_force_reload(unsigned int cpu, struct thread_info *thread)
 	 * If the thread we're interested in is the current owner of the
 	 * hardware VFP state, then we need to save its state.
 	 */
-	if (vfp_current_hw_state[cpu] == &thread->vfpstate) {
+	if (vfp_state_in_hw(cpu, thread)) {
 		u32 fpexc = fmrx(FPEXC);
 
 		fmxr(FPEXC, fpexc & ~FPEXC_EN);
@@ -546,7 +555,7 @@ void vfp_sync_hwstate(struct thread_info *thread)
 	 * If the thread we're interested in is the current owner of the
 	 * hardware VFP state, then we need to save its state.
 	 */
-	if (vfp_current_hw_state[cpu] == &thread->vfpstate) {
+	if (vfp_state_in_hw(cpu, thread)) {
 		u32 fpexc = fmrx(FPEXC);
 
 		/*
