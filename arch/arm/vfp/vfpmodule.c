@@ -55,6 +55,40 @@ unsigned int VFP_arch;
 union vfp_state *vfp_current_hw_state[NR_CPUS];
 
 /*
+ * Force a reload of the VFP context from the thread structure.  We do
+ * this by ensuring that access to the VFP hardware is disabled, and
+ * clear last_VFP_context.  Must be called from non-preemptible context.
+ */
+static void vfp_force_reload(unsigned int cpu, struct thread_info *thread)
+{
+	/*
+	 * If the thread we're interested in is the current owner of the
+	 * hardware VFP state, then we need to save its state.
+	 */
+	if (vfp_current_hw_state[cpu] == &thread->vfpstate) {
+		u32 fpexc = fmrx(FPEXC);
+
+		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+
+		/*
+		 * Set the context to NULL to force a reload the next time
+		 * the thread uses the VFP.
+		 */
+		vfp_current_hw_state[cpu] = NULL;
+	}
+
+#ifdef CONFIG_SMP
+	/*
+	 * For SMP we still have to take care of the case where the thread
+	 * migrates to another CPU and then back to the original CPU on which
+	 * the last VFP user is still the same thread. Mark the thread VFP
+	 * state as belonging to a non-existent CPU so that the saved one will
+	 * be reloaded in the above case.
+	 */
+	thread->vfpstate.hard.cpu = NR_CPUS;
+#endif
+}
+/*
  * Per-thread VFP initialization.
  */
 static void vfp_thread_flush(struct thread_info *thread)
@@ -531,32 +565,8 @@ void vfp_flush_hwstate(struct thread_info *thread)
 {
 	unsigned int cpu = get_cpu();
 
-	/*
-	 * If the thread we're interested in is the current owner of the
-	 * hardware VFP state, then we need to save its state.
-	 */
-	if (vfp_current_hw_state[cpu] == &thread->vfpstate) {
-		u32 fpexc = fmrx(FPEXC);
+	vfp_force_reload(cpu, thread);
 
-		fmxr(FPEXC, fpexc & ~FPEXC_EN);
-
-		/*
-		 * Set the context to NULL to force a reload the next time
-		 * the thread uses the VFP.
-		 */
-		vfp_current_hw_state[cpu] = NULL;
-	}
-
-#ifdef CONFIG_SMP
-	/*
-	 * For SMP we still have to take care of the case where the thread
-	 * migrates to another CPU and then back to the original CPU on which
-	 * the last VFP user is still the same thread. Mark the thread VFP
-	 * state as belonging to a non-existent CPU so that the saved one will
-	 * be reloaded in the above case.
-	 */
-	thread->vfpstate.hard.cpu = NR_CPUS;
-#endif
 	put_cpu();
 }
 
