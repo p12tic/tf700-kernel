@@ -1857,7 +1857,7 @@ static void __init tegra_cardhu_reserve(void)
 }
 
 MACHINE_START(CARDHU, "cardhu")
-	.boot_params    = 0x80000100,
+	.atag_offset    = 0x100,
 	.map_io         = tegra_map_common_io,
 	.reserve        = tegra_cardhu_reserve,
 	.init_early	= tegra_init_early,
