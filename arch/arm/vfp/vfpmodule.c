@@ -459,8 +459,7 @@ static void vfp_enable(void *unused)
 	set_copro_access(access | CPACC_FULL(10) | CPACC_FULL(11));
 }
 
-#ifdef CONFIG_PM
-#include <linux/syscore_ops.h>
+#ifdef CONFIG_CPU_PM
 
 static int vfp_pm_suspend(void)
 {
@@ -504,23 +503,13 @@ static void vfp_pm_resume(void)
 static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
 	void *v)
 {
-	u32 fpexc = fmrx(FPEXC);
-	unsigned int cpu = smp_processor_id();
-
 	switch (cmd) {
 	case CPU_PM_ENTER:
-		if (vfp_current_hw_state[cpu]) {
-			fmxr(FPEXC, fpexc | FPEXC_EN);
-			vfp_save_state(vfp_current_hw_state[cpu], fpexc);
-			/* force a reload when coming back from idle */
-			vfp_current_hw_state[cpu] = NULL;
-			fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		}
+		vfp_pm_suspend();
 		break;
 	case CPU_PM_ENTER_FAILED:
 	case CPU_PM_EXIT:
-		/* make sure VFP is disabled when leaving idle */
-		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+		vfp_pm_resume();
 		break;
 	}
 	return NOTIFY_OK;
@@ -530,19 +519,14 @@ static struct notifier_block vfp_cpu_pm_notifier_block = {
 	.notifier_call = vfp_cpu_pm_notifier,
 };
 
-static struct syscore_ops vfp_pm_syscore_ops = {
-	.suspend	= vfp_pm_suspend,
-	.resume		= vfp_pm_resume,
-};
-
 static void vfp_pm_init(void)
 {
-	register_syscore_ops(&vfp_pm_syscore_ops);
+	cpu_pm_register_notifier(&vfp_cpu_pm_notifier_block);
 }
 
 #else
 static inline void vfp_pm_init(void) { }
-#endif /* CONFIG_PM */
+#endif /* CONFIG_CPU_PM */
 
 /*
  * Ensure that the VFP state stored in 'thread->vfpstate' is up to date
@@ -643,7 +627,6 @@ static int __init vfp_init(void)
 		vfp_vector = vfp_support_entry;
 
 		thread_register_notifier(&vfp_notifier_block);
-		cpu_pm_register_notifier(&vfp_cpu_pm_notifier_block);
 		vfp_pm_init();
 
 		/*
