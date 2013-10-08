@@ -15,12 +15,11 @@
  *
  */
 
+#include <linux/cpu_pm.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
-
-#include <asm/cpu_pm.h>
 
 static DEFINE_RWLOCK(cpu_pm_notifier_lock);
 static RAW_NOTIFIER_HEAD(cpu_pm_notifier_chain);

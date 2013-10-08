@@ -20,6 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <linux/cpu_pm.h>
 #include <linux/kernel.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
@@ -48,7 +49,6 @@
 #include <trace/events/power.h>
 
 #include <asm/cacheflush.h>
-#include <asm/cpu_pm.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
 #include <asm/pgalloc.h>

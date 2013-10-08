@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/cpu.h>
+#include <linux/cpu_pm.h>
 #include <linux/hardirq.h>
 #include <linux/kernel.h>
 #include <linux/notifier.h>
@@ -22,7 +23,6 @@
 #include <asm/cputype.h>
 #include <asm/thread_notify.h>
 #include <asm/vfp.h>
-#include <asm/cpu_pm.h>
 
 #include "vfpinstr.h"
 #include "vfp.h"

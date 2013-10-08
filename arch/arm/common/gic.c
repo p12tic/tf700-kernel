@@ -22,6 +22,7 @@
  * As such, the enable set/clear, pending set/clear and active bit
  * registers are banked per-cpu for these sources.
  */
+#include <linux/cpu_pm.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -29,7 +30,6 @@
 #include <linux/cpumask.h>
 #include <linux/io.h>
 
-#include <asm/cpu_pm.h>
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 #include <asm/hardware/gic.h>

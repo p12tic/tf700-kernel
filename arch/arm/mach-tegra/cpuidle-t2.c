@@ -25,6 +25,7 @@
 
 #include <linux/kernel.h>
 #include <linux/cpu.h>
+#include <linux/cpu_pm.h>
 #include <linux/cpuidle.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -38,8 +39,6 @@
 #include <linux/smp.h>
 #include <linux/suspend.h>
 #include <linux/tick.h>
-
-#include <asm/cpu_pm.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>

@@ -7,11 +7,11 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <linux/cpu_pm.h>
 #include <linux/kernel.h>
 #include <linux/io.h>
 #include <linux/smp.h>
 
-#include <asm/cpu_pm.h>
 #include <asm/cacheflush.h>
 
 #include <mach/iomap.h>
