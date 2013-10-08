@@ -97,6 +97,7 @@ static void vfp_force_reload(unsigned int cpu, struct thread_info *thread)
 	thread->vfpstate.hard.cpu = NR_CPUS;
 #endif
 }
+
 /*
  * Per-thread VFP initialization.
  */
@@ -104,11 +105,6 @@ static void vfp_thread_flush(struct thread_info *thread)
 {
 	union vfp_state *vfp = &thread->vfpstate;
 	unsigned int cpu;
-
-	memset(vfp, 0, sizeof(union vfp_state));
-
-	vfp->hard.fpexc = FPEXC_EN;
-	vfp->hard.fpscr = FPSCR_ROUND_NEAREST;
 
 	/*
 	 * Disable VFP to ensure we initialize it first.  We must ensure
@@ -123,6 +119,11 @@ static void vfp_thread_flush(struct thread_info *thread)
 		vfp_current_hw_state[cpu] = NULL;
 	fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
 	put_cpu();
+
+	memset(vfp, 0, sizeof(union vfp_state));
+
+	vfp->hard.fpexc = FPEXC_EN;
+	vfp->hard.fpscr = FPSCR_ROUND_NEAREST;
 }
 
 static void vfp_thread_exit(struct thread_info *thread)
@@ -225,35 +226,6 @@ static int vfp_notifier(struct notifier_block *self, unsigned long cmd, void *v)
 
 static struct notifier_block vfp_notifier_block = {
 	.notifier_call	= vfp_notifier,
-};
-
-static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
-	void *v)
-{
-	u32 fpexc = fmrx(FPEXC);
-	unsigned int cpu = smp_processor_id();
-
-	switch (cmd) {
-	case CPU_PM_ENTER:
-		if (vfp_current_hw_state[cpu]) {
-			fmxr(FPEXC, fpexc | FPEXC_EN);
-			vfp_save_state(vfp_current_hw_state[cpu], fpexc);
-			/* force a reload when coming back from idle */
-			vfp_current_hw_state[cpu] = NULL;
-			fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		}
-		break;
-	case CPU_PM_ENTER_FAILED:
-	case CPU_PM_EXIT:
-		/* make sure VFP is disabled when leaving idle */
-		fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		break;
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block vfp_cpu_pm_notifier_block = {
-	.notifier_call = vfp_cpu_pm_notifier,
 };
 
 /*
@@ -528,6 +500,35 @@ static void vfp_pm_resume(void)
 	/* and disable it to ensure the next usage restores the state */
 	fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
 }
+
+static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
+	void *v)
+{
+	u32 fpexc = fmrx(FPEXC);
+	unsigned int cpu = smp_processor_id();
+
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		if (vfp_current_hw_state[cpu]) {
+			fmxr(FPEXC, fpexc | FPEXC_EN);
+			vfp_save_state(vfp_current_hw_state[cpu], fpexc);
+			/* force a reload when coming back from idle */
+			vfp_current_hw_state[cpu] = NULL;
+			fmxr(FPEXC, fpexc & ~FPEXC_EN);
+		}
+		break;
+	case CPU_PM_ENTER_FAILED:
+	case CPU_PM_EXIT:
+		/* make sure VFP is disabled when leaving idle */
+		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block vfp_cpu_pm_notifier_block = {
+	.notifier_call = vfp_cpu_pm_notifier,
+};
 
 static struct syscore_ops vfp_pm_syscore_ops = {
 	.suspend	= vfp_pm_suspend,
