@@ -520,11 +520,11 @@ static int gic_notifier(struct notifier_block *self, unsigned long cmd,	void *v)
 		case CPU_PM_EXIT:
 			gic_cpu_restore(i);
 			break;
-		case CPU_COMPLEX_PM_ENTER:
+		case CPU_CLUSTER_PM_ENTER:
 			gic_dist_save(i);
 			break;
-		case CPU_COMPLEX_PM_ENTER_FAILED:
-		case CPU_COMPLEX_PM_EXIT:
+		case CPU_CLUSTER_PM_ENTER_FAILED:
+		case CPU_CLUSTER_PM_EXIT:
 			gic_dist_restore(i);
 			break;
 		}

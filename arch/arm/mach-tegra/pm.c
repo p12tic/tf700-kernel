@@ -631,7 +631,7 @@ unsigned int tegra_idle_lp2_last(unsigned int sleep_time, unsigned int flags)
 	if (sleep_time)
 		tegra_lp2_set_trigger(sleep_time);
 
-	cpu_complex_pm_enter();
+	cpu_cluster_pm_enter();
 	suspend_cpu_complex(flags);
 	tegra_cluster_switch_time(flags, tegra_cluster_switch_time_id_prolog);
 	flush_cache_all();
@@ -650,7 +650,7 @@ unsigned int tegra_idle_lp2_last(unsigned int sleep_time, unsigned int flags)
 	tegra_init_cache(false);
 	tegra_cluster_switch_time(flags, tegra_cluster_switch_time_id_switch);
 	restore_cpu_complex(flags);
-	cpu_complex_pm_exit();
+	cpu_cluster_pm_exit();
 
 	remain = tegra_lp2_timer_remain();
 	if (sleep_time)
@@ -905,7 +905,7 @@ int tegra_suspend_dram(enum tegra_suspend_mode mode, unsigned int flags)
 	trace_cpu_suspend(CPU_SUSPEND_START);
 
 	cpu_pm_enter();
-	cpu_complex_pm_enter();
+	cpu_cluster_pm_enter();
 
 	if (mode == TEGRA_SUSPEND_LP0) {
 #ifdef CONFIG_TEGRA_CLUSTER_CONTROL
@@ -961,7 +961,7 @@ int tegra_suspend_dram(enum tegra_suspend_mode mode, unsigned int flags)
 		pmc_32kwritel(reg, PMC_CTRL);
 	}
 
-	cpu_complex_pm_exit();
+	cpu_cluster_pm_exit();
 	cpu_pm_exit();
 
 	if (pdata && pdata->board_resume)
