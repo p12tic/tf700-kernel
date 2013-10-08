@@ -37,18 +37,22 @@ void vfp_null_entry(void);
 void (*vfp_vector)(void) = vfp_null_entry;
 
 /*
- * The pointer to the vfpstate structure of the thread which currently
- * owns the context held in the VFP hardware, or NULL if the hardware
- * context is invalid.
- */
-union vfp_state *vfp_current_hw_state[NR_CPUS];
-
-/*
  * Dual-use variable.
  * Used in startup: set to non-zero if VFP checks fail
  * After startup, holds VFP architecture
  */
 unsigned int VFP_arch;
+
+/*
+ * The pointer to the vfpstate structure of the thread which currently
+ * owns the context held in the VFP hardware, or NULL if the hardware
+ * context is invalid.
+ *
+ * For UP, this is sufficient to tell which thread owns the VFP context.
+ * However, for SMP, we also need to check the CPU number stored in the
+ * saved state too to catch migrations.
+ */
+union vfp_state *vfp_current_hw_state[NR_CPUS];
 
 /*
  * Per-thread VFP initialization.
@@ -65,8 +69,11 @@ static void vfp_thread_flush(struct thread_info *thread)
 
 	/*
 	 * Disable VFP to ensure we initialize it first.  We must ensure
-	 * that the modification of vfp_current_hw_state[] and hardware disable
-	 * are done for the same CPU and without preemption.
+	 * that the modification of vfp_current_hw_state[] and hardware
+	 * disable are done for the same CPU and without preemption.
+	 *
+	 * Do this first to ensure that preemption won't overwrite our
+	 * state saving should access to the VFP be enabled at this point.
 	 */
 	cpu = get_cpu();
 	if (vfp_current_hw_state[cpu] == vfp)
@@ -493,6 +500,10 @@ static void vfp_pm_init(void)
 static inline void vfp_pm_init(void) { }
 #endif /* CONFIG_PM */
 
+/*
+ * Ensure that the VFP state stored in 'thread->vfpstate' is up to date
+ * with the hardware state.
+ */
 void vfp_sync_hwstate(struct thread_info *thread)
 {
 	unsigned int cpu = get_cpu();
@@ -515,6 +526,7 @@ void vfp_sync_hwstate(struct thread_info *thread)
 	put_cpu();
 }
 
+/* Ensure that the thread reloads the hardware VFP state on the next use. */
 void vfp_flush_hwstate(struct thread_info *thread)
 {
 	unsigned int cpu = get_cpu();
