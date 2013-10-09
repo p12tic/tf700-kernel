@@ -84,6 +84,12 @@ enum {
 	CSS_REMOVED, /* This CSS is dead */
 };
 
+/* Caller must verify that the css is not for root cgroup */
+static inline void __css_get(struct cgroup_subsys_state *css, int count)
+{
+	atomic_add(count, &css->refcnt);
+}
+
 /*
  * Call css_get() to hold a reference on the css; it can be used
  * for a reference obtained via:
@@ -91,7 +97,6 @@ enum {
  * - task->cgroups for a locked task
  */
 
-extern void __css_get(struct cgroup_subsys_state *css, int count);
 static inline void css_get(struct cgroup_subsys_state *css)
 {
 	/* We don't need to reference count the root state */
@@ -138,7 +143,10 @@ static inline void css_put(struct cgroup_subsys_state *css)
 enum {
 	/* Control Group is dead */
 	CGRP_REMOVED,
-	/* Control Group has ever had a child cgroup or a task */
+	/*
+	 * Control Group has previously had a child cgroup or a task,
+	 * but no longer (only if CGRP_NOTIFY_ON_RELEASE is set)
+	 */
 	CGRP_RELEASABLE,
 	/* Control Group requires release notifications to userspace */
 	CGRP_NOTIFY_ON_RELEASE,
@@ -150,38 +158,6 @@ enum {
 	 * Clone cgroup values when creating a new child cgroup
 	 */
 	CGRP_CLONE_CHILDREN,
-};
-
-/* which pidlist file are we talking about? */
-enum cgroup_filetype {
-	CGROUP_FILE_PROCS,
-	CGROUP_FILE_TASKS,
-};
-
-/*
- * A pidlist is a list of pids that virtually represents the contents of one
- * of the cgroup files ("procs" or "tasks"). We keep a list of such pidlists,
- * a pair (one each for procs, tasks) for each pid namespace that's relevant
- * to the cgroup.
- */
-struct cgroup_pidlist {
-	/*
-	 * used to find which pidlist is wanted. doesn't change as long as
-	 * this particular list stays in the list.
-	 */
-	struct { enum cgroup_filetype type; struct pid_namespace *ns; } key;
-	/* array of xids */
-	pid_t *list;
-	/* how many elements the above list has */
-	int length;
-	/* how many files are using the current array */
-	int use_count;
-	/* each of these stored in a list by its cgroup */
-	struct list_head links;
-	/* pointer to the cgroup we belong to, for list removal purposes */
-	struct cgroup *owner;
-	/* protects the other fields */
-	struct rw_semaphore mutex;
 };
 
 struct cgroup {
@@ -279,7 +255,6 @@ struct css_set {
 
 	/* For RCU-protected deletion */
 	struct rcu_head rcu_head;
-	struct work_struct work;
 };
 
 /*
@@ -477,24 +452,18 @@ int cgroup_taskset_size(struct cgroup_taskset *tset);
  */
 
 struct cgroup_subsys {
-	struct cgroup_subsys_state *(*create)(struct cgroup_subsys *ss,
-						  struct cgroup *cgrp);
-	int (*pre_destroy)(struct cgroup_subsys *ss, struct cgroup *cgrp);
-	void (*destroy)(struct cgroup_subsys *ss, struct cgroup *cgrp);
-	int (*allow_attach)(struct cgroup *cgrp, struct task_struct *tsk);
-	int (*can_attach)(struct cgroup_subsys *ss, struct cgroup *cgrp,
-			  struct cgroup_taskset *tset);
-	void (*cancel_attach)(struct cgroup_subsys *ss, struct cgroup *cgrp,
-			      struct cgroup_taskset *tset);
-	void (*attach)(struct cgroup_subsys *ss, struct cgroup *cgrp,
-		       struct cgroup_taskset *tset);
-	void (*fork)(struct cgroup_subsys *ss, struct task_struct *task);
-	void (*exit)(struct cgroup_subsys *ss, struct cgroup *cgrp,
-			struct cgroup *old_cgrp, struct task_struct *task);
-	int (*populate)(struct cgroup_subsys *ss,
-			struct cgroup *cgrp);
-	void (*post_clone)(struct cgroup_subsys *ss, struct cgroup *cgrp);
-	void (*bind)(struct cgroup_subsys *ss, struct cgroup *root);
+	struct cgroup_subsys_state *(*create)(struct cgroup *cgrp);
+	int (*pre_destroy)(struct cgroup *cgrp);
+	void (*destroy)(struct cgroup *cgrp);
+	int (*can_attach)(struct cgroup *cgrp, struct cgroup_taskset *tset);
+	void (*cancel_attach)(struct cgroup *cgrp, struct cgroup_taskset *tset);
+	void (*attach)(struct cgroup *cgrp, struct cgroup_taskset *tset);
+	void (*fork)(struct task_struct *task);
+	void (*exit)(struct cgroup *cgrp, struct cgroup *old_cgrp,
+		     struct task_struct *task);
+	int (*populate)(struct cgroup_subsys *ss, struct cgroup *cgrp);
+	void (*post_clone)(struct cgroup *cgrp);
+	void (*bind)(struct cgroup *root);
 
 	int subsys_id;
 	int active;
@@ -596,11 +565,6 @@ int cgroup_scan_tasks(struct cgroup_scanner *scan);
 int cgroup_attach_task(struct cgroup *, struct task_struct *);
 int cgroup_attach_task_all(struct task_struct *from, struct task_struct *);
 
-static inline int cgroup_attach_task_current_cg(struct task_struct *tsk)
-{
-	return cgroup_attach_task_all(current, tsk);
-}
-
 /*
  * CSS ID is ID for cgroup_subsys_state structs under subsys. This only works
  * if cgroup_subsys.use_id == true. It can be used for looking up and scanning.
@@ -660,10 +624,6 @@ static inline int cgroupstats_build(struct cgroupstats *stats,
 /* No cgroups - nothing to do */
 static inline int cgroup_attach_task_all(struct task_struct *from,
 					 struct task_struct *t)
-{
-	return 0;
-}
-static inline int cgroup_attach_task_current_cg(struct task_struct *t)
 {
 	return 0;
 }
