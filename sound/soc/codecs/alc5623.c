@@ -22,7 +22,6 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
-#include <linux/platform_device.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -839,7 +838,7 @@ static int alc5623_set_bias_level(struct snd_soc_codec *codec,
 			| SNDRV_PCM_FMTBIT_S24_LE \
 			| SNDRV_PCM_FMTBIT_S32_LE)
 
-static struct snd_soc_dai_ops alc5623_dai_ops = {
+static const struct snd_soc_dai_ops alc5623_dai_ops = {
 		.hw_params = alc5623_pcm_hw_params,
 		.digital_mute = alc5623_mute,
 		.set_fmt = alc5623_set_dai_fmt,
@@ -869,7 +868,7 @@ static struct snd_soc_dai_driver alc5623_dai = {
 	.ops = &alc5623_dai_ops,
 };
 
-static int alc5623_suspend(struct snd_soc_codec *codec, pm_message_t mesg)
+static int alc5623_suspend(struct snd_soc_codec *codec)
 {
 	alc5623_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	return 0;
@@ -1023,7 +1022,8 @@ static int alc5623_i2c_probe(struct i2c_client *client,
 
 	dev_dbg(&client->dev, "Found codec id : alc56%02x\n", vid2);
 
-	alc5623 = kzalloc(sizeof(struct alc5623_priv), GFP_KERNEL);
+	alc5623 = devm_kzalloc(&client->dev, sizeof(struct alc5623_priv),
+			       GFP_KERNEL);
 	if (alc5623 == NULL)
 		return -ENOMEM;
 
@@ -1045,7 +1045,6 @@ static int alc5623_i2c_probe(struct i2c_client *client,
 		alc5623_dai.name = "alc5623-hifi";
 		break;
 	default:
-		kfree(alc5623);
 		return -EINVAL;
 	}
 
@@ -1054,20 +1053,15 @@ static int alc5623_i2c_probe(struct i2c_client *client,
 
 	ret =  snd_soc_register_codec(&client->dev,
 		&soc_codec_device_alc5623, &alc5623_dai, 1);
-	if (ret != 0) {
+	if (ret != 0)
 		dev_err(&client->dev, "Failed to register codec: %d\n", ret);
-		kfree(alc5623);
-	}
 
 	return ret;
 }
 
 static int alc5623_i2c_remove(struct i2c_client *client)
 {
-	struct alc5623_priv *alc5623 = i2c_get_clientdata(client);
-
 	snd_soc_unregister_codec(&client->dev);
-	kfree(alc5623);
 	return 0;
 }
 

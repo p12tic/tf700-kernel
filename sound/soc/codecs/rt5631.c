@@ -18,7 +18,6 @@
 #include <linux/delay.h>
 #include <linux/pm.h>
 #include <linux/i2c.h>
-#include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -2434,7 +2433,7 @@ static DEVICE_ATTR(rt_codec_reg, S_IRUGO, rt5631_codec_reg_show, rt5631_codec_re
 			SNDRV_PCM_FMTBIT_S8)
 
 
-struct snd_soc_dai_ops rt5631_ops = {
+static struct snd_soc_dai_ops rt5631_ops = {
 	.hw_params = rt5631_hifi_pcm_params,
 	.set_fmt = rt5631_hifi_codec_set_dai_fmt,
 	.set_sysclk = rt5631_hifi_codec_set_dai_sysclk,
@@ -2817,7 +2816,7 @@ static int rt5631_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static int rt5631_suspend(struct snd_soc_codec *codec, pm_message_t state)
+static int rt5631_suspend(struct snd_soc_codec *codec)
 {
 	printk(KERN_INFO "%s+ #####\n", __func__);
 	rt5631_set_bias_level(codec, SND_SOC_BIAS_OFF);
@@ -2893,7 +2892,8 @@ static int rt5631_i2c_probe(struct i2c_client *i2c,
 	pr_info("RT5631 Audio Codec %s\n", RT5631_VERSION);
 	audio_codec_status = 0;
 
-	rt5631 = kzalloc(sizeof(struct rt5631_priv), GFP_KERNEL);
+	rt5631 = devm_kzalloc(&i2c->dev, sizeof(struct rt5631_priv),
+			      GFP_KERNEL);
 	if (NULL == rt5631)
 		return -ENOMEM;
 
@@ -2907,8 +2907,7 @@ static int rt5631_i2c_probe(struct i2c_client *i2c,
 
 	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_rt5631,
 			rt5631_dai, ARRAY_SIZE(rt5631_dai));
-	if (ret < 0)
-		kfree(rt5631);
+
 	INIT_DELAYED_WORK(&poll_audio_work, audio_codec_stress);
 	printk("%s-\n", __func__);
 	return ret;
@@ -2917,7 +2916,6 @@ static int rt5631_i2c_probe(struct i2c_client *i2c,
 static __devexit int rt5631_i2c_remove(struct i2c_client *client)
 {
 	snd_soc_unregister_codec(&client->dev);
-	kfree(i2c_get_clientdata(client));
 	return 0;
 }
 

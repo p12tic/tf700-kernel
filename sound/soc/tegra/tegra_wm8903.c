@@ -522,6 +522,54 @@ static int tegra_wm8903_event_ext_mic(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static const struct snd_soc_dapm_widget tegra_wm8903_dapm_widgets[] = {
+	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
+	SND_SOC_DAPM_HP("Headphone Jack", tegra_wm8903_event_hp),
+	SND_SOC_DAPM_MIC("Mic Jack", NULL),
+};
+
+static const struct snd_soc_dapm_route harmony_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "ROP"},
+	{"Int Spk", NULL, "RON"},
+	{"Int Spk", NULL, "LOP"},
+	{"Int Spk", NULL, "LON"},
+	{"Mic Jack", NULL, "MICBIAS"},
+	{"IN1L", NULL, "Mic Jack"},
+};
+
+static const struct snd_soc_dapm_route seaboard_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "ROP"},
+	{"Int Spk", NULL, "RON"},
+	{"Int Spk", NULL, "LOP"},
+	{"Int Spk", NULL, "LON"},
+	{"Mic Jack", NULL, "MICBIAS"},
+	{"IN1R", NULL, "Mic Jack"},
+};
+
+static const struct snd_soc_dapm_route kaen_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "ROP"},
+	{"Int Spk", NULL, "RON"},
+	{"Int Spk", NULL, "LOP"},
+	{"Int Spk", NULL, "LON"},
+	{"Mic Jack", NULL, "MICBIAS"},
+	{"IN2R", NULL, "Mic Jack"},
+};
+
+static const struct snd_soc_dapm_route aebl_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "LINEOUTR"},
+	{"Int Spk", NULL, "LINEOUTL"},
+	{"Mic Jack", NULL, "MICBIAS"},
+	{"IN1R", NULL, "Mic Jack"},
+};
+
 static const struct snd_soc_dapm_widget cardhu_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", NULL),
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
@@ -676,6 +724,7 @@ static struct snd_soc_dai_link tegra_wm8903_dai[] = {
 
 static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.name = "tegra-codec",
+	.owner = THIS_MODULE,
 	.dai_link = tegra_wm8903_dai,
 	.num_links = ARRAY_SIZE(tegra_wm8903_dai),
 	//.set_bias_level = tegra30_soc_set_bias_level,
@@ -695,17 +744,19 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	machine = kzalloc(sizeof(struct tegra_wm8903), GFP_KERNEL);
+	machine = devm_kzalloc(&pdev->dev, sizeof(struct tegra_wm8903),
+			       GFP_KERNEL);
 	if (!machine) {
 		dev_err(&pdev->dev, "Can't allocate tegra_wm8903 struct\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err;
 	}
 
 	machine->pdata = pdata;
 
 	ret = tegra_asoc_utils_init(&machine->util_data, &pdev->dev, card);
 	if (ret)
-		goto err_free_machine;
+		goto err;
 
 	if (machine_is_cardhu()) {
 		tegra_wm8903_dai[0].codec_name = "wm8903.4-001a",
@@ -750,8 +801,7 @@ err_unregister_card:
 	snd_soc_unregister_card(card);
 err_fini_utils:
 	tegra_asoc_utils_fini(&machine->util_data);
-err_free_machine:
-	kfree(machine);
+err:
 	return ret;
 }
 
@@ -783,8 +833,6 @@ static int __devexit tegra_wm8903_driver_remove(struct platform_device *pdev)
 	snd_soc_unregister_card(card);
 
 	tegra_asoc_utils_fini(&machine->util_data);
-
-	kfree(machine);
 
 	return 0;
 }
