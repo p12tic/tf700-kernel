@@ -17,6 +17,8 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/types.h>
+
 #ifndef CONFIG_MMU
 
 #include "page-nommu.h"

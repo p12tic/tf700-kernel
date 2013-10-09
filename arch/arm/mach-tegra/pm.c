@@ -48,6 +48,7 @@
 
 #include <trace/events/power.h>
 
+#include <asm/idmap.h>
 #include <asm/cacheflush.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
