@@ -779,7 +779,7 @@ late_initcall(tegra_cpu_debug_init);
 module_exit(tegra_cpu_debug_exit);
 #endif /* CONFIG_DEBUG_FS */
 
-int tegra_verify_speed(struct cpufreq_policy *policy)
+static int tegra_verify_speed(struct cpufreq_policy *policy)
 {
 	return cpufreq_frequency_table_verify(policy, freq_table);
 }
@@ -942,7 +942,7 @@ static int tegra_target(struct cpufreq_policy *policy,
 		       unsigned int target_freq,
 		       unsigned int relation)
 {
-	int idx = 0;
+	unsigned int idx = 0;
 	unsigned int freq;
 	unsigned int new_speed;
 	int ret = 0;
@@ -1144,7 +1144,7 @@ static int __init tegra_cpufreq_init(void)
 
 	rebuild_max_freq_table( freq_table[freq_table_size-1].frequency);
 	printk("tegra_cpufreq_init freq_table_size=%u max rate=%u\n", freq_table_size, freq_table[freq_table_size-1].frequency);
-	
+
 	tegra_cpu_edp_init(false);
 
 	ret = cpufreq_register_notifier(

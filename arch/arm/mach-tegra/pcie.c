@@ -50,6 +50,8 @@
 
 #define MSELECT_CONFIG_0_ENABLE_PCIE_APERTURE				5
 
+#include "board.h"
+
 /* register definitions */
 #define AFI_OFFSET							0x3800
 #define PADS_OFFSET							0x3000
@@ -576,7 +578,7 @@ static struct pci_bus *tegra_pcie_scan_bus(int nr,
 	struct tegra_pcie_port *pp;
 
 	if (nr >= tegra_pcie.num_ports)
-		return 0;
+		return NULL;
 
 	pp = tegra_pcie.port + nr;
 	pp->root_bus_nr = sys->busnr;
