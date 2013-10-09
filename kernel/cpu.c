@@ -387,6 +387,7 @@ out:
 	trace_cpu_hotplug(cpu, POWER_CPU_UP_DONE);
 	return err;
 }
+EXPORT_SYMBOL_GPL(cpu_up);
 
 #ifdef CONFIG_PM_SLEEP_SMP
 static cpumask_var_t frozen_cpus;

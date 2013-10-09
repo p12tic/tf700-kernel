@@ -1,5 +1,5 @@
 /*
- * kernel/time/sched_debug.c
+ * kernel/sched/debug.c
  *
  * Print the CFS rbtree
  *
@@ -15,6 +15,8 @@
 #include <linux/seq_file.h>
 #include <linux/kallsyms.h>
 #include <linux/utsname.h>
+
+#include "sched.h"
 
 static DEFINE_SPINLOCK(sched_debug_lock);
 
@@ -264,9 +266,6 @@ static void print_cpu(struct seq_file *m, int cpu)
 	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", #x, SPLIT_NS(rq->x))
 
 	P(nr_running);
-	SEQ_printf(m, "  .%-30s: %d.%03d   \n", "ave_nr_running",
-		   rq->ave_nr_running / FIXED_1,
-		   ((rq->ave_nr_running % FIXED_1) * 1000) / FIXED_1);
 	SEQ_printf(m, "  .%-30s: %lu\n", "load",
 		   rq->load.weight);
 	P(nr_switches);
@@ -376,7 +375,7 @@ static int sched_debug_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static void sysrq_sched_debug_show(void)
+void sysrq_sched_debug_show(void)
 {
 	sched_debug_show(NULL, NULL);
 }
