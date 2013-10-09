@@ -24,7 +24,7 @@
 #define TEMPORARY_HOLD_TIME	2000
 
 static bool enabled = true;
-static struct otg_transceiver *otgwl_xceiv;
+static struct usb_phy *otgwl_xceiv;
 static struct notifier_block otgwl_nb;
 
 /*

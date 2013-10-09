@@ -56,7 +56,7 @@ struct tegra_ehci_hcd {
 	struct tegra_usb_phy *phy;
 	struct clk *clk;
 #ifdef CONFIG_USB_OTG_UTILS
-	struct otg_transceiver *transceiver;
+	struct usb_phy *transceiver;
 #endif
 	struct mutex sync_lock;
 	bool port_resuming;

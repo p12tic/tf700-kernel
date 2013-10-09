@@ -84,7 +84,7 @@ struct tegra_usb_phy {
 	struct regulator *vbus_reg;
 	struct tegra_usb_phy_ops *ops;
 	struct tegra_xtal_freq *freq;
-	struct otg_transceiver *ulpi_vp;
+	struct usb_phy *ulpi_vp;
 	enum usb_phy_port_speed port_speed;
 	signed char utmi_xcvr_setup;
 	void __iomem *regs;

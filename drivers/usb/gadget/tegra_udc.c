@@ -38,6 +38,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/pm_qos.h>
+#include <linux/usb/otg.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>
