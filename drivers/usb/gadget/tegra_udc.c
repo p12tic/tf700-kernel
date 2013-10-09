@@ -1621,7 +1621,7 @@ static int tegra_vbus_draw(struct usb_gadget *gadget, unsigned mA)
 	}
 
 	if (udc->transceiver)
-		return otg_set_power(udc->transceiver, mA);
+		return usb_phy_set_power(udc->transceiver, mA);
 	return -ENOTSUPP;
 }
 
@@ -2952,7 +2952,7 @@ static int __init tegra_udc_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_USB_OTG_UTILS
 	if (tegra_usb_phy_otg_supported(udc->phy))
-		udc->transceiver = otg_get_transceiver();
+		udc->transceiver = usb_get_transceiver();
 
 	if (udc->transceiver) {
 		dr_controller_stop(udc);
@@ -2960,7 +2960,7 @@ static int __init tegra_udc_probe(struct platform_device *pdev)
 		tegra_usb_phy_power_off(udc->phy);
 		udc->vbus_active = 0;
 		udc->usb_state = USB_STATE_DEFAULT;
-		otg_set_peripheral(udc->transceiver, &udc->gadget);
+		otg_set_peripheral(udc->transceiver->otg, &udc->gadget);
 	}
 #else
 	/* Power down the phy if cable is not connected */
@@ -3020,7 +3020,7 @@ static int __exit tegra_udc_remove(struct platform_device *pdev)
 		regulator_put(udc->vbus_reg);
 
 	if (udc->transceiver)
-		otg_set_peripheral(udc->transceiver, NULL);
+		otg_set_peripheral(udc->transceiver->otg, NULL);
 
 
 	/* Free allocated memory */

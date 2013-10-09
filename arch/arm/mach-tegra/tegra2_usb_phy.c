@@ -1385,20 +1385,20 @@ static int ulpi_link_phy_power_off(struct tegra_usb_phy *phy)
 	}
 
 	/* Disable VbusValid, SessEnd comparators */
-	ret = otg_io_write(phy->ulpi_vp, 0x00, 0x0D);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x00, 0x0D);
 	if (ret)
 		pr_err("%s: ulpi write 0x0D failed\n", __func__);
 
-	ret = otg_io_write(phy->ulpi_vp, 0x00, 0x10);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x00, 0x10);
 	if (ret)
 		pr_err("%s: ulpi write 0x10 failed\n", __func__);
 
 	/* Disable IdFloat comparator */
-	ret = otg_io_write(phy->ulpi_vp, 0x00, 0x19);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x00, 0x19);
 	if (ret)
 		pr_err("%s: ulpi write 0x19 failed\n", __func__);
 
-	ret = otg_io_write(phy->ulpi_vp, 0x00, 0x1D);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x00, 0x1D);
 	if (ret)
 		pr_err("%s: ulpi write 0x1D failed\n", __func__);
 
@@ -1483,13 +1483,13 @@ static int ulpi_link_phy_power_on(struct tegra_usb_phy *phy)
 	ulpi_set_trimmer(phy);
 
 	/* Fix VbusInvalid due to floating VBUS */
-	ret = otg_io_write(phy->ulpi_vp, 0x40, 0x08);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x40, 0x08);
 	if (ret) {
 		pr_err("%s: ulpi write failed\n", __func__);
 		return ret;
 	}
 
-	ret = otg_io_write(phy->ulpi_vp, 0x80, 0x0B);
+	ret = usb_phy_io_write(phy->ulpi_vp, 0x80, 0x0B);
 	if (ret) {
 		pr_err("%s: ulpi write failed\n", __func__);
 		return ret;
