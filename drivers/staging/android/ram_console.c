@@ -22,6 +22,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/platform_data/ram_console.h>
+#include "ram_console.h"
 
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 #include <linux/rslib.h>

@@ -17,7 +17,7 @@ if ARCH_TEGRA
 comment "NVIDIA Tegra options"
 
 config ARCH_TEGRA_2x_SOC
-	bool "Tegra 2 family SOC"
+	bool "Enable support for Tegra20 family"
 	default y
 	depends on !ARCH_TEGRA_3x_SOC
 	select ARCH_TEGRA_HAS_PCIE
@@ -82,7 +82,8 @@ config ARCH_TEGRA_HAS_SATA
 	bool
 
 config TEGRA_PCI
-	bool "PCIe host controller driver"
+	bool "PCI Express support"
+	depends on ARCH_TEGRA_2x_SOC
 	select PCI
 	depends on ARCH_TEGRA_HAS_PCIE
 	help
@@ -98,6 +99,13 @@ config TEGRA_IRDA
 
 comment "Tegra board type"
 
+config MACH_HARMONY
+       bool "Harmony board"
+       depends on ARCH_TEGRA_2x_SOC
+       select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
+       help
+         Support for nVidia Harmony development platform
+
 config MACH_KAEN
        bool "Kaen board"
        depends on ARCH_TEGRA_2x_SOC
@@ -105,6 +113,12 @@ config MACH_KAEN
        select MACH_HAS_SND_SOC_TEGRA_WM8903 if SND_SOC
        help
          Support for the Kaen version of Seaboard
+
+config MACH_PAZ00
+       bool "Paz00 board"
+       depends on ARCH_TEGRA_2x_SOC
+       help
+         Support for the Toshiba AC100/Dynabook AZ netbook
 
 config MACH_SEABOARD
        bool "Seaboard board"
@@ -116,10 +130,18 @@ config MACH_SEABOARD
 	 have large similarities with the seaboard design.
 
 config MACH_TEGRA_DT
-	bool "Generic Tegra board (FDT support)"
+	bool "Generic Tegra20 board (FDT support)"
+	depends on ARCH_TEGRA_2x_SOC
 	select USE_OF
 	help
-	  Support for generic nVidia Tegra boards using Flattened Device Tree
+	  Support for generic NVIDIA Tegra20 boards using Flattened Device Tree
+
+config MACH_TRIMSLICE
+       bool "TrimSlice board"
+       depends on ARCH_TEGRA_2x_SOC
+       select TEGRA_PCI
+       help
+         Support for CompuLab TrimSlice platform
 
 config MACH_WARIO
        bool "Wario board"
@@ -127,6 +149,11 @@ config MACH_WARIO
        select MACH_SEABOARD
        help
          Support for the Wario version of Seaboard
+
+config MACH_VENTANA
+       bool "Ventana board"
+       depends on ARCH_TEGRA_2x_SOC
+       select MACH_TEGRA_DT
 
 config MACH_CARDHU
        bool "Cardhu board"
@@ -137,30 +164,6 @@ config MACH_CARDHU
        select MACH_HAS_SND_SOC_TEGRA_MAX98095 if SND_SOC
        help
          Support for NVIDIA Cardhu development platform
-
-choice
-       prompt "Tegra platform type"
-       default TEGRA_SILICON_PLATFORM
-
-config TEGRA_SILICON_PLATFORM
-        bool "Silicon"
-        help
-          This enables support for a Tegra silicon platform.
-
-config TEGRA_SIMULATION_PLATFORM
-        bool "Simulation"
-        help
-          This enables support for a Tegra simulation platform.
-          Select this only if you are an NVIDIA developer working
-          on a simulation platform.
-
-config TEGRA_FPGA_PLATFORM
-        bool "FPGA"
-        help
-          This enables support for a Tegra FPGA platform.
-          Select this only if you are an NVIDIA developer working
-          on a FPGA platform.
-endchoice
 
 choice
         prompt "Low-level debug console UART"
@@ -234,17 +237,14 @@ config TEGRA_CARDHU_DUAL_DSI_PANEL
 
 config TEGRA_EMC_SCALING_ENABLE
 	bool "Enable scaling the memory frequency"
-	depends on TEGRA_SILICON_PLATFORM
 	default n
 
 config TEGRA_CPU_DVFS
 	bool "Enable voltage scaling on Tegra CPU"
-	depends on TEGRA_SILICON_PLATFORM
 	default y
 
 config TEGRA_CORE_DVFS
 	bool "Enable voltage scaling on Tegra core"
-	depends on TEGRA_SILICON_PLATFORM
 	depends on TEGRA_CPU_DVFS
 	default y
 
@@ -300,7 +300,6 @@ config TEGRA_ARB_SEMAPHORE
 
 config TEGRA_THERMAL_THROTTLE
 	bool "Enable throttling of CPU speed on overtemp"
-	depends on TEGRA_SILICON_PLATFORM
 	depends on CPU_FREQ
 	depends on THERMAL
 	default y
@@ -354,7 +353,6 @@ config TEGRA_MC_PROFILE
 
 config TEGRA_EDP_LIMITS
 	bool "Enforce electrical design limits"
-	depends on TEGRA_SILICON_PLATFORM
 	depends on CPU_FREQ
 	default y if ARCH_TEGRA_3x_SOC
 	default n
@@ -409,7 +407,6 @@ config TEGRA_GADGET_BOOST_CPU_FREQ
 
 config TEGRA_DYNAMIC_PWRDET
 	bool "Enable dynamic activation of IO level auto-detection"
-	depends on TEGRA_SILICON_PLATFORM
 	default n
 	help
 	  This option allows turning off tegra IO level auto-detection

@@ -69,3 +69,5 @@ obj-$(CONFIG_USB_ZD1201)        += usb/
 obj-$(CONFIG_USB_IPHETH)        += usb/
 obj-$(CONFIG_USB_CDC_PHONET)   += usb/
 obj-$(CONFIG_USB_NET_RAW_IP)    += usb/
+
+obj-$(CONFIG_HYPERV_NET) += hyperv/

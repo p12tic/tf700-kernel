@@ -107,9 +107,11 @@ static enum power_supply_type pow_supply_type = POWER_SUPPLY_TYPE_MAINS;
 
 #define NEVER_RESET 0
 
+void (*arch_reset)(char mode, const char *cmd) = tegra_assert_system_reset;
+
 void tegra_assert_system_reset(char mode, const char *cmd)
 {
-#if defined(CONFIG_TEGRA_FPGA_PLATFORM) || NEVER_RESET
+#if NEVER_RESET
 	printk("tegra_assert_system_reset() ignored.....");
 	do { } while (1);
 #else
@@ -133,7 +135,7 @@ void tegra_assert_system_reset(char mode, const char *cmd)
 		reg &= ~(BOOTLOADER_MODE | RECOVERY_MODE | FORCED_RECOVERY_MODE);
 	}
 	writel_relaxed(reg, reset + PMC_SCRATCH0);
-	/* use *_related to avoid spinlock since caches are off */
+
 	reg = readl_relaxed(reset);
 	reg |= 0x10;
 	writel_relaxed(reg, reset);
@@ -158,7 +160,6 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "kfuse",	NULL,		0,		true },
 	{ "fuse",	NULL,		0,		true },
 	{ "sclk",	NULL,		0,		true },
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	{ "pll_p",	NULL,		216000000,	true },
 	{ "pll_p_out1",	"pll_p",	28800000,	true },
@@ -186,17 +187,6 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "sclk",	"pll_p_out4",	102000000,	true },
 	{ "hclk",	"sclk",		102000000,	true },
 	{ "pclk",	"hclk",		51000000,	true },
-#endif
-#else
-	{ "pll_p",	NULL,		216000000,	true },
-	{ "pll_p_out1",	"pll_p",	28800000,	false },
-	{ "pll_p_out2",	"pll_p",	48000000,	false },
-	{ "pll_p_out3",	"pll_p",	72000000,	true },
-	{ "pll_m_out1",	"pll_m",	275000000,	true },
-	{ "pll_p_out4",	"pll_p",	108000000,	false },
-	{ "sclk",	"pll_p_out4",	108000000,	true },
-	{ "hclk",	"sclk",		108000000,	true },
-	{ "pclk",	"hclk",		54000000,	true },
 #endif
 #ifdef CONFIG_TEGRA_SLOW_CSITE
 	{ "csite",	"clk_m",	1000000, 	true },
@@ -301,7 +291,6 @@ void tegra_init_cache(bool init)
 	writel_relaxed(0x441, p + L2X0_DATA_LATENCY_CTRL);
 
 #elif defined(CONFIG_ARCH_TEGRA_3x_SOC)
-#ifdef CONFIG_TEGRA_SILICON_PLATFORM
 	/* PL310 RAM latency is CPU dependent. NOTE: Changes here
 	   must also be reflected in __cortex_a9_l2x0_restart */
 
@@ -322,10 +311,6 @@ void tegra_init_cache(bool init)
 			writel(0x551, p + L2X0_DATA_LATENCY_CTRL);
 		}
 	}
-#else
-	writel(0x770, p + L2X0_TAG_LATENCY_CTRL);
-	writel(0x770, p + L2X0_DATA_LATENCY_CTRL);
-#endif
 #endif
 	writel(0x3, p + L2X0_POWER_CTRL);
 	aux_ctrl = readl(p + L2X0_CACHE_TYPE);
@@ -1011,3 +996,10 @@ void cpufreq_restore_default_gov(void)
 	}
 }
 #endif /* CONFIG_TEGRA_CONVSERVATIVE_GOV_ON_EARLYSUPSEND */
+
+#ifdef CONFIG_ARCH_TEGRA_3x_SOC
+void __init tegra30_init_early(void)
+{
+	//tegra_init_cache(0x441, 0x551); TODO
+}
+#endif

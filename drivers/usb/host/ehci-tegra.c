@@ -21,8 +21,13 @@
 #include <linux/irq.h>
 #include <linux/usb/otg.h>
 #include <linux/clk.h>
+#include <linux/gpio.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+
 #include <mach/usb_phy.h>
 #include <mach/iomap.h>
+
 #include <../tegra_usb_phy.h>
 #include <mach/clk.h>
 #include "board-cardhu.h"
@@ -36,7 +41,6 @@
 #define EHCI_DBG(stuff...)	do {} while (0)
 #endif
 
-static const char driver_name[] = "tegra-ehci";
 static struct tegra_ehci_hcd *modem_ehci_tegra;
 static struct platform_device *modem_port_device;
 static int usb3_init = 0;
@@ -527,6 +531,35 @@ static const struct hc_driver tegra_ehci_hc_driver = {
 #endif
 };
 
+static int setup_vbus_gpio(struct platform_device *pdev)
+{
+	int err = 0;
+	int gpio;
+
+	if (!pdev->dev.of_node)
+		return 0;
+
+	gpio = of_get_named_gpio(pdev->dev.of_node, "nvidia,vbus-gpio", 0);
+	if (!gpio_is_valid(gpio))
+		return 0;
+
+	err = gpio_request(gpio, "vbus_gpio");
+	if (err) {
+		dev_err(&pdev->dev, "can't request vbus gpio %d", gpio);
+		return err;
+	}
+	err = gpio_direction_output(gpio, 1);
+	if (err) {
+		dev_err(&pdev->dev, "can't enable vbus\n");
+		return err;
+	}
+	gpio_set_value(gpio, 1);
+
+	return err;
+}
+
+static u64 tegra_ehci_dma_mask = DMA_BIT_MASK(32);
+
 static int tegra_ehci_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -535,11 +568,22 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	int err = 0;
 	int irq;
 	int ret = 0;
+	int instance = pdev->id;
 
 	printk(KERN_INFO "%s + #####\n", __func__);
 
+	/* Right now device-tree probed devices don't get dma_mask set.
+	 * Since shared usb code relies on it, set it here for now.
+	 * Once we have dma capability bindings this can go away.
+	 */
+	if (!pdev->dev.dma_mask)
+		pdev->dev.dma_mask = &tegra_ehci_dma_mask;
+
+	setup_vbus_gpio(pdev);
+
 	tegra = devm_kzalloc(&pdev->dev, sizeof(struct tegra_ehci_hcd),
 		GFP_KERNEL);
+
 	if (!tegra) {
 		dev_err(&pdev->dev, "memory alloc failed\n");
 		return -ENOMEM;
@@ -595,7 +639,30 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 	set_irq_flags(irq, IRQF_VALID);
 	tegra->irq = irq;
 
+	/* This is pretty ugly and needs to be fixed when we do only
+	 * device-tree probing. Old code relies on the platform_device
+	 * numbering that we lack for device-tree-instantiated devices.
+	 */
+	if (instance < 0) {
+		switch (res->start) {
+		case TEGRA_USB_BASE:
+			instance = 0;
+			break;
+		case TEGRA_USB2_BASE:
+			instance = 1;
+			break;
+		case TEGRA_USB3_BASE:
+			instance = 2;
+			break;
+		default:
+			err = -ENODEV;
+			dev_err(&pdev->dev, "unknown usb instance\n");
+			goto fail_phy;
+		}
+	}
+
 	tegra->phy = tegra_usb_phy_open(pdev);
+
 	if (IS_ERR(tegra->phy)) {
 		dev_err(&pdev->dev, "failed to open USB phy\n");
 		err = -ENXIO;
@@ -786,6 +853,11 @@ static void tegra_ehci_hcd_shutdown(struct platform_device *pdev)
 	pr_info("%s instance %d -\n", __func__, tegra->phy->inst);
 }
 
+static struct of_device_id tegra_ehci_of_match[] __devinitdata = {
+	{ .compatible = "nvidia,tegra20-ehci", },
+	{ },
+};
+
 static struct platform_driver tegra_ehci_driver = {
 	.probe		= tegra_ehci_probe,
 	.remove	= tegra_ehci_remove,
@@ -794,7 +866,9 @@ static struct platform_driver tegra_ehci_driver = {
 	.suspend = tegra_ehci_suspend,
 	.resume  = tegra_ehci_resume,
 #endif
-	.driver	= {
-		.name	= driver_name,
+	.shutdown	= tegra_ehci_hcd_shutdown,
+	.driver		= {
+		.name	= "tegra-ehci",
+		.of_match_table = tegra_ehci_of_match,
 	}
 };

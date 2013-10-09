@@ -2,7 +2,7 @@
  * linux/arch/arm/mach-tegra/include/mach/pinmux.h
  *
  * Copyright (C) 2010 Google, Inc.
- * Copyright (C) 2011 NVIDIA Corporation.
+ * Copyright (C) 2010,2011 Nvidia, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -19,7 +19,7 @@
 #define __MACH_TEGRA_PINMUX_H
 
 #if defined(CONFIG_ARCH_TEGRA_2x_SOC)
-#include "pinmux-t2.h"
+#include "pinmux-tegra20.h"
 #elif defined(CONFIG_ARCH_TEGRA_3x_SOC)
 #include "pinmux-t3.h"
 #else
@@ -215,7 +215,7 @@ enum tegra_vddio {
 };
 
 struct tegra_pingroup_config {
-	enum tegra_pingroup	pingroup;
+	int pingroup;
 	enum tegra_mux_func	func;
 	enum tegra_pullupdown	pupd;
 	enum tegra_tristate	tristate;
@@ -303,7 +303,7 @@ enum tegra_schmitt {
 };
 
 struct tegra_drive_pingroup_config {
-	enum tegra_drive_pingroup pingroup;
+	int pingroup;
 	enum tegra_hsm hsm;
 	enum tegra_schmitt schmitt;
 	enum tegra_drive drive;
@@ -348,14 +348,11 @@ extern const struct tegra_pingroup_desc tegra_soc_pingroups[];
 extern const struct tegra_drive_pingroup_desc tegra_soc_drive_pingroups[];
 extern const int gpio_to_pingroup[];
 
-int tegra_pinmux_get_func(enum tegra_pingroup pg);
-int tegra_pinmux_set_tristate(enum tegra_pingroup pg,
-	enum tegra_tristate tristate);
-int tegra_pinmux_set_io(enum tegra_pingroup pg,
-	enum tegra_pin_io input);
+int tegra_pinmux_get_func(int pg);
+int tegra_pinmux_set_io(int pg, enum tegra_pin_io input);
 int tegra_pinmux_get_pingroup(int gpio_nr);
-int tegra_pinmux_set_pullupdown(enum tegra_pingroup pg,
-	enum tegra_pullupdown pupd);
+int tegra_pinmux_set_tristate(int pg, enum tegra_tristate tristate);
+int tegra_pinmux_set_pullupdown(int pg, enum tegra_pullupdown pupd);
 
 void tegra_pinmux_config_table(const struct tegra_pingroup_config *config,
 	int len);
