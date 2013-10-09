@@ -118,12 +118,6 @@ static u32 notrace tegra_read_usec(void)
 	return cyc;
 }
 
-unsigned long long notrace sched_clock(void)
-{
-	u32 cyc = tegra_read_usec();
-	return cyc_to_fixed_sched_clock(&cd, cyc, (u32)~0, SC_MULT, SC_SHIFT);
-}
-
 static void notrace tegra_update_sched_clock(void)
 {
 	u32 cyc = tegra_read_usec();
