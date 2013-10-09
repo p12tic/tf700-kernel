@@ -55,9 +55,9 @@
 #define TIMER4_OFFSET (TEGRA_TMR4_BASE-TEGRA_TMR1_BASE)
 
 #define timer_writel(value, reg) \
-	__raw_writel(value, (u32)timer_reg_base + (reg))
+	__raw_writel(value, timer_reg_base + (reg))
 #define timer_readl(reg) \
-	__raw_readl((u32)timer_reg_base + (reg))
+	__raw_readl(timer_reg_base + (reg))
 
 
 static void __iomem *timer_reg_base = IO_ADDRESS(TEGRA_TMR1_BASE);

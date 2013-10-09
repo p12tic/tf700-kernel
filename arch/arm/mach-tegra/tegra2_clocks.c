@@ -174,15 +174,15 @@ static DEFINE_SPINLOCK(clock_register_lock);
 static int tegra_periph_clk_enable_refcount[3 * 32];
 
 #define clk_writel(value, reg) \
-	__raw_writel(value, (u32)reg_clk_base + (reg))
+	__raw_writel(value, reg_clk_base + (reg))
 #define clk_readl(reg) \
-	__raw_readl((u32)reg_clk_base + (reg))
+	__raw_readl(reg_clk_base + (reg))
 #define pmc_writel(value, reg) \
-	__raw_writel(value, (u32)reg_pmc_base + (reg))
+	__raw_writel(value, reg_pmc_base + (reg))
 #define pmc_readl(reg) \
-	__raw_readl((u32)reg_pmc_base + (reg))
+	__raw_readl(reg_pmc_base + (reg))
 #define chipid_readl() \
-	__raw_readl((u32)misc_gp_hidrev_base + MISC_GP_HIDREV)
+	__raw_readl(misc_gp_hidrev_base + MISC_GP_HIDREV)
 
 static int clk_div71_get_divider(unsigned long parent_rate, unsigned long rate)
 {
@@ -1057,7 +1057,7 @@ static struct clk_ops tegra_pll_div_ops = {
 static void tegra2_periph_clk_init(struct clk *c)
 {
 	u32 val = clk_readl(c->reg);
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	if (c->flags & MUX) {
 		for (sel = c->inputs; sel->input != NULL; sel++) {
@@ -1478,7 +1478,7 @@ static struct clk_ops tegra_audio_sync_clk_ops = {
 /* call this function after pinmux configuration */
 static void tegra2_cdev_clk_set_parent(struct clk *c)
 {
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	enum tegra_pingroup pg = TEGRA_PINGROUP_CDEV1;
 	int val;

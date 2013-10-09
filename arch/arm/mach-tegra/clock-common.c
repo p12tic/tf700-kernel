@@ -23,9 +23,9 @@
 #include "clock.h"
 
 #define clk_writel(value, reg) \
-	__raw_writel(value, (u32)reg_clk_base + (reg))
+	__raw_writel(value, reg_clk_base + (reg))
 #define clk_readl(reg) \
-	__raw_readl((u32)reg_clk_base + (reg))
+	__raw_readl(reg_clk_base + (reg))
 
 #define OSC_FREQ_DET			0x58
 #define OSC_FREQ_DET_TRIG		(1<<31)

@@ -375,15 +375,15 @@ static DEFINE_SPINLOCK(periph_refcount_lock);
 static int tegra_periph_clk_enable_refcount[CLK_OUT_ENB_NUM * 32];
 
 #define clk_writel(value, reg) \
-	__raw_writel(value, (u32)reg_clk_base + (reg))
+	__raw_writel(value, reg_clk_base + (reg))
 #define clk_readl(reg) \
-	__raw_readl((u32)reg_clk_base + (reg))
+	__raw_readl(reg_clk_base + (reg))
 #define pmc_writel(value, reg) \
-	__raw_writel(value, (u32)reg_pmc_base + (reg))
+	__raw_writel(value, reg_pmc_base + (reg))
 #define pmc_readl(reg) \
-	__raw_readl((u32)reg_pmc_base + (reg))
+	__raw_readl(reg_pmc_base + (reg))
 #define chipid_readl() \
-	__raw_readl((u32)misc_gp_hidrev_base + MISC_GP_HIDREV)
+	__raw_readl(misc_gp_hidrev_base + MISC_GP_HIDREV)
 
 #define clk_writel_delay(value, reg) 					\
 	do {								\
@@ -2132,7 +2132,7 @@ static inline u32 periph_clk_source_shift(struct clk *c)
 static void tegra3_periph_clk_init(struct clk *c)
 {
 	u32 val = clk_readl(c->reg);
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	if (c->flags & MUX) {
 		for (sel = c->inputs; sel->input != NULL; sel++) {
@@ -2522,7 +2522,7 @@ static DEFINE_SPINLOCK(clk_out_lock);
 
 static void tegra3_clk_out_init(struct clk *c)
 {
-	const struct clk_mux_sel *mux = 0;
+	const struct clk_mux_sel *mux = NULL;
 	const struct clk_mux_sel *sel;
 	u32 val = pmc_readl(c->reg);
 
