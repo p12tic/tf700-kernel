@@ -73,6 +73,8 @@ ENDPROC(cpu_suspend_abort)
  * r2 = phys page table base
  * r3 = L1 section flags
  */
+	.align	5
+	.pushsection	.idmap.text,"ax"
 ENTRY(cpu_resume_mmu)
 	ldr	r3, =cpu_resume_after_mmu
 	bic	r1, r0, #CR_C		@ ensure D-cache is disabled
@@ -82,6 +84,7 @@ ENTRY(cpu_resume_mmu)
 	mov	r1, r1
 	mov	pc, r3			@ jump to virtual address
 ENDPROC(cpu_resume_mmu)
+	.popsection
 cpu_resume_after_mmu:
 	mcr	p15, 0, r0, c1, c0, 0	@ turn on D-cache
 	mov	r0, #0			@ return zero on success
