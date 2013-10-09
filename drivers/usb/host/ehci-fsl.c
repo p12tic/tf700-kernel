@@ -117,6 +117,9 @@ static int usb_hcd_fsl_probe(const struct hc_driver *driver,
 
 	pdata->regs = hcd->regs;
 
+	if (pdata->power_budget)
+		hcd->power_budget = pdata->power_budget;
+
 	/*
 	 * do platform specific init: check the clock, grab/config pins, etc.
 	 */
@@ -134,6 +137,30 @@ static int usb_hcd_fsl_probe(const struct hc_driver *driver,
 	retval = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (retval != 0)
 		goto err4;
+
+#ifdef CONFIG_USB_OTG
+	if (pdata->operating_mode == FSL_USB2_DR_OTG) {
+		struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+
+		ehci->transceiver = usb_get_transceiver();
+		dev_dbg(&pdev->dev, "hcd=0x%p  ehci=0x%p, transceiver=0x%p\n",
+			hcd, ehci, ehci->transceiver);
+
+		if (ehci->transceiver) {
+			retval = otg_set_host(ehci->transceiver,
+					      &ehci_to_hcd(ehci)->self);
+			if (retval) {
+				if (ehci->transceiver)
+					put_device(ehci->transceiver->dev);
+				goto err4;
+			}
+		} else {
+			dev_err(&pdev->dev, "can't find transceiver\n");
+			retval = -ENODEV;
+			goto err4;
+		}
+	}
+#endif
 	return retval;
 
       err4:
@@ -164,6 +191,12 @@ static void usb_hcd_fsl_remove(struct usb_hcd *hcd,
 			       struct platform_device *pdev)
 {
 	struct fsl_usb2_platform_data *pdata = pdev->dev.platform_data;
+	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+
+	if (ehci->transceiver) {
+		otg_set_host(ehci->transceiver, NULL);
+		put_device(ehci->transceiver->dev);
+	}
 
 	usb_remove_hcd(hcd);
 
@@ -183,8 +216,6 @@ static void ehci_fsl_setup_phy(struct ehci_hcd *ehci,
 			       unsigned int port_offset)
 {
 	u32 portsc;
-	struct usb_hcd *hcd = ehci_to_hcd(ehci);
-	void __iomem *non_ehci = hcd->regs;
 
 	portsc = ehci_readl(ehci, &ehci->regs->port_status[port_offset]);
 	portsc &= ~(PORT_PTS_MSK | PORT_PTS_PTW);
@@ -200,8 +231,6 @@ static void ehci_fsl_setup_phy(struct ehci_hcd *ehci,
 		portsc |= PORT_PTS_PTW;
 		/* fall through */
 	case FSL_USB2_PHY_UTMI:
-		/* enable UTMI PHY */
-		setbits32(non_ehci + FSL_SOC_USB_CTRL, CTRL_UTMI_PHY_EN);
 		portsc |= PORT_PTS_UTMI;
 		break;
 	case FSL_USB2_PHY_NONE:
@@ -223,18 +252,21 @@ static void ehci_fsl_usb_setup(struct ehci_hcd *ehci)
 	if (pdata->have_sysif_regs) {
 		temp = in_be32(non_ehci + FSL_SOC_USB_CTRL);
 		out_be32(non_ehci + FSL_SOC_USB_CTRL, temp | 0x00000004);
-
-		/*
-		* Turn on cache snooping hardware, since some PowerPC platforms
-		* wholly rely on hardware to deal with cache coherent
-		*/
-
-		/* Setup Snooping for all the 4GB space */
-		/* SNOOP1 starts from 0x0, size 2G */
-		out_be32(non_ehci + FSL_SOC_USB_SNOOP1, 0x0 | SNOOP_SIZE_2GB);
-		/* SNOOP2 starts from 0x80000000, size 2G */
-		out_be32(non_ehci + FSL_SOC_USB_SNOOP2, 0x80000000 | SNOOP_SIZE_2GB);
+		out_be32(non_ehci + FSL_SOC_USB_SNOOP1, 0x0000001b);
 	}
+
+#if defined(CONFIG_PPC32) && !defined(CONFIG_NOT_COHERENT_CACHE)
+	/*
+	 * Turn on cache snooping hardware, since some PowerPC platforms
+	 * wholly rely on hardware to deal with cache coherent
+	 */
+
+	/* Setup Snooping for all the 4GB space */
+	/* SNOOP1 starts from 0x0, size 2G */
+	out_be32(non_ehci + FSL_SOC_USB_SNOOP1, 0x0 | SNOOP_SIZE_2GB);
+	/* SNOOP2 starts from 0x80000000, size 2G */
+	out_be32(non_ehci + FSL_SOC_USB_SNOOP2, 0x80000000 | SNOOP_SIZE_2GB);
+#endif
 
 	if ((pdata->operating_mode == FSL_USB2_DR_HOST) ||
 			(pdata->operating_mode == FSL_USB2_DR_OTG))
@@ -284,9 +316,7 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	int retval;
 	struct fsl_usb2_platform_data *pdata;
-	struct device *dev;
 
-	dev = hcd->self.controller;
 	pdata = hcd->self.controller->platform_data;
 	ehci->big_endian_desc = pdata->big_endian_desc;
 	ehci->big_endian_mmio = pdata->big_endian_mmio;
@@ -315,16 +345,6 @@ static int ehci_fsl_setup(struct usb_hcd *hcd)
 	ehci->sbrn = 0x20;
 
 	ehci_reset(ehci);
-
-	if (of_device_is_compatible(dev->parent->of_node,
-				    "fsl,mpc5121-usb2-dr")) {
-		/*
-		 * set SBUSCFG:AHBBRST so that control msgs don't
-		 * fail when doing heavy PATA writes.
-		 */
-		ehci_writel(ehci, SBUSCFG_INCR8,
-			    hcd->regs + FSL_SOC_USB_SBUSCFG);
-	}
 
 	retval = ehci_fsl_reinit(ehci);
 	return retval;
@@ -449,8 +469,6 @@ static int ehci_fsl_mpc512x_drv_resume(struct device *dev)
 	ehci_writel(ehci, ISIPHYCTRL_PXE | ISIPHYCTRL_PHYE,
 		    hcd->regs + FSL_SOC_USB_ISIPHYCTRL);
 
-	ehci_writel(ehci, SBUSCFG_INCR8, hcd->regs + FSL_SOC_USB_SBUSCFG);
-
 	/* restore EHCI registers */
 	ehci_writel(ehci, pdata->pm_command, &ehci->regs->command);
 	ehci_writel(ehci, pdata->pm_intr_enable, &ehci->regs->intr_enable);
@@ -559,6 +577,38 @@ static struct dev_pm_ops ehci_fsl_pm_ops = {
 #define EHCI_FSL_PM_OPS		NULL
 #endif /* CONFIG_PM */
 
+#ifdef CONFIG_USB_OTG
+static int ehci_start_port_reset(struct usb_hcd *hcd, unsigned port)
+{
+	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
+	u32 status;
+
+	if (!port)
+		return -EINVAL;
+
+	port--;
+
+	/* start port reset before HNP protocol time out */
+	status = readl(&ehci->regs->port_status[port]);
+	if (!(status & PORT_CONNECT))
+		return -ENODEV;
+
+	/* khubd will finish the reset later */
+	if (ehci_is_TDI(ehci)) {
+		writel(PORT_RESET |
+		       (status & ~(PORT_CSC | PORT_PEC | PORT_OCC)),
+		       &ehci->regs->port_status[port]);
+	} else {
+		writel(PORT_RESET, &ehci->regs->port_status[port]);
+	}
+
+	return 0;
+}
+#else
+#define ehci_start_port_reset	NULL
+#endif /* CONFIG_USB_OTG */
+
+
 static const struct hc_driver ehci_fsl_hc_driver = {
 	.description = hcd_name,
 	.product_desc = "Freescale On-Chip EHCI Host Controller",
@@ -598,6 +648,7 @@ static const struct hc_driver ehci_fsl_hc_driver = {
 	.hub_control = ehci_hub_control,
 	.bus_suspend = ehci_bus_suspend,
 	.bus_resume = ehci_bus_resume,
+	.start_port_reset = ehci_start_port_reset,
 	.relinquish_port = ehci_relinquish_port,
 	.port_handed_over = ehci_port_handed_over,
 
