@@ -255,7 +255,7 @@ static int __devinit tps51632_probe(struct i2c_client *client,
 
 	/* Register the regulators */
 	rdev = regulator_register(&tps->desc, &client->dev,
-			pdata->reg_init_data, tps);
+			pdata->reg_init_data, tps, NULL);
 	if (IS_ERR(rdev)) {
 		dev_err(tps->dev, "regulator register failed\n");
 		return PTR_ERR(rdev);
