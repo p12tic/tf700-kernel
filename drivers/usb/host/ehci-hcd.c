@@ -1364,11 +1364,6 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		s5p_ehci_driver
 #endif
 
-#ifdef CONFIG_USB_EHCI_ATH79
-#include "ehci-ath79.c"
-#define PLATFORM_DRIVER		ehci_ath79_driver
-#endif
-
 #ifdef CONFIG_SPARC_LEON
 #include "ehci-grlib.c"
 #define PLATFORM_DRIVER		ehci_grlib_driver
@@ -1387,6 +1382,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_MACH_LOONGSON1
 #include "ehci-ls1x.c"
 #define PLATFORM_DRIVER		ehci_ls1x_driver
+#endif
+
+#ifdef CONFIG_USB_EHCI_HCD_PLATFORM
+#include "ehci-platform.c"
+#define PLATFORM_DRIVER		ehci_platform_driver
 #endif
 
 #if !defined(PCI_DRIVER) && !defined(PLATFORM_DRIVER) && \
