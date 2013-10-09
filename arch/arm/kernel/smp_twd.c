@@ -87,6 +87,14 @@ int twd_timer_ack(void)
 	return 0;
 }
 
+void twd_timer_stop(struct clock_event_device *clk)
+{
+	twd_set_mode(CLOCK_EVT_MODE_UNUSED, clk);
+	disable_percpu_irq(clk->irq);
+}
+
+#ifdef CONFIG_CPU_FREQ
+
 /*
  * Updates clockevent frequency when the cpu frequency changes.
  * Called on the cpu that is changing frequency with interrupts disabled.
@@ -121,7 +129,7 @@ static struct notifier_block twd_cpufreq_nb = {
 
 static int twd_cpufreq_init(void)
 {
-	if (!IS_ERR_OR_NULL(twd_clk))
+	if (!IS_ERR(twd_clk))
 		return cpufreq_register_notifier(&twd_cpufreq_nb,
 			CPUFREQ_TRANSITION_NOTIFIER);
 
@@ -129,11 +137,7 @@ static int twd_cpufreq_init(void)
 }
 core_initcall(twd_cpufreq_init);
 
-void twd_timer_stop(struct clock_event_device *clk)
-{
-	twd_set_mode(CLOCK_EVT_MODE_UNUSED, clk);
-	disable_percpu_irq(clk->irq);
-}
+#endif
 
 static void __cpuinit twd_calibrate_rate(void)
 {
@@ -174,6 +178,18 @@ static void __cpuinit twd_calibrate_rate(void)
 	}
 }
 
+static irqreturn_t twd_handler(int irq, void *dev_id)
+{
+	struct clock_event_device *evt = *(struct clock_event_device **)dev_id;
+
+	if (twd_timer_ack()) {
+		evt->event_handler(evt);
+		return IRQ_HANDLED;
+	}
+
+	return IRQ_NONE;
+}
+
 static struct clk *twd_get_clock(void)
 {
 	struct clk *clk;
@@ -185,26 +201,22 @@ static struct clk *twd_get_clock(void)
 		return clk;
 	}
 
+	err = clk_prepare(clk);
+	if (err) {
+		pr_err("smp_twd: clock failed to prepare: %d\n", err);
+		clk_put(clk);
+		return ERR_PTR(err);
+	}
+
 	err = clk_enable(clk);
 	if (err) {
 		pr_err("smp_twd: clock failed to enable: %d\n", err);
+		clk_unprepare(clk);
 		clk_put(clk);
 		return ERR_PTR(err);
 	}
 
 	return clk;
-}
-
-static irqreturn_t twd_handler(int irq, void *dev_id)
-{
-	struct clock_event_device *evt = *(struct clock_event_device **)dev_id;
-
-	if (twd_timer_ack()) {
-		evt->event_handler(evt);
-		return IRQ_HANDLED;
-	}
-
-	return IRQ_NONE;
 }
 
 /*
@@ -242,8 +254,6 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 
 	__raw_writel(0, twd_base + TWD_TIMER_CONTROL);
 
-	twd_calibrate_rate();
-
 	clk->name = "local_timer";
 	clk->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT |
 			CLOCK_EVT_FEAT_C3STOP;
@@ -254,8 +264,8 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 	this_cpu_clk = __this_cpu_ptr(twd_evt);
 	*this_cpu_clk = clk;
 
+
 	clockevents_config_and_register(clk, twd_timer_rate,
 					0xf, 0xffffffff);
-
 	enable_percpu_irq(clk->irq, 0);
 }
