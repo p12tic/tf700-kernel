@@ -30,7 +30,7 @@ void __iomem *twd_base;
 
 static struct clk *twd_clk;
 static unsigned long twd_timer_rate;
-static DEFINE_PER_CPU(struct clock_event_device *, twd_ce);
+static struct clock_event_device __percpu **twd_evt;
 
 static void twd_set_mode(enum clock_event_mode mode,
 			struct clock_event_device *clk)
@@ -94,7 +94,7 @@ static void twd_update_frequency(void *data)
 {
 	twd_timer_rate = clk_get_rate(twd_clk);
 
-	clockevents_update_freq(__get_cpu_var(twd_ce), twd_timer_rate);
+	clockevents_update_freq(*__this_cpu_ptr(twd_evt), twd_timer_rate);
 }
 
 static int twd_cpufreq_transition(struct notifier_block *nb,
@@ -193,6 +193,18 @@ static struct clk *twd_get_clock(void)
  */
 void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 {
+	struct clock_event_device **this_cpu_clk;
+
+	if (!twd_evt) {
+		int err;
+
+		twd_evt = alloc_percpu(struct clock_event_device *);
+		if (!twd_evt) {
+			pr_err("twd: can't allocate memory\n");
+			return;
+		}
+	}
+
 	if (!twd_clk)
 		twd_clk = twd_get_clock();
 
@@ -210,7 +222,8 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 	clk->set_mode = twd_set_mode;
 	clk->set_next_event = twd_set_next_event;
 
-	__get_cpu_var(twd_ce) = clk;
+	this_cpu_clk = __this_cpu_ptr(twd_evt);
+	*this_cpu_clk = clk;
 
 	clockevents_config_and_register(clk, twd_timer_rate,
 					0xf, 0xffffffff);
