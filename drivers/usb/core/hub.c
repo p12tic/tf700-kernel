@@ -1842,6 +1842,37 @@ fail:
 	return err;
 }
 
+static void set_usb_port_removable(struct usb_device *udev)
+{
+	struct usb_device *hdev = udev->parent;
+	struct usb_hub *hub;
+	u8 port = udev->portnum;
+	u16 wHubCharacteristics;
+	bool removable = true;
+
+	if (!hdev)
+		return;
+
+	hub = hdev_to_hub(udev->parent);
+
+	wHubCharacteristics = le16_to_cpu(hub->descriptor->wHubCharacteristics);
+
+	if (!(wHubCharacteristics & HUB_CHAR_COMPOUND))
+		return;
+
+	if (hub_is_superspeed(hdev)) {
+		if (hub->descriptor->u.ss.DeviceRemovable & (1 << port))
+			removable = false;
+	} else {
+		if (hub->descriptor->u.hs.DeviceRemovable[port / 8] & (1 << (port % 8)))
+			removable = false;
+	}
+
+	if (removable)
+		udev->removable = USB_DEVICE_REMOVABLE;
+	else
+		udev->removable = USB_DEVICE_FIXED;
+}
 
 /**
  * usb_new_device - perform initial device setup (usbcore-internal)
@@ -1900,6 +1931,15 @@ int usb_new_device(struct usb_device *udev)
 	announce_device(udev);
 
 	device_enable_async_suspend(&udev->dev);
+
+	/*
+	 * check whether the hub marks this port as non-removable. Do it
+	 * now so that platform-specific data can override it in
+	 * device_add()
+	 */
+	if (udev->parent)
+		set_usb_port_removable(udev);
+
 	/* Register the device.  The device driver is responsible
 	 * for configuring the device and invoking the add-device
 	 * notifier chain (used by usbfs and possibly others).
