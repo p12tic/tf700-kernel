@@ -65,7 +65,8 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/prefetch.h>
-#include  <linux/io.h>
+#include <linux/u64_stats_sync.h>
+#include <linux/io.h>
 
 #include <asm/irq.h>
 #include <asm/system.h>
@@ -736,6 +737,16 @@ struct nv_skb_map {
  * - tx setup is lockless: it relies on netif_tx_lock. Actual submission
  *	needs netdev_priv(dev)->lock :-(
  * - set_multicast_list: preparation lockless, relies on netif_tx_lock.
+ *
+ * Hardware stats updates are protected by hwstats_lock:
+ * - updated by nv_do_stats_poll (timer). This is meant to avoid
+ *   integer wraparound in the NIC stats registers, at low frequency
+ *   (0.1 Hz)
+ * - updated by nv_get_ethtool_stats + nv_get_stats64
+ *
+ * Software stats are accessed only through 64b synchronization points
+ * and are not subject to other synchronization techniques (single
+ * update thread on the TX or RX paths).
  */
 
 /* in dev: base, irq */
@@ -745,9 +756,10 @@ struct fe_priv {
 	struct net_device *dev;
 	struct napi_struct napi;
 
-	/* General data:
-	 * Locking: spin_lock(&np->lock); */
+	/* hardware stats are updated in syscall and timer */
+	spinlock_t hwstats_lock;
 	struct nv_ethtool_stats estats;
+
 	int in_shutdown;
 	u32 linkspeed;
 	int duplex;
@@ -798,6 +810,13 @@ struct fe_priv {
 	u32 nic_poll_irq;
 	int rx_ring_size;
 
+	/* RX software stats */
+	struct u64_stats_sync swstats_rx_syncp;
+	u64 stat_rx_packets;
+	u64 stat_rx_bytes; /* not always available in HW */
+	u64 stat_rx_missed_errors;
+	u64 stat_rx_dropped;
+
 	/* media detection workaround.
 	 * Locking: Within irq hander or disable_irq+spin_lock(&np->lock);
 	 */
@@ -819,6 +838,12 @@ struct fe_priv {
 	struct nv_skb_map *tx_change_owner;
 	struct nv_skb_map *tx_end_flip;
 	int tx_stop;
+
+	/* TX software stats */
+	struct u64_stats_sync swstats_tx_syncp;
+	u64 stat_tx_packets; /* not always available in HW */
+	u64 stat_tx_bytes;
+	u64 stat_tx_dropped;
 
 	/* msi/msi-x fields */
 	u32 msi_flags;
@@ -890,6 +915,11 @@ enum {
 	NV_DMA_64BIT_ENABLED
 };
 static int dma_64bit = NV_DMA_64BIT_ENABLED;
+
+/*
+ * Debug output control for tx_timeout
+ */
+static bool debug_tx_timeout = false;
 
 /*
  * Crossover Detection
@@ -1630,11 +1660,19 @@ static void nv_mac_reset(struct net_device *dev)
 	pci_push(base);
 }
 
-static void nv_get_hw_stats(struct net_device *dev)
+/* Caller must appropriately lock netdev_priv(dev)->hwstats_lock */
+static void nv_update_stats(struct net_device *dev)
 {
 	struct fe_priv *np = netdev_priv(dev);
 	u8 __iomem *base = get_hwbase(dev);
 
+	/* If it happens that this is run in top-half context, then
+	 * replace the spin_lock of hwstats_lock with
+	 * spin_lock_irqsave() in calling functions. */
+	WARN_ONCE(in_irq(), "forcedeth: estats spin_lock(_bh) from top-half");
+	assert_spin_locked(&np->hwstats_lock);
+
+	/* query hardware */
 	np->estats.tx_bytes += readl(base + NvRegTxCnt);
 	np->estats.tx_zero_rexmt += readl(base + NvRegTxZeroReXmt);
 	np->estats.tx_one_rexmt += readl(base + NvRegTxOneReXmt);
@@ -1693,40 +1731,73 @@ static void nv_get_hw_stats(struct net_device *dev)
 }
 
 /*
- * nv_get_stats: dev->get_stats function
+ * nv_get_stats64: dev->ndo_get_stats64 function
  * Get latest stats value from the nic.
  * Called with read_lock(&dev_base_lock) held for read -
  * only synchronized against unregister_netdevice.
  */
-static struct net_device_stats *nv_get_stats(struct net_device *dev)
+static struct rtnl_link_stats64*
+nv_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *storage)
+	__acquires(&netdev_priv(dev)->hwstats_lock)
+	__releases(&netdev_priv(dev)->hwstats_lock)
 {
 	struct fe_priv *np = netdev_priv(dev);
+	unsigned int syncp_start;
+
+	/*
+	 * Note: because HW stats are not always available and for
+	 * consistency reasons, the following ifconfig stats are
+	 * managed by software: rx_bytes, tx_bytes, rx_packets and
+	 * tx_packets. The related hardware stats reported by ethtool
+	 * should be equivalent to these ifconfig stats, with 4
+	 * additional bytes per packet (Ethernet FCS CRC), except for
+	 * tx_packets when TSO kicks in.
+	 */
+
+	/* software stats */
+	do {
+		syncp_start = u64_stats_fetch_begin_bh(&np->swstats_rx_syncp);
+		storage->rx_packets       = np->stat_rx_packets;
+		storage->rx_bytes         = np->stat_rx_bytes;
+		storage->rx_dropped       = np->stat_rx_dropped;
+		storage->rx_missed_errors = np->stat_rx_missed_errors;
+	} while (u64_stats_fetch_retry_bh(&np->swstats_rx_syncp, syncp_start));
+
+	do {
+		syncp_start = u64_stats_fetch_begin_bh(&np->swstats_tx_syncp);
+		storage->tx_packets = np->stat_tx_packets;
+		storage->tx_bytes   = np->stat_tx_bytes;
+		storage->tx_dropped = np->stat_tx_dropped;
+	} while (u64_stats_fetch_retry_bh(&np->swstats_tx_syncp, syncp_start));
 
 	/* If the nic supports hw counters then retrieve latest values */
-	if (np->driver_data & (DEV_HAS_STATISTICS_V1|DEV_HAS_STATISTICS_V2|DEV_HAS_STATISTICS_V3)) {
-		nv_get_hw_stats(dev);
+	if (np->driver_data & DEV_HAS_STATISTICS_V123) {
+		spin_lock_bh(&np->hwstats_lock);
 
-		/*
-		 * Note: because HW stats are not always available and
-		 * for consistency reasons, the following ifconfig
-		 * stats are managed by software: rx_bytes, tx_bytes,
-		 * rx_packets and tx_packets. The related hardware
-		 * stats reported by ethtool should be equivalent to
-		 * these ifconfig stats, with 4 additional bytes per
-		 * packet (Ethernet FCS CRC).
-		 */
+		nv_update_stats(dev);
 
-		/* copy to net_device stats */
-		dev->stats.tx_fifo_errors = np->estats.tx_fifo_errors;
-		dev->stats.tx_carrier_errors = np->estats.tx_carrier_errors;
-		dev->stats.rx_crc_errors = np->estats.rx_crc_errors;
-		dev->stats.rx_over_errors = np->estats.rx_over_errors;
-		dev->stats.rx_fifo_errors = np->estats.rx_drop_frame;
-		dev->stats.rx_errors = np->estats.rx_errors_total;
-		dev->stats.tx_errors = np->estats.tx_errors_total;
+		/* generic stats */
+		storage->rx_errors = np->estats.rx_errors_total;
+		storage->tx_errors = np->estats.tx_errors_total;
+
+		/* meaningful only when NIC supports stats v3 */
+		storage->multicast = np->estats.rx_multicast;
+
+		/* detailed rx_errors */
+		storage->rx_length_errors = np->estats.rx_length_error;
+		storage->rx_over_errors   = np->estats.rx_over_errors;
+		storage->rx_crc_errors    = np->estats.rx_crc_errors;
+		storage->rx_frame_errors  = np->estats.rx_frame_align_error;
+		storage->rx_fifo_errors   = np->estats.rx_drop_frame;
+
+		/* detailed tx_errors */
+		storage->tx_carrier_errors = np->estats.tx_carrier_errors;
+		storage->tx_fifo_errors    = np->estats.tx_fifo_errors;
+
+		spin_unlock_bh(&np->hwstats_lock);
 	}
 
-	return &dev->stats;
+	return storage;
 }
 
 /*
@@ -1759,8 +1830,12 @@ static int nv_alloc_rx(struct net_device *dev)
 				np->put_rx.orig = np->first_rx.orig;
 			if (unlikely(np->put_rx_ctx++ == np->last_rx_ctx))
 				np->put_rx_ctx = np->first_rx_ctx;
-		} else
+		} else {
+			u64_stats_update_begin(&np->swstats_rx_syncp);
+			np->stat_rx_dropped++;
+			u64_stats_update_end(&np->swstats_rx_syncp);
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -1791,8 +1866,12 @@ static int nv_alloc_rx_optimized(struct net_device *dev)
 				np->put_rx.ex = np->first_rx.ex;
 			if (unlikely(np->put_rx_ctx++ == np->last_rx_ctx))
 				np->put_rx_ctx = np->first_rx_ctx;
-		} else
+		} else {
+			u64_stats_update_begin(&np->swstats_rx_syncp);
+			np->stat_rx_dropped++;
+			u64_stats_update_end(&np->swstats_rx_syncp);
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -1849,6 +1928,7 @@ static void nv_init_tx(struct net_device *dev)
 		np->last_tx.ex = &np->tx_ring.ex[np->tx_ring_size-1];
 	np->get_tx_ctx = np->put_tx_ctx = np->first_tx_ctx = np->tx_skb;
 	np->last_tx_ctx = &np->tx_skb[np->tx_ring_size-1];
+	netdev_reset_queue(np->dev);
 	np->tx_pkts_in_progress = 0;
 	np->tx_change_owner = NULL;
 	np->tx_end_flip = NULL;
@@ -1927,8 +2007,11 @@ static void nv_drain_tx(struct net_device *dev)
 			np->tx_ring.ex[i].bufhigh = 0;
 			np->tx_ring.ex[i].buflow = 0;
 		}
-		if (nv_release_txskb(np, &np->tx_skb[i]))
-			dev->stats.tx_dropped++;
+		if (nv_release_txskb(np, &np->tx_skb[i])) {
+			u64_stats_update_begin(&np->swstats_tx_syncp);
+			np->stat_tx_dropped++;
+			u64_stats_update_end(&np->swstats_tx_syncp);
+		}
 		np->tx_skb[i].dma = 0;
 		np->tx_skb[i].dma_len = 0;
 		np->tx_skb[i].dma_single = 0;
@@ -2194,6 +2277,9 @@ static netdev_tx_t nv_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* set tx flags */
 	start_tx->flaglen |= cpu_to_le32(tx_flags | tx_flags_extra);
+
+	netdev_sent_queue(np->dev, skb->len);
+
 	np->put_tx.orig = put_tx;
 
 	spin_unlock_irqrestore(&np->lock, flags);
@@ -2338,6 +2424,9 @@ static netdev_tx_t nv_start_xmit_optimized(struct sk_buff *skb,
 
 	/* set tx flags */
 	start_tx->flaglen |= cpu_to_le32(tx_flags | tx_flags_extra);
+
+	netdev_sent_queue(np->dev, skb->len);
+
 	np->put_tx.ex = put_tx;
 
 	spin_unlock_irqrestore(&np->lock, flags);
@@ -2375,6 +2464,7 @@ static int nv_tx_done(struct net_device *dev, int limit)
 	u32 flags;
 	int tx_work = 0;
 	struct ring_desc *orig_get_tx = np->get_tx.orig;
+	unsigned int bytes_compl = 0;
 
 	while ((np->get_tx.orig != np->put_tx.orig) &&
 	       !((flags = le32_to_cpu(np->get_tx.orig->flaglen)) & NV_TX_VALID) &&
@@ -2385,12 +2475,16 @@ static int nv_tx_done(struct net_device *dev, int limit)
 		if (np->desc_ver == DESC_VER_1) {
 			if (flags & NV_TX_LASTPACKET) {
 				if (flags & NV_TX_ERROR) {
-					if ((flags & NV_TX_RETRYERROR) && !(flags & NV_TX_RETRYCOUNT_MASK))
+					if ((flags & NV_TX_RETRYERROR)
+					    && !(flags & NV_TX_RETRYCOUNT_MASK))
 						nv_legacybackoff_reseed(dev);
 				} else {
-					dev->stats.tx_packets++;
-					dev->stats.tx_bytes += np->get_tx_ctx->skb->len;
+					u64_stats_update_begin(&np->swstats_tx_syncp);
+					np->stat_tx_packets++;
+					np->stat_tx_bytes += np->get_tx_ctx->skb->len;
+					u64_stats_update_end(&np->swstats_tx_syncp);
 				}
+				bytes_compl += np->get_tx_ctx->skb->len;
 				dev_kfree_skb_any(np->get_tx_ctx->skb);
 				np->get_tx_ctx->skb = NULL;
 				tx_work++;
@@ -2398,12 +2492,16 @@ static int nv_tx_done(struct net_device *dev, int limit)
 		} else {
 			if (flags & NV_TX2_LASTPACKET) {
 				if (flags & NV_TX2_ERROR) {
-					if ((flags & NV_TX2_RETRYERROR) && !(flags & NV_TX2_RETRYCOUNT_MASK))
+					if ((flags & NV_TX2_RETRYERROR)
+					    && !(flags & NV_TX2_RETRYCOUNT_MASK))
 						nv_legacybackoff_reseed(dev);
 				} else {
-					dev->stats.tx_packets++;
-					dev->stats.tx_bytes += np->get_tx_ctx->skb->len;
+					u64_stats_update_begin(&np->swstats_tx_syncp);
+					np->stat_tx_packets++;
+					np->stat_tx_bytes += np->get_tx_ctx->skb->len;
+					u64_stats_update_end(&np->swstats_tx_syncp);
 				}
+				bytes_compl += np->get_tx_ctx->skb->len;
 				dev_kfree_skb_any(np->get_tx_ctx->skb);
 				np->get_tx_ctx->skb = NULL;
 				tx_work++;
@@ -2414,6 +2512,9 @@ static int nv_tx_done(struct net_device *dev, int limit)
 		if (unlikely(np->get_tx_ctx++ == np->last_tx_ctx))
 			np->get_tx_ctx = np->first_tx_ctx;
 	}
+
+	netdev_completed_queue(np->dev, tx_work, bytes_compl);
+
 	if (unlikely((np->tx_stop == 1) && (np->get_tx.orig != orig_get_tx))) {
 		np->tx_stop = 0;
 		netif_wake_queue(dev);
@@ -2427,6 +2528,7 @@ static int nv_tx_done_optimized(struct net_device *dev, int limit)
 	u32 flags;
 	int tx_work = 0;
 	struct ring_desc_ex *orig_get_tx = np->get_tx.ex;
+	unsigned long bytes_cleaned = 0;
 
 	while ((np->get_tx.ex != np->put_tx.ex) &&
 	       !((flags = le32_to_cpu(np->get_tx.ex->flaglen)) & NV_TX2_VALID) &&
@@ -2436,17 +2538,21 @@ static int nv_tx_done_optimized(struct net_device *dev, int limit)
 
 		if (flags & NV_TX2_LASTPACKET) {
 			if (flags & NV_TX2_ERROR) {
-				if ((flags & NV_TX2_RETRYERROR) && !(flags & NV_TX2_RETRYCOUNT_MASK)) {
+				if ((flags & NV_TX2_RETRYERROR)
+				    && !(flags & NV_TX2_RETRYCOUNT_MASK)) {
 					if (np->driver_data & DEV_HAS_GEAR_MODE)
 						nv_gear_backoff_reseed(dev);
 					else
 						nv_legacybackoff_reseed(dev);
 				}
 			} else {
-				dev->stats.tx_packets++;
-				dev->stats.tx_bytes += np->get_tx_ctx->skb->len;
+				u64_stats_update_begin(&np->swstats_tx_syncp);
+				np->stat_tx_packets++;
+				np->stat_tx_bytes += np->get_tx_ctx->skb->len;
+				u64_stats_update_end(&np->swstats_tx_syncp);
 			}
 
+			bytes_cleaned += np->get_tx_ctx->skb->len;
 			dev_kfree_skb_any(np->get_tx_ctx->skb);
 			np->get_tx_ctx->skb = NULL;
 			tx_work++;
@@ -2454,11 +2560,15 @@ static int nv_tx_done_optimized(struct net_device *dev, int limit)
 			if (np->tx_limit)
 				nv_tx_flip_ownership(dev);
 		}
+
 		if (unlikely(np->get_tx.ex++ == np->last_tx.ex))
 			np->get_tx.ex = np->first_tx.ex;
 		if (unlikely(np->get_tx_ctx++ == np->last_tx_ctx))
 			np->get_tx_ctx = np->first_tx_ctx;
 	}
+
+	netdev_completed_queue(np->dev, tx_work, bytes_cleaned);
+
 	if (unlikely((np->tx_stop == 1) && (np->get_tx.ex != orig_get_tx))) {
 		np->tx_stop = 0;
 		netif_wake_queue(dev);
@@ -2477,56 +2587,64 @@ static void nv_tx_timeout(struct net_device *dev)
 	u32 status;
 	union ring_type put_tx;
 	int saved_tx_limit;
-	int i;
 
 	if (np->msi_flags & NV_MSI_X_ENABLED)
 		status = readl(base + NvRegMSIXIrqStatus) & NVREG_IRQSTAT_MASK;
 	else
 		status = readl(base + NvRegIrqStatus) & NVREG_IRQSTAT_MASK;
 
-	netdev_info(dev, "Got tx_timeout. irq: %08x\n", status);
+	netdev_warn(dev, "Got tx_timeout. irq status: %08x\n", status);
 
-	netdev_info(dev, "Ring at %lx\n", (unsigned long)np->ring_addr);
-	netdev_info(dev, "Dumping tx registers\n");
-	for (i = 0; i <= np->register_size; i += 32) {
-		netdev_info(dev,
-			    "%3x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			    i,
-			    readl(base + i + 0), readl(base + i + 4),
-			    readl(base + i + 8), readl(base + i + 12),
-			    readl(base + i + 16), readl(base + i + 20),
-			    readl(base + i + 24), readl(base + i + 28));
-	}
-	netdev_info(dev, "Dumping tx ring\n");
-	for (i = 0; i < np->tx_ring_size; i += 4) {
-		if (!nv_optimized(np)) {
+	if (unlikely(debug_tx_timeout)) {
+		int i;
+
+		netdev_info(dev, "Ring at %lx\n", (unsigned long)np->ring_addr);
+		netdev_info(dev, "Dumping tx registers\n");
+		for (i = 0; i <= np->register_size; i += 32) {
 			netdev_info(dev,
-				    "%03x: %08x %08x // %08x %08x // %08x %08x // %08x %08x\n",
+				    "%3x: %08x %08x %08x %08x "
+				    "%08x %08x %08x %08x\n",
 				    i,
-				    le32_to_cpu(np->tx_ring.orig[i].buf),
-				    le32_to_cpu(np->tx_ring.orig[i].flaglen),
-				    le32_to_cpu(np->tx_ring.orig[i+1].buf),
-				    le32_to_cpu(np->tx_ring.orig[i+1].flaglen),
-				    le32_to_cpu(np->tx_ring.orig[i+2].buf),
-				    le32_to_cpu(np->tx_ring.orig[i+2].flaglen),
-				    le32_to_cpu(np->tx_ring.orig[i+3].buf),
-				    le32_to_cpu(np->tx_ring.orig[i+3].flaglen));
-		} else {
-			netdev_info(dev,
-				    "%03x: %08x %08x %08x // %08x %08x %08x // %08x %08x %08x // %08x %08x %08x\n",
-				    i,
-				    le32_to_cpu(np->tx_ring.ex[i].bufhigh),
-				    le32_to_cpu(np->tx_ring.ex[i].buflow),
-				    le32_to_cpu(np->tx_ring.ex[i].flaglen),
-				    le32_to_cpu(np->tx_ring.ex[i+1].bufhigh),
-				    le32_to_cpu(np->tx_ring.ex[i+1].buflow),
-				    le32_to_cpu(np->tx_ring.ex[i+1].flaglen),
-				    le32_to_cpu(np->tx_ring.ex[i+2].bufhigh),
-				    le32_to_cpu(np->tx_ring.ex[i+2].buflow),
-				    le32_to_cpu(np->tx_ring.ex[i+2].flaglen),
-				    le32_to_cpu(np->tx_ring.ex[i+3].bufhigh),
-				    le32_to_cpu(np->tx_ring.ex[i+3].buflow),
-				    le32_to_cpu(np->tx_ring.ex[i+3].flaglen));
+				    readl(base + i + 0), readl(base + i + 4),
+				    readl(base + i + 8), readl(base + i + 12),
+				    readl(base + i + 16), readl(base + i + 20),
+				    readl(base + i + 24), readl(base + i + 28));
+		}
+		netdev_info(dev, "Dumping tx ring\n");
+		for (i = 0; i < np->tx_ring_size; i += 4) {
+			if (!nv_optimized(np)) {
+				netdev_info(dev,
+					    "%03x: %08x %08x // %08x %08x "
+					    "// %08x %08x // %08x %08x\n",
+					    i,
+					    le32_to_cpu(np->tx_ring.orig[i].buf),
+					    le32_to_cpu(np->tx_ring.orig[i].flaglen),
+					    le32_to_cpu(np->tx_ring.orig[i+1].buf),
+					    le32_to_cpu(np->tx_ring.orig[i+1].flaglen),
+					    le32_to_cpu(np->tx_ring.orig[i+2].buf),
+					    le32_to_cpu(np->tx_ring.orig[i+2].flaglen),
+					    le32_to_cpu(np->tx_ring.orig[i+3].buf),
+					    le32_to_cpu(np->tx_ring.orig[i+3].flaglen));
+			} else {
+				netdev_info(dev,
+					    "%03x: %08x %08x %08x "
+					    "// %08x %08x %08x "
+					    "// %08x %08x %08x "
+					    "// %08x %08x %08x\n",
+					    i,
+					    le32_to_cpu(np->tx_ring.ex[i].bufhigh),
+					    le32_to_cpu(np->tx_ring.ex[i].buflow),
+					    le32_to_cpu(np->tx_ring.ex[i].flaglen),
+					    le32_to_cpu(np->tx_ring.ex[i+1].bufhigh),
+					    le32_to_cpu(np->tx_ring.ex[i+1].buflow),
+					    le32_to_cpu(np->tx_ring.ex[i+1].flaglen),
+					    le32_to_cpu(np->tx_ring.ex[i+2].bufhigh),
+					    le32_to_cpu(np->tx_ring.ex[i+2].buflow),
+					    le32_to_cpu(np->tx_ring.ex[i+2].flaglen),
+					    le32_to_cpu(np->tx_ring.ex[i+3].bufhigh),
+					    le32_to_cpu(np->tx_ring.ex[i+3].buflow),
+					    le32_to_cpu(np->tx_ring.ex[i+3].flaglen));
+			}
 		}
 	}
 
@@ -2649,8 +2767,11 @@ static int nv_rx_process(struct net_device *dev, int limit)
 					}
 					/* the rest are hard errors */
 					else {
-						if (flags & NV_RX_MISSEDFRAME)
-							dev->stats.rx_missed_errors++;
+						if (flags & NV_RX_MISSEDFRAME) {
+							u64_stats_update_begin(&np->swstats_rx_syncp);
+							np->stat_rx_missed_errors++;
+							u64_stats_update_end(&np->swstats_rx_syncp);
+						}
 						dev_kfree_skb(skb);
 						goto next_pkt;
 					}
@@ -2693,8 +2814,10 @@ static int nv_rx_process(struct net_device *dev, int limit)
 		skb_put(skb, len);
 		skb->protocol = eth_type_trans(skb, dev);
 		napi_gro_receive(&np->napi, skb);
-		dev->stats.rx_packets++;
-		dev->stats.rx_bytes += len;
+		u64_stats_update_begin(&np->swstats_rx_syncp);
+		np->stat_rx_packets++;
+		np->stat_rx_bytes += len;
+		u64_stats_update_end(&np->swstats_rx_syncp);
 next_pkt:
 		if (unlikely(np->get_rx.orig++ == np->last_rx.orig))
 			np->get_rx.orig = np->first_rx.orig;
@@ -2777,8 +2900,10 @@ static int nv_rx_process_optimized(struct net_device *dev, int limit)
 				__vlan_hwaccel_put_tag(skb, vid);
 			}
 			napi_gro_receive(&np->napi, skb);
-			dev->stats.rx_packets++;
-			dev->stats.rx_bytes += len;
+			u64_stats_update_begin(&np->swstats_rx_syncp);
+			np->stat_rx_packets++;
+			np->stat_rx_bytes += len;
+			u64_stats_update_end(&np->swstats_rx_syncp);
 		} else {
 			dev_kfree_skb(skb);
 		}
@@ -3810,6 +3935,7 @@ static int nv_request_irq(struct net_device *dev, int intr_test)
 				writel(0, base + NvRegMSIXMap0);
 				writel(0, base + NvRegMSIXMap1);
 			}
+			netdev_info(dev, "MSI-X enabled\n");
 		}
 	}
 	if (ret != 0 && np->msi_flags & NV_MSI_CAPABLE) {
@@ -3831,6 +3957,7 @@ static int nv_request_irq(struct net_device *dev, int intr_test)
 			writel(0, base + NvRegMSIMap1);
 			/* enable msi vector 0 */
 			writel(NVREG_MSI_VECTOR_0_ENABLED, base + NvRegMSIIrqMask);
+			netdev_info(dev, "MSI enabled\n");
 		}
 	}
 	if (ret != 0) {
@@ -3985,11 +4112,18 @@ static void nv_poll_controller(struct net_device *dev)
 #endif
 
 static void nv_do_stats_poll(unsigned long data)
+	__acquires(&netdev_priv(dev)->hwstats_lock)
+	__releases(&netdev_priv(dev)->hwstats_lock)
 {
 	struct net_device *dev = (struct net_device *) data;
 	struct fe_priv *np = netdev_priv(dev);
 
-	nv_get_hw_stats(dev);
+	/* If lock is currently taken, the stats are being refreshed
+	 * and hence fresh enough */
+	if (spin_trylock(&np->hwstats_lock)) {
+		nv_update_stats(dev);
+		spin_unlock(&np->hwstats_lock);
+	}
 
 	if (!np->in_shutdown)
 		mod_timer(&np->stats_poll,
@@ -4697,14 +4831,18 @@ static int nv_get_sset_count(struct net_device *dev, int sset)
 	}
 }
 
-static void nv_get_ethtool_stats(struct net_device *dev, struct ethtool_stats *estats, u64 *buffer)
+static void nv_get_ethtool_stats(struct net_device *dev,
+				 struct ethtool_stats *estats, u64 *buffer)
+	__acquires(&netdev_priv(dev)->hwstats_lock)
+	__releases(&netdev_priv(dev)->hwstats_lock)
 {
 	struct fe_priv *np = netdev_priv(dev);
 
-	/* update stats */
-	nv_get_hw_stats(dev);
-
-	memcpy(buffer, &np->estats, nv_get_sset_count(dev, ETH_SS_STATS)*sizeof(u64));
+	spin_lock_bh(&np->hwstats_lock);
+	nv_update_stats(dev);
+	memcpy(buffer, &np->estats,
+	       nv_get_sset_count(dev, ETH_SS_STATS)*sizeof(u64));
+	spin_unlock_bh(&np->hwstats_lock);
 }
 
 static int nv_link_test(struct net_device *dev)
@@ -5348,7 +5486,7 @@ static int nv_close(struct net_device *dev)
 static const struct net_device_ops nv_netdev_ops = {
 	.ndo_open		= nv_open,
 	.ndo_stop		= nv_close,
-	.ndo_get_stats		= nv_get_stats,
+	.ndo_get_stats64	= nv_get_stats64,
 	.ndo_start_xmit		= nv_start_xmit,
 	.ndo_tx_timeout		= nv_tx_timeout,
 	.ndo_change_mtu		= nv_change_mtu,
@@ -5365,7 +5503,7 @@ static const struct net_device_ops nv_netdev_ops = {
 static const struct net_device_ops nv_netdev_ops_optimized = {
 	.ndo_open		= nv_open,
 	.ndo_stop		= nv_close,
-	.ndo_get_stats		= nv_get_stats,
+	.ndo_get_stats64	= nv_get_stats64,
 	.ndo_start_xmit		= nv_start_xmit_optimized,
 	.ndo_tx_timeout		= nv_tx_timeout,
 	.ndo_change_mtu		= nv_change_mtu,
@@ -5404,6 +5542,7 @@ static int __devinit nv_probe(struct pci_dev *pci_dev, const struct pci_device_i
 	np->dev = dev;
 	np->pci_dev = pci_dev;
 	spin_lock_init(&np->lock);
+	spin_lock_init(&np->hwstats_lock);
 	SET_NETDEV_DEV(dev, &pci_dev->dev);
 
 	init_timer(&np->oom_kick);
@@ -5412,7 +5551,7 @@ static int __devinit nv_probe(struct pci_dev *pci_dev, const struct pci_device_i
 	init_timer(&np->nic_poll);
 	np->nic_poll.data = (unsigned long) dev;
 	np->nic_poll.function = nv_do_nic_poll;	/* timer handler */
-	init_timer(&np->stats_poll);
+	init_timer_deferrable(&np->stats_poll);
 	np->stats_poll.data = (unsigned long) dev;
 	np->stats_poll.function = nv_do_stats_poll;	/* timer handler */
 
@@ -6155,6 +6294,9 @@ module_param(phy_cross, int, 0);
 MODULE_PARM_DESC(phy_cross, "Phy crossover detection for Realtek 8201 phy is enabled by setting to 1 and disabled by setting to 0.");
 module_param(phy_power_down, int, 0);
 MODULE_PARM_DESC(phy_power_down, "Power down phy and disable link when interface is down (1), or leave phy powered up (0).");
+module_param(debug_tx_timeout, bool, 0);
+MODULE_PARM_DESC(debug_tx_timeout,
+		 "Dump tx related registers and ring when tx_timeout happens");
 
 MODULE_AUTHOR("Manfred Spraul <manfred@colorfullife.com>");
 MODULE_DESCRIPTION("Reverse Engineered nForce ethernet driver");

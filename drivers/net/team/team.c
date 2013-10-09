@@ -18,6 +18,7 @@
 #include <linux/ctype.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
+#include <linux/if_vlan.h>
 #include <linux/if_arp.h>
 #include <linux/socket.h>
 #include <linux/etherdevice.h>
@@ -96,35 +97,36 @@ int team_options_register(struct team *team,
 			  size_t option_count)
 {
 	int i;
-	struct team_option *dst_opts[option_count];
+	struct team_option **dst_opts;
 	int err;
 
-	memset(dst_opts, 0, sizeof(dst_opts));
+	dst_opts = kzalloc(sizeof(struct team_option *) * option_count,
+			   GFP_KERNEL);
+	if (!dst_opts)
+		return -ENOMEM;
 	for (i = 0; i < option_count; i++, option++) {
-		struct team_option *dst_opt;
-
 		if (__team_find_option(team, option->name)) {
 			err = -EEXIST;
 			goto rollback;
 		}
-		dst_opt = kmalloc(sizeof(*option), GFP_KERNEL);
-		if (!dst_opt) {
+		dst_opts[i] = kmemdup(option, sizeof(*option), GFP_KERNEL);
+		if (!dst_opts[i]) {
 			err = -ENOMEM;
 			goto rollback;
 		}
-		memcpy(dst_opt, option, sizeof(*option));
-		dst_opts[i] = dst_opt;
 	}
 
 	for (i = 0; i < option_count; i++)
 		list_add_tail(&dst_opts[i]->list, &team->option_list);
 
+	kfree(dst_opts);
 	return 0;
 
 rollback:
 	for (i = 0; i < option_count; i++)
 		kfree(dst_opts[i]);
 
+	kfree(dst_opts);
 	return err;
 }
 
@@ -586,6 +588,13 @@ static int team_port_add(struct team *team, struct net_device *port_dev)
 		goto err_dev_open;
 	}
 
+	err = vlan_vids_add_by_dev(port_dev, dev);
+	if (err) {
+		netdev_err(dev, "Failed to add vlan ids to device %s\n",
+				portname);
+		goto err_vids_add;
+	}
+
 	err = netdev_set_master(port_dev, dev);
 	if (err) {
 		netdev_err(dev, "Device %s failed to set master\n", portname);
@@ -613,6 +622,9 @@ err_handler_register:
 	netdev_set_master(port_dev, NULL);
 
 err_set_master:
+	vlan_vids_del_by_dev(port_dev, dev);
+
+err_vids_add:
 	dev_close(port_dev);
 
 err_dev_open:
@@ -646,6 +658,7 @@ static int team_port_del(struct team *team, struct net_device *port_dev)
 	team_adjust_ops(team);
 	netdev_rx_handler_unregister(port_dev);
 	netdev_set_master(port_dev, NULL);
+	vlan_vids_del_by_dev(port_dev, dev);
 	dev_close(port_dev);
 	team_port_leave(team, port);
 	team_port_set_orig_mac(port);
@@ -901,34 +914,45 @@ team_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 	return stats;
 }
 
-static void team_vlan_rx_add_vid(struct net_device *dev, uint16_t vid)
+static int team_vlan_rx_add_vid(struct net_device *dev, uint16_t vid)
 {
 	struct team *team = netdev_priv(dev);
 	struct team_port *port;
+	int err;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(port, &team->port_list, list) {
-		const struct net_device_ops *ops = port->dev->netdev_ops;
-
-		if (ops->ndo_vlan_rx_add_vid)
-			ops->ndo_vlan_rx_add_vid(port->dev, vid);
+	/*
+	 * Alhough this is reader, it's guarded by team lock. It's not possible
+	 * to traverse list in reverse under rcu_read_lock
+	 */
+	mutex_lock(&team->lock);
+	list_for_each_entry(port, &team->port_list, list) {
+		err = vlan_vid_add(port->dev, vid);
+		if (err)
+			goto unwind;
 	}
-	rcu_read_unlock();
+	mutex_unlock(&team->lock);
+
+	return 0;
+
+unwind:
+	list_for_each_entry_continue_reverse(port, &team->port_list, list)
+		vlan_vid_del(port->dev, vid);
+	mutex_unlock(&team->lock);
+
+	return err;
 }
 
-static void team_vlan_rx_kill_vid(struct net_device *dev, uint16_t vid)
+static int team_vlan_rx_kill_vid(struct net_device *dev, uint16_t vid)
 {
 	struct team *team = netdev_priv(dev);
 	struct team_port *port;
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(port, &team->port_list, list) {
-		const struct net_device_ops *ops = port->dev->netdev_ops;
-
-		if (ops->ndo_vlan_rx_kill_vid)
-			ops->ndo_vlan_rx_kill_vid(port->dev, vid);
-	}
+	list_for_each_entry_rcu(port, &team->port_list, list)
+		vlan_vid_del(port->dev, vid);
 	rcu_read_unlock();
+
+	return 0;
 }
 
 static int team_add_slave(struct net_device *dev, struct net_device *port_dev)
@@ -953,6 +977,27 @@ static int team_del_slave(struct net_device *dev, struct net_device *port_dev)
 	return err;
 }
 
+static netdev_features_t team_fix_features(struct net_device *dev,
+					   netdev_features_t features)
+{
+	struct team_port *port;
+	struct team *team = netdev_priv(dev);
+	netdev_features_t mask;
+
+	mask = features;
+	features &= ~NETIF_F_ONE_FOR_ALL;
+	features |= NETIF_F_ALL_FOR_ALL;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(port, &team->port_list, list) {
+		features = netdev_increment_features(features,
+						     port->dev->features,
+						     mask);
+	}
+	rcu_read_unlock();
+	return features;
+}
+
 static const struct net_device_ops team_netdev_ops = {
 	.ndo_init		= team_init,
 	.ndo_uninit		= team_uninit,
@@ -968,6 +1013,7 @@ static const struct net_device_ops team_netdev_ops = {
 	.ndo_vlan_rx_kill_vid	= team_vlan_rx_kill_vid,
 	.ndo_add_slave		= team_add_slave,
 	.ndo_del_slave		= team_del_slave,
+	.ndo_fix_features	= team_fix_features,
 };
 
 

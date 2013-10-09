@@ -201,9 +201,9 @@ static void xennet_sysfs_delif(struct net_device *netdev);
 #define xennet_sysfs_delif(dev) do { } while (0)
 #endif
 
-static int xennet_can_sg(struct net_device *dev)
+static bool xennet_can_sg(struct net_device *dev)
 {
-	return !!(dev->features & NETIF_F_SG);
+	return dev->features & NETIF_F_SG;
 }
 
 
@@ -1709,7 +1709,6 @@ static void netback_changed(struct xenbus_device *dev,
 	case XenbusStateInitialised:
 	case XenbusStateReconfiguring:
 	case XenbusStateReconfigured:
-	case XenbusStateConnected:
 	case XenbusStateUnknown:
 	case XenbusStateClosed:
 		break;
@@ -1720,6 +1719,9 @@ static void netback_changed(struct xenbus_device *dev,
 		if (xennet_connect(netdev) != 0)
 			break;
 		xenbus_switch_state(dev, XenbusStateConnected);
+		break;
+
+	case XenbusStateConnected:
 		netif_notify_peers(netdev);
 		break;
 

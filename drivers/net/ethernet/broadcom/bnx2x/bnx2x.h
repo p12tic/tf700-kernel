@@ -887,6 +887,8 @@ struct bnx2x_common {
 #define CHIP_PORT_MODE_NONE			0x2
 #define CHIP_MODE(bp)			(bp->common.chip_port_mode)
 #define CHIP_MODE_IS_4_PORT(bp) (CHIP_MODE(bp) == CHIP_4_PORT_MODE)
+
+	u32			boot_mode;
 };
 
 /* IGU MSIX STATISTICS on 57712: 64 for VFs; 4 for PFs; 4 for Attentions */
@@ -1048,6 +1050,8 @@ struct bnx2x_slowpath {
 
 	u32				wb_comp;
 	u32				wb_data[4];
+
+	union drv_info_to_mcp		drv_info_to_mcp;
 };
 
 #define bnx2x_sp(bp, var)		(&bp->slowpath->var)
@@ -1128,18 +1132,21 @@ enum {
 enum {
 	BNX2X_PORT_QUERY_IDX,
 	BNX2X_PF_QUERY_IDX,
+	BNX2X_FCOE_QUERY_IDX,
 	BNX2X_FIRST_QUEUE_QUERY_IDX,
 };
 
 struct bnx2x_fw_stats_req {
 	struct stats_query_header hdr;
-	struct stats_query_entry query[STATS_QUERY_CMD_COUNT];
+	struct stats_query_entry query[FP_SB_MAX_E1x+
+		BNX2X_FIRST_QUEUE_QUERY_IDX];
 };
 
 struct bnx2x_fw_stats_data {
 	struct stats_counter	storm_counters;
 	struct per_port_stats	port;
 	struct per_pf_stats	pf;
+	struct fcoe_statistics_params	fcoe;
 	struct per_queue_stats  queue_stats[1];
 };
 
@@ -1266,6 +1273,7 @@ struct bnx2x {
 #define NO_ISCSI_OOO_FLAG		(1 << 13)
 #define NO_ISCSI_FLAG			(1 << 14)
 #define NO_FCOE_FLAG			(1 << 15)
+#define BC_SUPPORTS_PFC_STATS		(1 << 17)
 
 #define NO_ISCSI(bp)		((bp)->flags & NO_ISCSI_FLAG)
 #define NO_ISCSI_OOO(bp)	((bp)->flags & NO_ISCSI_OOO_FLAG)
@@ -2084,4 +2092,16 @@ static const u32 dmae_reg_go_c[] = {
 
 void bnx2x_set_ethtool_ops(struct net_device *netdev);
 void bnx2x_notify_link_changed(struct bnx2x *bp);
+
+
+#define BNX2X_MF_PROTOCOL(bp) \
+	((bp)->mf_config[BP_VN(bp)] & FUNC_MF_CFG_PROTOCOL_MASK)
+
+#ifdef BCM_CNIC
+#define BNX2X_IS_MF_PROTOCOL_ISCSI(bp) \
+	(BNX2X_MF_PROTOCOL(bp) == FUNC_MF_CFG_PROTOCOL_ISCSI)
+
+#define IS_MF_ISCSI_SD(bp) (IS_MF_SD(bp) && BNX2X_IS_MF_PROTOCOL_ISCSI(bp))
+#endif
+
 #endif /* bnx2x.h */

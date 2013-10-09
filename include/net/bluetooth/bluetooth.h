@@ -36,6 +36,11 @@
 #define PF_BLUETOOTH	AF_BLUETOOTH
 #endif
 
+/* Bluetooth versions */
+#define BLUETOOTH_VER_1_1	1
+#define BLUETOOTH_VER_1_2	2
+#define BLUETOOTH_VER_2_0	3
+
 /* Reserv for core and drivers use */
 #define BT_SKB_RESERVE	8
 
@@ -104,7 +109,7 @@ struct bt_power {
  */
 #define BT_CHANNEL_POLICY_AMP_PREFERRED		2
 
-__attribute__((format (printf, 2, 3)))
+__printf(2, 3)
 int bt_printk(const char *level, const char *fmt, ...);
 
 #define BT_INFO(fmt, arg...)   bt_printk(KERN_INFO, pr_fmt(fmt), ##arg)
@@ -245,32 +250,10 @@ extern void bt_sysfs_cleanup(void);
 
 extern struct dentry *bt_debugfs;
 
-#ifdef CONFIG_BT_L2CAP
 int l2cap_init(void);
 void l2cap_exit(void);
-#else
-static inline int l2cap_init(void)
-{
-	return 0;
-}
 
-static inline void l2cap_exit(void)
-{
-}
-#endif
-
-#ifdef CONFIG_BT_SCO
 int sco_init(void);
 void sco_exit(void);
-#else
-static inline int sco_init(void)
-{
-	return 0;
-}
-
-static inline void sco_exit(void)
-{
-}
-#endif
 
 #endif /* __BLUETOOTH_H */

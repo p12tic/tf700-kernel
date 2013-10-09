@@ -17,6 +17,7 @@
 #ifndef _BRCM_PUB_H_
 #define _BRCM_PUB_H_
 
+#include <linux/bcma/bcma.h>
 #include <brcmu_wifi.h>
 #include "types.h"
 #include "defs.h"
@@ -248,7 +249,6 @@ enum brcms_srom_id {
 };
 
 #define	BRCMS_NUMRATES	16	/* max # of rates in a rateset */
-#define	D11_PHY_HDR_LEN	6	/* Phy header length - 6 bytes */
 
 /* phy types */
 #define	PHY_TYPE_A	0	/* Phy type A */
@@ -382,7 +382,6 @@ struct brcms_pub {
 	uint _nbands;		/* # bands supported */
 	uint now;		/* # elapsed seconds */
 
-	bool promisc;		/* promiscuous destination address */
 	bool delayed_down;	/* down delayed */
 	bool associated;	/* true:part of [I]BSS, false: not */
 	/* (union of stas_associated, aps_associated) */
@@ -532,9 +531,8 @@ struct brcms_antselcfg {
 
 /* common functions for every port */
 extern struct brcms_c_info *
-brcms_c_attach(struct brcms_info *wl, u16 vendor, u16 device, uint unit,
-	       bool piomode, void __iomem *regsva, struct pci_dev *btparam,
-	       uint *perr);
+brcms_c_attach(struct brcms_info *wl, struct bcma_device *core, uint unit,
+	       bool piomode, uint *perr);
 extern uint brcms_c_detach(struct brcms_c_info *wlc);
 extern int brcms_c_up(struct brcms_c_info *wlc);
 extern uint brcms_c_down(struct brcms_c_info *wlc);

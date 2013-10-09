@@ -452,7 +452,7 @@ static void skb_release_head_state(struct sk_buff *skb)
 		WARN_ON(in_irq());
 		skb->destructor(skb);
 	}
-#if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
+#if IS_ENABLED(CONFIG_NF_CONNTRACK)
 	nf_conntrack_put(skb->nfct);
 #endif
 #ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
@@ -602,15 +602,14 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->ip_summed		= old->ip_summed;
 	skb_copy_queue_mapping(new, old);
 	new->priority		= old->priority;
-#if defined(CONFIG_IP_VS) || defined(CONFIG_IP_VS_MODULE)
+#if IS_ENABLED(CONFIG_IP_VS)
 	new->ipvs_property	= old->ipvs_property;
 #endif
 	new->protocol		= old->protocol;
 	new->mark		= old->mark;
 	new->skb_iif		= old->skb_iif;
 	__nf_copy(new, old);
-#if defined(CONFIG_NETFILTER_XT_TARGET_TRACE) || \
-    defined(CONFIG_NETFILTER_XT_TARGET_TRACE_MODULE)
+#if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE)
 	new->nf_trace		= old->nf_trace;
 #endif
 #ifdef CONFIG_NET_SCHED
@@ -840,8 +839,9 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, gfp_t gfp_mask)
 EXPORT_SYMBOL(skb_copy);
 
 /**
- *	pskb_copy	-	create copy of an sk_buff with private head.
+ *	__pskb_copy	-	create copy of an sk_buff with private head.
  *	@skb: buffer to copy
+ *	@headroom: headroom of new skb
  *	@gfp_mask: allocation priority
  *
  *	Make a copy of both an &sk_buff and part of its data, located
@@ -852,16 +852,16 @@ EXPORT_SYMBOL(skb_copy);
  *	The returned buffer has a reference count of 1.
  */
 
-struct sk_buff *pskb_copy(struct sk_buff *skb, gfp_t gfp_mask)
+struct sk_buff *__pskb_copy(struct sk_buff *skb, int headroom, gfp_t gfp_mask)
 {
-	unsigned int size = skb_end_pointer(skb) - skb->head;
+	unsigned int size = skb_headlen(skb) + headroom;
 	struct sk_buff *n = alloc_skb(size, gfp_mask);
 
 	if (!n)
 		goto out;
 
 	/* Set the data pointer */
-	skb_reserve(n, skb_headroom(skb));
+	skb_reserve(n, headroom);
 	/* Set the tail pointer and length */
 	skb_put(n, skb_headlen(skb));
 	/* Copy the bytes */
@@ -897,7 +897,7 @@ struct sk_buff *pskb_copy(struct sk_buff *skb, gfp_t gfp_mask)
 out:
 	return n;
 }
-EXPORT_SYMBOL(pskb_copy);
+EXPORT_SYMBOL(__pskb_copy);
 
 /**
  *	pskb_expand_head - reallocate header of &sk_buff
@@ -3217,6 +3217,26 @@ void skb_tstamp_tx(struct sk_buff *orig_skb,
 		kfree_skb(skb);
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
+
+void skb_complete_wifi_ack(struct sk_buff *skb, bool acked)
+{
+	struct sock *sk = skb->sk;
+	struct sock_exterr_skb *serr;
+	int err;
+
+	skb->wifi_acked_valid = 1;
+	skb->wifi_acked = acked;
+
+	serr = SKB_EXT_ERR(skb);
+	memset(serr, 0, sizeof(*serr));
+	serr->ee.ee_errno = ENOMSG;
+	serr->ee.ee_origin = SO_EE_ORIGIN_TXSTATUS;
+
+	err = sock_queue_err_skb(sk, skb);
+	if (err)
+		kfree_skb(skb);
+}
+EXPORT_SYMBOL_GPL(skb_complete_wifi_ack);
 
 
 /**

@@ -235,7 +235,7 @@ extern struct sctp_globals {
 
 	/* Flag to indicate whether computing and verifying checksum
 	 * is disabled. */
-        int checksum_disable;
+        bool checksum_disable;
 
 	/* Threshold for rwnd update SACKS.  Receive buffer shifted this many
 	 * bits is an indicator of when to send and window update SACK.
@@ -369,7 +369,7 @@ static inline struct sock *sctp_opt2sk(const struct sctp_sock *sp)
        return (struct sock *)sp;
 }
 
-#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+#if IS_ENABLED(CONFIG_IPV6)
 struct sctp6_sock {
        struct sctp_sock  sctp;
        struct ipv6_pinfo inet6;
