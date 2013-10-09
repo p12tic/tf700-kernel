@@ -2,13 +2,13 @@
  * Linux cfg80211 driver
  *
  * Copyright (C) 1999-2011, Broadcom Corporation
- * 
+ *
  *         Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,7 +16,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -4061,369 +4061,6 @@ exit:
 	return 0;
 }
 
-static s32
-wl_cfg80211_add_set_beacon(struct wiphy *wiphy, struct net_device *dev,
-	struct beacon_parameters *info)
-{
-	s32 err = BCME_OK;
-	bcm_tlv_t *ssid_ie;
-	wlc_ssid_t ssid;
-	struct wl_priv *wl = wiphy_priv(wiphy);
-	struct wl_join_params join_params;
-	wpa_ie_fixed_t *wps_ie;
-	wpa_ie_fixed_t *wpa_ie;
-	bcm_tlv_t *wpa2_ie;
-	wifi_p2p_ie_t *p2p_ie;
-	wifi_wfd_ie_t *wfd_ie;
-	bool is_bssup = false;
-	bool update_bss = false;
-	bool pbc = false;
-	u16 wpsie_len = 0;
-	u16 p2pie_len = 0;
-	u32 wfdie_len = 0;
-	u8 beacon_ie[IE_MAX_LEN];
-	s32 ie_offset = 0;
-	s32 bssidx = 0;
-	s32 infra = 1;
-	s32 join_params_size = 0;
-	s32 ap = 0;
-	WL_DBG(("interval (%d) dtim_period (%d) head_len (%d) tail_len (%d)\n",
-		info->interval, info->dtim_period, info->head_len, info->tail_len));
-
-	if (wl->p2p_net == dev) {
-		dev = wl_to_prmry_ndev(wl);
-	}
-
-	bssidx = wl_cfgp2p_find_idx(wl, dev);
-	if (p2p_is_on(wl) &&
-		(bssidx == wl_to_p2p_bss_bssidx(wl,
-		P2PAPI_BSSCFG_CONNECTION))) {
-		memset(beacon_ie, 0, sizeof(beacon_ie));
-		/* We don't need to set beacon for P2P_GO,
-		 * but need to parse ssid from beacon_parameters
-		 * because there is no way to set ssid
-		 */
-		ie_offset = DOT11_MGMT_HDR_LEN + DOT11_BCN_PRB_FIXED_LEN;
-		/* find the SSID */
-		if ((ssid_ie = bcm_parse_tlvs((u8 *)&info->head[ie_offset],
-			info->head_len - ie_offset,
-			DOT11_MNG_SSID_ID)) != NULL) {
-			memcpy(wl->p2p->ssid.SSID, ssid_ie->data, ssid_ie->len);
-			wl->p2p->ssid.SSID_len = ssid_ie->len;
-			WL_DBG(("SSID (%s) in Head \n", ssid_ie->data));
-
-		} else {
-			WL_ERR(("No SSID in beacon \n"));
-		}
-
-		/* find the WPSIE */
-		if ((wps_ie = wl_cfgp2p_find_wpsie((u8 *)info->tail, info->tail_len)) != NULL) {
-			wpsie_len = wps_ie->length + WPA_RSN_IE_TAG_FIXED_LEN;
-			/*
-			 * Should be compared with saved ie before saving it
-			 */
-			wl_validate_wps_ie((char *) wps_ie, &pbc);
-			memcpy(beacon_ie, wps_ie, wpsie_len);
-		} else {
-			WL_ERR(("No WPSIE in beacon \n"));
-		}
-
-
-		/* find the P2PIE */
-		if ((p2p_ie = wl_cfgp2p_find_p2pie((u8 *)info->tail, info->tail_len)) != NULL) {
-			/* Total length of P2P Information Element */
-			p2pie_len = p2p_ie->len + sizeof(p2p_ie->len) + sizeof(p2p_ie->id);
-			memcpy(&beacon_ie[wpsie_len], p2p_ie, p2pie_len);
-
-		} else {
-			WL_ERR(("No P2PIE in beacon \n"));
-		}
-		/* find the WFD IEs */
-		if ((wfd_ie = wl_cfgp2p_find_wfdie((u8 *)info->tail, info->tail_len)) != NULL) {
-		/* Total length of P2P Information Element */
-		wfdie_len = wfd_ie->len + sizeof(wfd_ie->len) + sizeof(wfd_ie->id);
-		if ((wpsie_len + p2pie_len + wfdie_len) < IE_MAX_LEN) {
-			memcpy(&beacon_ie[wpsie_len + p2pie_len], wfd_ie, wfdie_len);
-		} else {
-				WL_ERR(("Found WFD IE but there is no space, (%d)(%d)(%d)\n",
-				wpsie_len, p2pie_len, wfdie_len));
-				wfdie_len = 0;
-			}
-		} else {
-			WL_ERR(("No WFDIE in beacon \n"));
-		}
-		/* add WLC_E_PROBREQ_MSG event to respose probe_request from STA */
-		wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, pbc);
-		wl_cfgp2p_set_management_ie(wl, dev, bssidx, VNDR_IE_BEACON_FLAG,
-			beacon_ie, wpsie_len + p2pie_len + wfdie_len);
-
-		/* find the RSN_IE */
-		if ((wpa2_ie = bcm_parse_tlvs((u8 *)info->tail, info->tail_len,
-			DOT11_MNG_RSN_ID)) != NULL) {
-			WL_DBG((" WPA2 IE is found\n"));
-		}
-		is_bssup = wl_cfgp2p_bss_isup(dev, bssidx);
-
-		if (!is_bssup && (wpa2_ie != NULL)) {
-			wldev_iovar_setint(dev, "mpc", 0);
-			if ((err = wl_validate_wpa2ie(dev, wpa2_ie, bssidx)) < 0) {
-				WL_ERR(("WPA2 IE parsing error"));
-				goto exit;
-			}
-			err = wldev_ioctl(dev, WLC_SET_INFRA, &infra, sizeof(s32), true);
-			if (err < 0) {
-				WL_ERR(("SET INFRA error %d\n", err));
-				goto exit;
-			}
-			err = wldev_iovar_setbuf_bsscfg(dev, "ssid", &wl->p2p->ssid,
-				sizeof(wl->p2p->ssid), wl->ioctl_buf, WLC_IOCTL_MAXLEN,
-				bssidx, &wl->ioctl_buf_sync);
-			if (err < 0) {
-				WL_ERR(("GO SSID setting error %d\n", err));
-				goto exit;
-			}
-			if ((err = wl_cfgp2p_bss(wl, dev, bssidx, 1)) < 0) {
-				WL_ERR(("GO Bring up error %d\n", err));
-				goto exit;
-			}
-		}
-	} else if (wl_get_drv_status(wl, AP_CREATING, dev)) {
-		ie_offset = DOT11_MGMT_HDR_LEN + DOT11_BCN_PRB_FIXED_LEN;
-		ap = 1;
-		/* find the SSID */
-		if ((ssid_ie = bcm_parse_tlvs((u8 *)&info->head[ie_offset],
-			info->head_len - ie_offset,
-			DOT11_MNG_SSID_ID)) != NULL) {
-			memset(&ssid, 0, sizeof(wlc_ssid_t));
-			memcpy(ssid.SSID, ssid_ie->data, ssid_ie->len);
-			WL_DBG(("SSID is (%s) in Head \n", ssid.SSID));
-			ssid.SSID_len = ssid_ie->len;
-			wldev_iovar_setint(dev, "mpc", 0);
-			wldev_ioctl(dev, WLC_DOWN, &ap, sizeof(s32), true);
-			wldev_ioctl(dev, WLC_SET_INFRA, &infra, sizeof(s32), true);
-			if ((err = wldev_ioctl(dev, WLC_SET_AP, &ap, sizeof(s32), true)) < 0) {
-				WL_ERR(("setting AP mode failed %d \n", err));
-				return err;
-			}
-
-			/* if requested, do softap ch autoselect  */
-			if (wl->hostapd_chan == 14) {
-				int auto_chan;
-				if ((err = wldev_get_auto_channel(dev, &auto_chan)) != 0) {
-					WL_ERR(("softap: auto chan select failed,"
-						" will use ch 6\n"));
-					auto_chan = 6;
-				} else {
-					printf("<0>softap: got auto ch:%d\n", auto_chan);
-				}
-				err = wldev_ioctl(dev, WLC_SET_CHANNEL,
-					&auto_chan, sizeof(auto_chan), true);
-				if (err < 0) {
-					WL_ERR(("softap: WLC_SET_CHANNEL error %d chip"
-						" may not be supporting this channel\n", err));
-					return err;
-				}
-			}
-
-			/* find the RSN_IE */
-			if ((wpa2_ie = bcm_parse_tlvs((u8 *)info->tail, info->tail_len,
-				DOT11_MNG_RSN_ID)) != NULL) {
-				WL_DBG((" WPA2 IE is found\n"));
-			}
-			/* find the WPA_IE */
-			if ((wpa_ie = wl_cfgp2p_find_wpaie((u8 *)info->tail,
-			info->tail_len)) != NULL) {
-				WL_DBG((" WPA IE is found\n"));
-			}
-			if ((wpa_ie != NULL || wpa2_ie != NULL)) {
-				if (wl_validate_wpa2ie(dev, wpa2_ie, bssidx)  < 0 ||
-					wl_validate_wpaie(dev, wpa_ie, bssidx) < 0) {
-					wl->ap_info->security_mode = false;
-					return BCME_ERROR;
-				}
-				wl->ap_info->security_mode = true;
-				if (wl->ap_info->rsn_ie) {
-					kfree(wl->ap_info->rsn_ie);
-					wl->ap_info->rsn_ie = NULL;
-				}
-				if (wl->ap_info->wpa_ie) {
-					kfree(wl->ap_info->wpa_ie);
-					wl->ap_info->wpa_ie = NULL;
-				}
-				if (wl->ap_info->wps_ie) {
-					kfree(wl->ap_info->wps_ie);
-					wl->ap_info->wps_ie = NULL;
-				}
-				if (wpa_ie != NULL) {
-					/* WPAIE */
-					wl->ap_info->rsn_ie = NULL;
-					wl->ap_info->wpa_ie = kmemdup(wpa_ie,
-						wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-				} else {
-					/* RSNIE */
-					wl->ap_info->wpa_ie = NULL;
-					wl->ap_info->rsn_ie = kmemdup(wpa2_ie,
-						wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-				}
-			} else
-				wl->ap_info->security_mode = false;
-			/* find the WPSIE */
-			if ((wps_ie = wl_cfgp2p_find_wpsie((u8 *)info->tail,
-				info->tail_len)) != NULL) {
-				wpsie_len = wps_ie->length +WPA_RSN_IE_TAG_FIXED_LEN;
-				/*
-				* Should be compared with saved ie before saving it
-				*/
-				wl_validate_wps_ie((char *) wps_ie, &pbc);
-				memcpy(beacon_ie, wps_ie, wpsie_len);
-				wl_cfgp2p_set_management_ie(wl, dev, bssidx, VNDR_IE_BEACON_FLAG,
-				beacon_ie, wpsie_len);
-				wl->ap_info->wps_ie = kmemdup(wps_ie, wpsie_len, GFP_KERNEL);
-				/* add WLC_E_PROBREQ_MSG event to respose probe_request from STA */
-				wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, pbc);
-			} else {
-				WL_DBG(("No WPSIE in beacon \n"));
-			}
-			if (info->interval) {
-				if ((err = wldev_ioctl(dev, WLC_SET_BCNPRD,
-					&info->interval, sizeof(s32), true)) < 0) {
-					WL_ERR(("Beacon Interval Set Error, %d\n", err));
-					return err;
-				}
-			}
-			if (info->dtim_period) {
-				if ((err = wldev_ioctl(dev, WLC_SET_DTIMPRD,
-					&info->dtim_period, sizeof(s32), true)) < 0) {
-					WL_ERR(("DTIM Interval Set Error, %d\n", err));
-					return err;
-				}
-			}
-			err = wldev_ioctl(dev, WLC_UP, &ap, sizeof(s32), true);
-			if (unlikely(err)) {
-				WL_ERR(("WLC_UP error (%d)\n", err));
-				return err;
-			}
-			memset(&join_params, 0, sizeof(join_params));
-			/* join parameters starts with ssid */
-			join_params_size = sizeof(join_params.ssid);
-			memcpy(join_params.ssid.SSID, ssid.SSID, ssid.SSID_len);
-			join_params.ssid.SSID_len = htod32(ssid.SSID_len);
-			/* create softap */
-			if ((err = wldev_ioctl(dev, WLC_SET_SSID, &join_params,
-				join_params_size, true)) == 0) {
-				wl_clr_drv_status(wl, AP_CREATING, dev);
-				wl_set_drv_status(wl, AP_CREATED, dev);
-			}
-		}
-	} else if (wl_get_drv_status(wl, AP_CREATED, dev)) {
-		ap = 1;
-		/* find the WPSIE */
-		if ((wps_ie = wl_cfgp2p_find_wpsie((u8 *)info->tail, info->tail_len)) != NULL) {
-			wpsie_len = wps_ie->length + WPA_RSN_IE_TAG_FIXED_LEN;
-			/*
-			 * Should be compared with saved ie before saving it
-			 */
-			wl_validate_wps_ie((char *) wps_ie, &pbc);
-			memcpy(beacon_ie, wps_ie, wpsie_len);
-			wl_cfgp2p_set_management_ie(wl, dev, bssidx, VNDR_IE_BEACON_FLAG,
-			beacon_ie, wpsie_len);
-			if (wl->ap_info->wps_ie &&
-				memcmp(wl->ap_info->wps_ie, wps_ie, wpsie_len)) {
-				WL_DBG((" WPS IE is changed\n"));
-				kfree(wl->ap_info->wps_ie);
-				wl->ap_info->wps_ie = kmemdup(wps_ie, wpsie_len, GFP_KERNEL);
-				/* add WLC_E_PROBREQ_MSG event to respose probe_request from STA */
-				wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, pbc);
-			} else if (wl->ap_info->wps_ie == NULL) {
-				WL_DBG((" WPS IE is added\n"));
-				wl->ap_info->wps_ie = kmemdup(wps_ie, wpsie_len, GFP_KERNEL);
-				/* add WLC_E_PROBREQ_MSG event to respose probe_request from STA */
-				wl_add_remove_eventmsg(dev, WLC_E_PROBREQ_MSG, pbc);
-			}
-			/* find the RSN_IE */
-			if ((wpa2_ie = bcm_parse_tlvs((u8 *)info->tail, info->tail_len,
-				DOT11_MNG_RSN_ID)) != NULL) {
-				WL_DBG((" WPA2 IE is found\n"));
-			}
-			/* find the WPA_IE */
-			if ((wpa_ie = wl_cfgp2p_find_wpaie((u8 *)info->tail,
-				info->tail_len)) != NULL) {
-				WL_DBG((" WPA IE is found\n"));
-			}
-			if ((wpa_ie != NULL || wpa2_ie != NULL)) {
-				if (!wl->ap_info->security_mode) {
-					/* change from open mode to security mode */
-					update_bss = true;
-					if (wpa_ie != NULL) {
-						wl->ap_info->wpa_ie = kmemdup(wpa_ie,
-						wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-					} else {
-						wl->ap_info->rsn_ie = kmemdup(wpa2_ie,
-						wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-					}
-				} else if (wl->ap_info->wpa_ie) {
-					/* change from WPA mode to WPA2 mode */
-					if (wpa2_ie != NULL) {
-						update_bss = true;
-						kfree(wl->ap_info->wpa_ie);
-						wl->ap_info->rsn_ie = kmemdup(wpa2_ie,
-						wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-						wl->ap_info->wpa_ie = NULL;
-					}
-					else if (memcmp(wl->ap_info->wpa_ie,
-						wpa_ie, wpa_ie->length +
-						WPA_RSN_IE_TAG_FIXED_LEN)) {
-						kfree(wl->ap_info->wpa_ie);
-						update_bss = true;
-						wl->ap_info->wpa_ie = kmemdup(wpa_ie,
-						wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-						wl->ap_info->rsn_ie = NULL;
-					}
-				} else {
-					/* change from WPA2 mode to WPA mode */
-					if (wpa_ie != NULL) {
-						update_bss = true;
-						kfree(wl->ap_info->rsn_ie);
-						wl->ap_info->rsn_ie = NULL;
-						wl->ap_info->wpa_ie = kmemdup(wpa_ie,
-						wpa_ie->length + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-					} else if (memcmp(wl->ap_info->rsn_ie,
-						wpa2_ie, wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN)) {
-						update_bss = true;
-						kfree(wl->ap_info->rsn_ie);
-						wl->ap_info->rsn_ie = kmemdup(wpa2_ie,
-						wpa2_ie->len + WPA_RSN_IE_TAG_FIXED_LEN,
-						GFP_KERNEL);
-						wl->ap_info->wpa_ie = NULL;
-					}
-				}
-				if (update_bss) {
-					wl->ap_info->security_mode = true;
-					wl_cfgp2p_bss(wl, dev, bssidx, 0);
-					if (wl_validate_wpa2ie(dev, wpa2_ie, bssidx)  < 0 ||
-						wl_validate_wpaie(dev, wpa_ie, bssidx) < 0) {
-						return BCME_ERROR;
-					}
-					wl_cfgp2p_bss(wl, dev, bssidx, 1);
-				}
-			}
-		} else {
-			WL_ERR(("No WPSIE in beacon \n"));
-		}
-	}
-exit:
-	if (err)
-		wldev_iovar_setint(dev, "mpc", 1);
-	return err;
-}
-
 #ifdef WL_SCHED_SCAN
 #define PNO_TIME	30
 #define PNO_REPEAT	4
@@ -4556,8 +4193,6 @@ static struct cfg80211_ops wl_cfg80211_ops = {
 	.mgmt_frame_register = wl_cfg80211_mgmt_frame_register,
 	.change_bss = wl_cfg80211_change_bss,
 	.set_channel = wl_cfg80211_set_channel,
-	.set_beacon = wl_cfg80211_add_set_beacon,
-	.add_beacon = wl_cfg80211_add_set_beacon,
 #ifdef WL_SCHED_SCAN
 	.sched_scan_start = wl_cfg80211_sched_scan_start,
 	.sched_scan_stop = wl_cfg80211_sched_scan_stop,
@@ -6737,7 +6372,7 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *data)
 #if defined(COEX_DHCP)
 	if (wl_cfg80211_btcoex_init(wl))
 		goto cfg80211_attach_out;
-#endif 
+#endif
 
 	wlcfg_drv_priv = wl;
 
@@ -6765,7 +6400,7 @@ void wl_cfg80211_detach(void *para)
 
 #if defined(COEX_DHCP)
 	wl_cfg80211_btcoex_deinit(wl);
-#endif 
+#endif
 
 #if defined(WLP2P) && defined(WL_ENABLE_P2P_IF)
 	wl_cfg80211_detach_p2p();
