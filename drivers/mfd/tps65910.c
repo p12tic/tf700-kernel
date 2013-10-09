@@ -188,6 +188,10 @@ static struct tps65910_board *tps65910_parse_dt(struct i2c_client *client,
 		return NULL;
 	}
 
+	data &= ~mask;
+	err = tps65910_i2c_write(tps65910, reg, 1, &data);
+	if (err)
+		dev_err(tps65910->dev, "write to reg %x failed\n", reg);
 
 	board_info->irq = client->irq;
 	board_info->irq_base = -1;
