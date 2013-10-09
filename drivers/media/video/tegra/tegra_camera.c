@@ -20,6 +20,7 @@
 #include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/module.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk.h>
 #include <linux/io.h>

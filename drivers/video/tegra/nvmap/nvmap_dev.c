@@ -26,6 +26,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
+#include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/platform_device.h>

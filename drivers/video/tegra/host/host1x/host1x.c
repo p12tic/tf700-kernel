@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
+#include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/file.h>
 #include <linux/clk.h>

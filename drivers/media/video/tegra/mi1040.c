@@ -25,6 +25,7 @@
 #include <linux/i2c.h>
 #include <linux/miscdevice.h>
 #include <linux/slab.h>
+#include <linux/module.h>
 #include <linux/uaccess.h>
 #include <media/yuv_sensor.h>
 #include <linux/debugfs.h>

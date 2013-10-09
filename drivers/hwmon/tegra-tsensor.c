@@ -23,6 +23,7 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
+#include <linux/module.h>
 #include <linux/err.h>
 #include <linux/spinlock.h>
 #include <linux/hwmon-sysfs.h>

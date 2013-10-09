@@ -17,6 +17,7 @@
 #include <linux/android_alarm.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/rtc.h>
 #include <linux/sched.h>

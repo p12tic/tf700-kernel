@@ -27,6 +27,7 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/mfd/tps6591x.h>
 #include <linux/platform_device.h>
 #include <linux/rtc.h>

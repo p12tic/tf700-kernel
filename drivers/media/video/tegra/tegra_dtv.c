@@ -33,6 +33,7 @@
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
 #include <linux/wakelock.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
 #include <linux/debugfs.h>

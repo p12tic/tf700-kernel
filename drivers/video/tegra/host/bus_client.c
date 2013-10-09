@@ -22,6 +22,7 @@
 #include <linux/string.h>
 #include <linux/spinlock.h>
 #include <linux/fs.h>
+#include <linux/module.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
 #include <linux/file.h>

@@ -18,6 +18,7 @@
  * more details.
  */
 
+#include <linux/export.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>

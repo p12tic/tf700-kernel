@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/io.h>
+#include <linux/module.h>
 #include <linux/err.h>
 #include <linux/notifier.h>
 #include <linux/regulator/consumer.h>

@@ -28,6 +28,7 @@
 #include "nvhost_memmgr.h"
 
 #include <linux/slab.h>
+#include <linux/module.h>
 
 #include "bus_client.h"
 
