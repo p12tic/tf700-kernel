@@ -40,7 +40,6 @@
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/device.h>
-#include <linux/sysdev.h>
 #include <linux/platform_data/ina230.h>
 #include <linux/init.h>
 #include <linux/hwmon-sysfs.h>
