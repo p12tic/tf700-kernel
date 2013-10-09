@@ -255,9 +255,8 @@ static void emc_last_stats_update(int last_sel)
 	spin_lock_irqsave(&emc_stats.spinlock, flags);
 
 	if (emc_stats.last_sel < TEGRA_EMC_TABLE_MAX_SIZE)
-		emc_stats.time_at_clock[emc_stats.last_sel] = cputime64_add(
-			emc_stats.time_at_clock[emc_stats.last_sel],
-			cputime64_sub(cur_jiffies, emc_stats.last_update));
+		emc_stats.time_at_clock[emc_stats.last_sel] +=
+			cur_jiffies - emc_stats.last_update;
 
 	emc_stats.last_update = cur_jiffies;
 

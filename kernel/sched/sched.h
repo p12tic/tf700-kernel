@@ -371,7 +371,7 @@ struct rq {
 	unsigned long last_load_update_tick;
 #ifdef CONFIG_NO_HZ
 	u64 nohz_stamp;
-	unsigned char nohz_balance_kick;
+	unsigned long nohz_flags;
 #endif
 	int skip_clock_update;
 
@@ -487,6 +487,14 @@ static inline int cpu_of(struct rq *rq)
 
 DECLARE_PER_CPU(struct rq, runqueues);
 
+#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+#define this_rq()		(&__get_cpu_var(runqueues))
+#define task_rq(p)		cpu_rq(task_cpu(p))
+#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+#define raw_rq()		(&__raw_get_cpu_var(runqueues))
+
+#ifdef CONFIG_SMP
+
 #define rcu_dereference_check_sched_domain(p) \
 	rcu_dereference_check((p), \
 			      lockdep_is_held(&sched_domains_mutex))
@@ -499,15 +507,37 @@ DECLARE_PER_CPU(struct rq, runqueues);
  * preempt-disabled sections.
  */
 #define for_each_domain(cpu, __sd) \
-	for (__sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd); __sd; __sd = __sd->parent)
+	for (__sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd); \
+			__sd; __sd = __sd->parent)
 
 #define for_each_lower_domain(sd) for (; sd; sd = sd->child)
 
-#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
-#define this_rq()		(&__get_cpu_var(runqueues))
-#define task_rq(p)		cpu_rq(task_cpu(p))
-#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
-#define raw_rq()		(&__raw_get_cpu_var(runqueues))
+/**
+ * highest_flag_domain - Return highest sched_domain containing flag.
+ * @cpu:	The cpu whose highest level of sched domain is to
+ *		be returned.
+ * @flag:	The flag to check for the highest sched_domain
+ *		for the given cpu.
+ *
+ * Returns the highest sched_domain of a cpu which contains the given flag.
+ */
+static inline struct sched_domain *highest_flag_domain(int cpu, int flag)
+{
+	struct sched_domain *sd, *hsd = NULL;
+
+	for_each_domain(cpu, sd) {
+		if (!(sd->flags & flag))
+			break;
+		hsd = sd;
+	}
+
+	return hsd;
+}
+
+DECLARE_PER_CPU(struct sched_domain *, sd_llc);
+DECLARE_PER_CPU(int, sd_llc_id);
+
+#endif /* CONFIG_SMP */
 
 #include "stats.h"
 #include "auto_group.h"
@@ -581,6 +611,7 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
  * Tunables that become constants when CONFIG_SCHED_DEBUG is off:
  */
 #ifdef CONFIG_SCHED_DEBUG
+# include <linux/jump_label.h>
 # define const_debug __read_mostly
 #else
 # define const_debug const
@@ -593,11 +624,37 @@ extern const_debug unsigned int sysctl_sched_features;
 
 enum {
 #include "features.h"
+	__SCHED_FEAT_NR,
 };
 
 #undef SCHED_FEAT
 
+#if defined(CONFIG_SCHED_DEBUG) && defined(HAVE_JUMP_LABEL)
+static __always_inline bool static_branch__true(struct jump_label_key *key)
+{
+	return likely(static_branch(key)); /* Not out of line branch. */
+}
+
+static __always_inline bool static_branch__false(struct jump_label_key *key)
+{
+	return unlikely(static_branch(key)); /* Out of line branch. */
+}
+
+#define SCHED_FEAT(name, enabled)					\
+static __always_inline bool static_branch_##name(struct jump_label_key *key) \
+{									\
+	return static_branch__##enabled(key);				\
+}
+
+#include "features.h"
+
+#undef SCHED_FEAT
+
+extern struct jump_label_key sched_feat_keys[__SCHED_FEAT_NR];
+#define sched_feat(x) (static_branch_##x(&sched_feat_keys[__SCHED_FEAT_##x]))
+#else /* !(SCHED_DEBUG && HAVE_JUMP_LABEL) */
 #define sched_feat(x) (sysctl_sched_features & (1UL << __SCHED_FEAT_##x))
+#endif /* SCHED_DEBUG && HAVE_JUMP_LABEL */
 
 static inline u64 global_rt_period(void)
 {
@@ -830,13 +887,39 @@ extern void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime
 extern void update_cpu_load(struct rq *this_rq);
 
 #ifdef CONFIG_CGROUP_CPUACCT
+#include <linux/cgroup.h>
+/* track cpu usage of a group of tasks and its child groups */
+struct cpuacct {
+	struct cgroup_subsys_state css;
+	/* cpuusage holds pointer to a u64-type object on every cpu */
+	u64 __percpu *cpuusage;
+	struct kernel_cpustat __percpu *cpustat;
+};
+
+/* return cpu accounting group corresponding to this container */
+static inline struct cpuacct *cgroup_ca(struct cgroup *cgrp)
+{
+	return container_of(cgroup_subsys_state(cgrp, cpuacct_subsys_id),
+			    struct cpuacct, css);
+}
+
+/* return cpu accounting group to which this task belongs */
+static inline struct cpuacct *task_ca(struct task_struct *tsk)
+{
+	return container_of(task_subsys_state(tsk, cpuacct_subsys_id),
+			    struct cpuacct, css);
+}
+
+static inline struct cpuacct *parent_ca(struct cpuacct *ca)
+{
+	if (!ca || !ca->css.cgroup->parent)
+		return NULL;
+	return cgroup_ca(ca->css.cgroup->parent);
+}
+
 extern void cpuacct_charge(struct task_struct *tsk, u64 cputime);
-extern void cpuacct_update_stats(struct task_struct *tsk,
-		enum cpuacct_stat_index idx, cputime_t val);
 #else
 static inline void cpuacct_charge(struct task_struct *tsk, u64 cputime) {}
-static inline void cpuacct_update_stats(struct task_struct *tsk,
-		enum cpuacct_stat_index idx, cputime_t val) {}
 #endif
 
 static inline void inc_nr_running(struct rq *rq)
@@ -884,6 +967,13 @@ static inline int hrtick_enabled(struct rq *rq)
 }
 
 void hrtick_start(struct rq *rq, u64 delay);
+
+#else
+
+static inline int hrtick_enabled(struct rq *rq)
+{
+	return 0;
+}
 
 #endif /* CONFIG_SCHED_HRTICK */
 
@@ -1064,3 +1154,13 @@ extern void init_rt_rq(struct rt_rq *rt_rq, struct rq *rq);
 extern void unthrottle_offline_cfs_rqs(struct rq *rq);
 
 extern void account_cfs_bandwidth_used(int enabled, int was_enabled);
+
+#ifdef CONFIG_NO_HZ
+enum rq_nohz_flag_bits {
+	NOHZ_TICK_STOPPED,
+	NOHZ_BALANCE_KICK,
+	NOHZ_IDLE,
+};
+
+#define nohz_flags(cpu)	(&cpu_rq(cpu)->nohz_flags)
+#endif

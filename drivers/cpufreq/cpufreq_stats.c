@@ -65,10 +65,9 @@ static int cpufreq_stats_update(unsigned int cpu)
 		return 0;
 	}
 
-	if (stat->time_in_state && stat->last_index >= 0)
-		stat->time_in_state[stat->last_index] =
-			cputime64_add(stat->time_in_state[stat->last_index],
-				      cputime_sub(cur_time, stat->last_time));
+	if (stat->time_in_state)
+		stat->time_in_state[stat->last_index] +=
+			cur_time - stat->last_time;
 	stat->last_time = cur_time;
 	spin_unlock(&cpufreq_stats_lock);
 	return 0;
