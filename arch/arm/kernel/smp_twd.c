@@ -23,6 +23,7 @@
 #include <linux/percpu.h>
 
 #include <asm/smp_twd.h>
+#include <asm/localtimer.h>
 #include <asm/hardware/gic.h>
 
 /* set up by the platform code */
@@ -128,6 +129,12 @@ static int twd_cpufreq_init(void)
 }
 core_initcall(twd_cpufreq_init);
 
+void twd_timer_stop(struct clock_event_device *clk)
+{
+	twd_set_mode(CLOCK_EVT_MODE_UNUSED, clk);
+	disable_percpu_irq(clk->irq);
+}
+
 static void __cpuinit twd_calibrate_rate(void)
 {
 	unsigned long count;
@@ -188,6 +195,18 @@ static struct clk *twd_get_clock(void)
 	return clk;
 }
 
+static irqreturn_t twd_handler(int irq, void *dev_id)
+{
+	struct clock_event_device *evt = *(struct clock_event_device **)dev_id;
+
+	if (twd_timer_ack()) {
+		evt->event_handler(evt);
+		return IRQ_HANDLED;
+	}
+
+	return IRQ_NONE;
+}
+
 /*
  * Setup the local clock events for a CPU.
  */
@@ -203,6 +222,14 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 			pr_err("twd: can't allocate memory\n");
 			return;
 		}
+
+		err = request_percpu_irq(clk->irq, twd_handler,
+					 "twd", twd_evt);
+		if (err) {
+			pr_err("twd: can't register interrupt %d (%d)\n",
+			       clk->irq, err);
+			return;
+		}
 	}
 
 	if (!twd_clk)
@@ -214,6 +241,8 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 		twd_calibrate_rate();
 
 	__raw_writel(0, twd_base + TWD_TIMER_CONTROL);
+
+	twd_calibrate_rate();
 
 	clk->name = "local_timer";
 	clk->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT |
@@ -228,6 +257,5 @@ void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 	clockevents_config_and_register(clk, twd_timer_rate,
 					0xf, 0xffffffff);
 
-	/* Make sure our local interrupt controller has this enabled */
-	gic_enable_ppi(clk->irq);
+	enable_percpu_irq(clk->irq, 0);
 }
