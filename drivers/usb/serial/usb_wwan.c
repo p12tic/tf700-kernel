@@ -38,7 +38,7 @@
 #include "usb-wwan.h"
 #include "../../ril/ril_wakeup.h"
 
-static int debug;
+static bool debug;
 static struct usb_interface *s_dev_id = NULL;
 
 struct usb_interface *get_usb_interface(void)

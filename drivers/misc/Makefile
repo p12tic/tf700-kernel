@@ -65,3 +65,4 @@ obj-$(CONFIG_THERM_EST)		+= therm_est.o
 obj-$(CONFIG_KERNEL_RAMDUMP)    += ramdump.o
 obj-$(CONFIG_TEGRA_THROUGHPUT)	+= tegra-throughput.o
 obj-$(CONFIG_ALTERA_STAPL)	+=altera-stapl/
+obj-$(CONFIG_MAX8997_MUIC)	+= max8997-muic.o
