@@ -116,7 +116,7 @@ static ssize_t pm_test_store(struct kobject *kobj, struct kobj_attribute *attr,
 	p = memchr(buf, '\n', n);
 	len = p ? p - buf : n;
 
-	mutex_lock(&pm_mutex);
+	lock_system_sleep();
 
 	level = TEST_FIRST;
 	for (s = &pm_tests[level]; level <= TEST_MAX; s++, level++)
@@ -126,7 +126,7 @@ static ssize_t pm_test_store(struct kobject *kobj, struct kobj_attribute *attr,
 			break;
 		}
 
-	mutex_unlock(&pm_mutex);
+	unlock_system_sleep();
 
 	return error ? error : n;
 }
@@ -286,7 +286,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 	/* First, check if we are requested to hibernate */
 	if (len == 4 && !strncmp(buf, "disk", len)) {
 		error = hibernate();
-  goto Exit;
+		goto Exit;
 	}
 
 #ifdef CONFIG_SUSPEND

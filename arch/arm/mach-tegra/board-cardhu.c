@@ -1866,4 +1866,5 @@ MACHINE_START(CARDHU, "cardhu")
 	.handle_irq	= gic_handle_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_cardhu_init,
+	.restart	= tegra_assert_system_reset,
 MACHINE_END

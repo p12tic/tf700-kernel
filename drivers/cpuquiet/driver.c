@@ -135,7 +135,7 @@ int cpuquiet_register_driver(struct cpuquiet_driver *drv)
 {
 	int err = -EBUSY;
 	unsigned int cpu;
-	struct sys_device *sys_dev;
+	struct device *dev;
 	u64 cur_jiffies;
 
 	if (!drv)
@@ -150,9 +150,9 @@ int cpuquiet_register_driver(struct cpuquiet_driver *drv)
 		stats[cpu].last_update = cur_jiffies;
 		if (cpu_online(cpu))
 			stats[cpu].up_down_count = 1;
-		sys_dev = get_cpu_sysdev(cpu);
-		if (sys_dev) {
-			cpuquiet_add_dev(sys_dev, cpu);
+		dev = get_cpu_device(cpu);
+		if (dev) {
+			cpuquiet_add_dev(dev, cpu);
 			cpuquiet_cpu_kobject_init(&stats[cpu].cpu_kobject,
 					&ktype_cpu_stats, "stats", cpu);
 		}
