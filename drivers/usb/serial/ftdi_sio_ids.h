@@ -97,6 +97,8 @@
 #define FTDI_TACTRIX_OPENPORT_13S_PID	0xCC49	/* OpenPort 1.3 Subaru */
 #define FTDI_TACTRIX_OPENPORT_13U_PID	0xCC4A	/* OpenPort 1.3 Universal */
 
+#define FTDI_DISTORTEC_JTAG_LOCK_PICK_PID	0xCFF8
+
 /* SCS HF Radio Modems PID's (http://www.scs-ptc.com) */
 /* the VID is the standard ftdi vid (FTDI_VID) */
 #define FTDI_SCS_DEVICE_0_PID 0xD010    /* SCS PTC-IIusb */
@@ -532,10 +534,14 @@
 #define ADI_GNICEPLUS_PID	0xF001
 
 /*
- * Hornby Elite
+ * Microchip Technology, Inc.
+ *
+ * MICROCHIP_VID (0x04D8) and MICROCHIP_USB_BOARD_PID (0x000A) are also used by:
+ * Hornby Elite - Digital Command Control Console
+ * http://www.hornby.com/hornby-dcc/controllers/
  */
-#define HORNBY_VID		0x04D8
-#define HORNBY_ELITE_PID	0x000A
+#define MICROCHIP_VID		0x04D8
+#define MICROCHIP_USB_BOARD_PID	0x000A /* CDC RS-232 Emulation Demo */
 
 /*
  * RATOC REX-USB60F
