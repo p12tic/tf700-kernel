@@ -19,6 +19,8 @@
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/slab.h>
 #include <linux/mmc/card.h>
@@ -26,6 +28,7 @@
 #include <linux/mmc/sd.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 
 #include <asm/gpio.h>
 
@@ -164,10 +167,9 @@ static unsigned int tegra_sdhci_get_cd(struct sdhci_host *sdhci)
 
 static unsigned int tegra_sdhci_get_ro(struct sdhci_host *sdhci)
 {
-	struct platform_device *pdev = to_platform_device(mmc_dev(sdhci->mmc));
-	struct tegra_sdhci_platform_data *plat;
-
-	plat = pdev->dev.platform_data;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
+	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
 
 	if (!gpio_is_valid(plat->wp_gpio))
 		return -1;
@@ -181,10 +183,8 @@ static void tegra3_sdhci_post_reset_init(struct sdhci_host *sdhci)
 	u32 vendor_ctrl;
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
-	struct platform_device *pdev = to_platform_device(mmc_dev(sdhci->mmc));
-	struct tegra_sdhci_platform_data *plat;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
 
-	plat = pdev->dev.platform_data;
 	/* Set the base clock frequency */
 	vendor_ctrl = sdhci_readl(sdhci, SDHCI_VENDOR_CLOCK_CNTRL);
 	vendor_ctrl &= ~(0xFF << SDHCI_VENDOR_CLOCK_CNTRL_BASE_CLK_FREQ_SHIFT);
@@ -263,14 +263,15 @@ static void tegra_sdhci_reset_exit(struct sdhci_host *sdhci, u8 mask)
 static void sdhci_status_notify_cb(int card_present, void *dev_id)
 {
 	struct sdhci_host *sdhci = (struct sdhci_host *)dev_id;
-	struct platform_device *pdev = to_platform_device(mmc_dev(sdhci->mmc));
-	struct tegra_sdhci_platform_data *plat;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
+	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
+
 	unsigned int status, oldstat;
 
 	pr_debug("%s: card_present %d\n", mmc_hostname(sdhci->mmc),
 		card_present);
 
-	plat = pdev->dev.platform_data;
 	if (!plat->mmc_data.status) {
 		mmc_detect_change(sdhci->mmc, 0);
 		return;
@@ -295,12 +296,9 @@ static irqreturn_t carddetect_irq(int irq, void *data)
 	struct sdhci_host *sdhost = (struct sdhci_host *)data;
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhost);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
-	struct platform_device *pdev = to_platform_device(mmc_dev(sdhost->mmc));
-	struct tegra_sdhci_platform_data *plat;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
 
 	MMC_printk("%s: gpio_%d:%d", mmc_hostname(sdhost->mmc), SD_CARD_DETECT, gpio_get_value(SD_CARD_DETECT));
-
-	plat = pdev->dev.platform_data;
 
 	tegra_host->card_present = (gpio_get_value(plat->cd_gpio) == 0);
 
@@ -328,11 +326,10 @@ static irqreturn_t carddetect_irq(int irq, void *data)
 
 static int tegra_sdhci_8bit(struct sdhci_host *host, int bus_width)
 {
-	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
-	struct tegra_sdhci_platform_data *plat;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
 	u32 ctrl;
-
-	plat = pdev->dev.platform_data;
 
 	ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
 	if (plat->is_8bit && bus_width == MMC_BUS_WIDTH_8) {
@@ -1018,6 +1015,37 @@ static struct sdhci_pltfm_data sdhci_tegra_pdata = {
 	.ops  = &tegra_sdhci_ops,
 };
 
+static const struct of_device_id sdhci_tegra_dt_match[] __devinitdata = {
+	{ .compatible = "nvidia,tegra20-sdhci", },
+	{}
+};
+MODULE_DEVICE_TABLE(of, sdhci_dt_ids);
+
+static struct tegra_sdhci_platform_data * __devinit sdhci_tegra_dt_parse_pdata(
+						struct platform_device *pdev)
+{
+	struct tegra_sdhci_platform_data *plat;
+	struct device_node *np = pdev->dev.of_node;
+
+	if (!np)
+		return NULL;
+
+	plat = devm_kzalloc(&pdev->dev, sizeof(*plat), GFP_KERNEL);
+	if (!plat) {
+		dev_err(&pdev->dev, "Can't allocate platform data\n");
+		return NULL;
+	}
+
+	plat->wow_gpio = of_get_named_gpio(np, "wow-gpios", 0);
+	plat->cd_gpio = of_get_named_gpio(np, "cd-gpios", 0);
+	plat->wp_gpio = of_get_named_gpio(np, "wp-gpios", 0);
+	plat->power_gpio = of_get_named_gpio(np, "power-gpios", 0);
+	if (of_find_property(np, "support-8bit", NULL))
+		plat->is_8bit = 1;
+
+	return plat;
+}
+
 static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 {
 	struct sdhci_pltfm_host *pltfm_host;
@@ -1033,7 +1061,17 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 
 	pltfm_host = sdhci_priv(host);
 
+	tegra_host = kzalloc(sizeof(struct tegra_sdhci_host), GFP_KERNEL);
+	if (tegra_host == NULL) {
+		dev_err(mmc_dev(host->mmc), "failed to allocate tegra host\n");
+		rc = -ENOMEM;
+		goto err_no_mem;
+	}
+
 	plat = pdev->dev.platform_data;
+
+	if (plat == NULL)
+		plat = sdhci_tegra_dt_parse_pdata(pdev);
 
 	if (plat == NULL) {
 		dev_err(mmc_dev(host->mmc), "missing platform data\n");
@@ -1041,12 +1079,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		goto err_no_plat;
 	}
 
-	tegra_host = kzalloc(sizeof(struct tegra_sdhci_host), GFP_KERNEL);
-	if (tegra_host == NULL) {
-		dev_err(mmc_dev(host->mmc), "failed to allocate tegra host\n");
-		rc = -ENOMEM;
-		goto err_no_mem;
-	}
+	tegra_host->plat = plat;
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 	if (plat->mmc_data.embedded_sdio)
@@ -1245,7 +1278,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	host->mmc->pm_flags |= MMC_PM_IGNORE_PM_NOTIFY;
 
 #ifdef CONFIG_MMC_BKOPS
-	host->mmc->caps |= MMC_CAP_BKOPS;
+	host->mmc->caps2 |= MMC_CAP2_BKOPS;
 #endif
 
 	tegra_sdhost_min_freq = TEGRA_SDHOST_MIN_FREQ;
@@ -1299,12 +1332,10 @@ static int __devexit sdhci_tegra_remove(struct platform_device *pdev)
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct tegra_sdhci_host *tegra_host = pltfm_host->priv;
-	struct tegra_sdhci_platform_data *plat;
+	struct tegra_sdhci_platform_data *plat = tegra_host->plat;
 	int dead = (readl(host->ioaddr + SDHCI_INT_STATUS) == 0xffffffff);
 
 	sdhci_remove_host(host, dead);
-
-	plat = pdev->dev.platform_data;
 
 	disable_irq_wake(gpio_to_irq(plat->cd_gpio));
 
@@ -1348,6 +1379,7 @@ static struct platform_driver sdhci_tegra_driver = {
 	.driver		= {
 		.name	= "sdhci-tegra",
 		.owner	= THIS_MODULE,
+		.of_match_table = sdhci_tegra_dt_match,
 	},
 	.probe		= sdhci_tegra_probe,
 	.remove		= __devexit_p(sdhci_tegra_remove),

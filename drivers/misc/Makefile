@@ -64,3 +64,4 @@ obj-$(CONFIG_MAX1749_VIBRATOR)	+= max1749.o
 obj-$(CONFIG_THERM_EST)		+= therm_est.o
 obj-$(CONFIG_KERNEL_RAMDUMP)    += ramdump.o
 obj-$(CONFIG_TEGRA_THROUGHPUT)	+= tegra-throughput.o
+obj-$(CONFIG_ALTERA_STAPL)	+=altera-stapl/

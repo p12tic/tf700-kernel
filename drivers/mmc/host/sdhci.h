@@ -279,6 +279,8 @@ struct sdhci_ops {
 	int	(*switch_signal_voltage)(struct sdhci_host *host,
 				unsigned int signal_voltage);
 	int	(*execute_freq_tuning)(struct sdhci_host *sdhci);
+
+	void	(*hw_reset)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
@@ -382,6 +384,11 @@ extern void sdhci_remove_host(struct sdhci_host *host, int dead);
 extern int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state);
 extern int sdhci_resume_host(struct sdhci_host *host);
 extern void sdhci_enable_irq_wakeups(struct sdhci_host *host);
+#endif
+
+#ifdef CONFIG_PM_RUNTIME
+extern int sdhci_runtime_suspend_host(struct sdhci_host *host);
+extern int sdhci_runtime_resume_host(struct sdhci_host *host);
 #endif
 
 #endif /* __SDHCI_HW_H */
