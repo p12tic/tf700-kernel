@@ -29,6 +29,7 @@
 #include <linux/bitops.h>
 #include <linux/sched.h>
 #include <linux/cpufreq.h>
+#include <linux/of_irq.h>
 
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/hardware/gic.h>
