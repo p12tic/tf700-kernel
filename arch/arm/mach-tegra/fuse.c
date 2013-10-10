@@ -312,6 +312,7 @@ unsigned int tegra_spare_fuse(int bit)
 	BUG_ON(bit < 0 || bit > 61);
 	return tegra_fuse_readl(FUSE_SPARE_BIT + bit * 4);
 }
+EXPORT_SYMBOL(tegra_chip_uid);
 
 int tegra_sku_id(void)
 {
