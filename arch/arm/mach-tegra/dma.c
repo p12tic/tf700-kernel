@@ -324,13 +324,11 @@ static unsigned int dma_active_count(struct tegra_dma_channel *ch,
 {
 	unsigned int to_transfer;
 	unsigned int req_transfer_count;
-
 	unsigned int bytes_transferred;
 
 	to_transfer = ((status & STA_COUNT_MASK) >> STA_COUNT_SHIFT) + 1;
 	req_transfer_count = get_req_xfer_word_count(ch, req);
 	bytes_transferred = req_transfer_count;
-
 	if (status & STA_BUSY)
 		bytes_transferred -= to_transfer;
 
@@ -378,7 +376,7 @@ int tegra_dma_dequeue_req(struct tegra_dma_channel *ch,
 	}
 
 	if (!stop)
-		goto skip_status;
+		goto skip_stop_dma;
 
 	status = get_channel_status(ch, req, true);
 	req->bytes_transferred = dma_active_count(ch, req, status);
@@ -390,7 +388,7 @@ int tegra_dma_dequeue_req(struct tegra_dma_channel *ch,
 			typeof(*next_req), node);
 		tegra_dma_update_hw(ch, next_req);
 	}
-skip_status:
+skip_stop_dma:
 	req->status = -TEGRA_DMA_REQ_ERROR_ABORTED;
 
 	spin_unlock_irqrestore(&ch->lock, irq_flags);
