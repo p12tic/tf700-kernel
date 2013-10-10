@@ -37,7 +37,6 @@
 #include <mach/iomap.h>
 #include <mach/pinmux.h>
 #include <mach/powergate.h>
-#include <mach/system.h>
 #include <mach/tegra_smmu.h>
 
 #include "apbio.h"
