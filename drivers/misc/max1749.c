@@ -20,8 +20,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <linux/regulator/consumer.h>
 #include <linux/kernel.h>
+#include <linux/regulator/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/hrtimer.h>

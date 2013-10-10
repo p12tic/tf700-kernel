@@ -9,7 +9,7 @@
 #define LINUX_MMC_CORE_H
 
 #include <linux/interrupt.h>
-#include <linux/device.h>
+#include <linux/completion.h>
 
 #define MMC_SLOW_WRITE_TIME	500000	/* time (us) */
 #define MMC_REFRESH_INTERVAL	60	/* time (s) */
