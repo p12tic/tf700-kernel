@@ -78,10 +78,10 @@
 
 #define DEBUG_UART_SHIFT 2
 
+volatile u8 *uart;
+
 static void putc(int c)
 {
-	volatile u8 *uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
-
 	if (uart == NULL)
 		return;
 
@@ -106,10 +106,11 @@ static inline void konk_delay(int delay)
 
 static inline void arch_decomp_setup(void)
 {
-	volatile u8 *uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
 	volatile u32 *addr;
 	u8 uart_dll = DEBUG_UART_DLL_216;
 	u32 val;
+
+	uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
 
 	if (uart == NULL)
 		return;
