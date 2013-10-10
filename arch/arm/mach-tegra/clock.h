@@ -233,7 +233,11 @@ struct tegra_sku_rate_limit {
 	int sku_ids[MAX_SAME_LIMIT_SKU_IDS];
 };
 
-void tegra_soc_init_clocks(void);
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+void tegra20_init_clocks(void);
+#else
+void tegra30_init_clocks(void);
+#endif
 void tegra_init_max_rate(struct clk *c, unsigned long max_rate);
 void clk_init(struct clk *clk);
 struct clk *tegra_get_clock_by_name(const char *name);

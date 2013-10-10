@@ -3083,7 +3083,7 @@ static int __init tegra_soc_preinit_clocks(void)
 }
 #endif /* CONFIG_TEGRA_PREINIT_CLOCKS */
 
-void __init tegra_soc_init_clocks(void)
+void __init tegra20_init_clocks(void)
 {
 	int i;
 	struct clk *c;

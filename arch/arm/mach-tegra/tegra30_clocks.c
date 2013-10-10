@@ -42,6 +42,8 @@
 #include "sleep.h"
 #include "tegra3_emc.h"
 
+#define USE_PLL_LOCK_BITS 0
+
 #define RST_DEVICES_L			0x004
 #define RST_DEVICES_H			0x008
 #define RST_DEVICES_U			0x00C
@@ -333,11 +335,13 @@ void tegra30_set_cpu_skipper_delay(int delay)
 	skipper_delay = delay;
 }
 
+/* FIXME: recommended safety delay after lock is detected */
+#define PLL_POST_LOCK_DELAY		100
+
 /**
 * Structure defining the fields for USB UTMI clocks Parameters.
 */
-struct utmi_clk_param
-{
+struct utmi_clk_param {
 	/* Oscillator Frequency in KHz */
 	u32 osc_frequency;
 	/* UTMIP PLL Enable Delay Count  */
@@ -350,14 +354,41 @@ struct utmi_clk_param
 	u8 xtal_freq_count;
 };
 
-static const struct utmi_clk_param utmi_parameters[] =
-{
-/*	OSC_FREQUENCY, 	ENABLE_DLY, 	STABLE_CNT, 	ACTIVE_DLY, 	XTAL_FREQ_CNT */
-	{13000000,	0x02,		0x33,		0x05,		0x7F},
-	{19200000,	0x03,		0x4B,		0x06,		0xBB},
-	{12000000,	0x02,		0x2F,		0x04,		0x76},
-	{26000000,	0x04,		0x66,		0x09,		0xFE},
-	{16800000,	0x03,		0x41,		0x0A,		0xA4},
+static const struct utmi_clk_param utmi_parameters[] = {
+	{
+		.osc_frequency = 13000000,
+		.enable_delay_count = 0x02,
+		.stable_count = 0x33,
+		.active_delay_count = 0x05,
+		.xtal_freq_count = 0x7F
+	},
+	{
+		.osc_frequency = 19200000,
+		.enable_delay_count = 0x03,
+		.stable_count = 0x4B,
+		.active_delay_count = 0x06,
+		.xtal_freq_count = 0xBB},
+	{
+		.osc_frequency = 12000000,
+		.enable_delay_count = 0x02,
+		.stable_count = 0x2F,
+		.active_delay_count = 0x04,
+		.xtal_freq_count = 0x76
+	},
+	{
+		.osc_frequency = 26000000,
+		.enable_delay_count = 0x04,
+		.stable_count = 0x66,
+		.active_delay_count = 0x09,
+		.xtal_freq_count = 0xFE
+	},
+	{
+		.osc_frequency = 16800000,
+		.enable_delay_count = 0x03,
+		.stable_count = 0x41,
+		.active_delay_count = 0x0A,
+		.xtal_freq_count = 0xA4
+	},
 };
 
 static void __iomem *reg_clk_base = IO_ADDRESS(TEGRA_CLK_RESET_BASE);
@@ -375,17 +406,17 @@ static DEFINE_SPINLOCK(periph_refcount_lock);
 static int tegra_periph_clk_enable_refcount[CLK_OUT_ENB_NUM * 32];
 
 #define clk_writel(value, reg) \
-	__raw_writel(value, reg_clk_base + (reg))
+	__raw_writel(value, (u32)reg_clk_base + (reg))
 #define clk_readl(reg) \
-	__raw_readl(reg_clk_base + (reg))
+	__raw_readl((u32)reg_clk_base + (reg))
 #define pmc_writel(value, reg) \
-	__raw_writel(value, reg_pmc_base + (reg))
+	__raw_writel(value, (u32)reg_pmc_base + (reg))
 #define pmc_readl(reg) \
-	__raw_readl(reg_pmc_base + (reg))
+	__raw_readl((u32)reg_pmc_base + (reg))
 #define chipid_readl() \
-	__raw_readl(misc_gp_hidrev_base + MISC_GP_HIDREV)
+	__raw_readl((u32)misc_gp_hidrev_base + MISC_GP_HIDREV)
 
-#define clk_writel_delay(value, reg) 					\
+#define clk_writel_delay(value, reg)					\
 	do {								\
 		__raw_writel((value), (u32)reg_clk_base + (reg));	\
 		udelay(2);						\
@@ -573,7 +604,7 @@ static struct clk_ops tegra_pll_ref_ops = {
 };
 
 /* super clock functions */
-/* "super clocks" on tegra3 have two-stage muxes, fractional 7.1 divider and
+/* "super clocks" on tegra30 have two-stage muxes, fractional 7.1 divider and
  * clock skipping super divider.  We will ignore the clock skipping divider,
  * since we can't lower the voltage when using the clock skip, but we can if
  * we lower the PLL frequency. We will use 7.1 divider for CPU super-clock
@@ -586,7 +617,6 @@ static void tegra30_super_clk_init(struct clk *c)
 	int source;
 	int shift;
 	const struct clk_mux_sel *sel;
-
 	val = clk_readl(c->reg + SUPER_CLK_MUX);
 	c->state = ON;
 	BUG_ON(((val & SUPER_STATE_MASK) != SUPER_STATE_RUN) &&
@@ -620,8 +650,7 @@ static void tegra30_super_clk_init(struct clk *c)
 		val = SUPER_CLOCK_SKIP_ENABLE +
 			(c->u.cclk.div71 << SUPER_CLOCK_DIV_U71_SHIFT);
 		clk_writel(val, c->reg + SUPER_CLK_DIVIDER);
-	}
-	else
+	} else
 		clk_writel(0, c->reg + SUPER_CLK_DIVIDER);
 }
 
@@ -643,7 +672,7 @@ static int tegra30_super_clk_set_parent(struct clk *c, struct clk *p)
 	const struct clk_mux_sel *sel;
 	int shift;
 
-	val = clk_readl(c->reg + SUPER_CLK_MUX);;
+	val = clk_readl(c->reg + SUPER_CLK_MUX);
 	BUG_ON(((val & SUPER_STATE_MASK) != SUPER_STATE_RUN) &&
 		((val & SUPER_STATE_MASK) != SUPER_STATE_IDLE));
 	shift = ((val & SUPER_STATE_MASK) == SUPER_STATE_IDLE) ?
@@ -1397,12 +1426,12 @@ static struct clk_ops tegra_blink_clk_ops = {
 };
 
 /* PLL Functions */
-static int tegra30_pll_clk_wait_for_lock(struct clk *c, u32 lock_reg, u32 lock_bit)
+static int tegra30_pll_clk_wait_for_lock(struct clk *c, u32 lock_reg,
+					 u32 lock_bit)
 {
 #if USE_PLL_LOCK_BITS
 	int i;
 	for (i = 0; i < c->u.pll.lock_delay; i++) {
-		udelay(2);		/* timeout = 2 * lock time */
 		if (clk_readl(lock_reg) & lock_bit) {
 			udelay(PLL_POST_LOCK_DELAY);
 			return 0;
@@ -1425,9 +1454,8 @@ static void tegra30_utmi_param_configure(struct clk *c)
 		clk_get_rate(c->parent->parent);
 
 	for (i = 0; i < ARRAY_SIZE(utmi_parameters); i++) {
-		if (main_rate == utmi_parameters[i].osc_frequency) {
+		if (main_rate == utmi_parameters[i].osc_frequency)
 			break;
-		}
 	}
 
 	if (i >= ARRAY_SIZE(utmi_parameters)) {
@@ -1648,7 +1676,8 @@ static int tegra30_pll_clk_set_rate(struct clk *c, unsigned long rate)
 					p_div = PLLU_BASE_POST_DIV;
 			} else {
 				BUG_ON(sel->p < 1);
-				for (val = sel->p; val > 1; val >>= 1, p_div++);
+				for (val = sel->p; val > 1; val >>= 1)
+					p_div++;
 				p_div <<= PLL_BASE_DIVP_SHIFT;
 			}
 			break;
@@ -1688,7 +1717,8 @@ static int tegra30_pll_clk_set_rate(struct clk *c, unsigned long rate)
 
 		/* Raise VCO to guarantee 0.5% accuracy */
 		for (cfg.output_rate = rate; cfg.output_rate < 200 * cfreq;
-		      cfg.output_rate <<= 1, p_div++);
+		      cfg.output_rate <<= 1)
+			p_div++;
 
 		cfg.p = 0x1 << p_div;
 		cfg.m = input_rate / cfreq;
@@ -1977,8 +2007,7 @@ static void tegra30_pll_div_clk_init(struct clk *c)
 		if (c->flags & (PLLD | PLLX)) {
 			c->div = 2;
 			c->mul = 1;
-		}
-		else
+		} else
 			BUG();
 	} else {
 		c->state = ON;
@@ -2102,7 +2131,7 @@ static struct clk_ops tegra_pll_div_ops = {
 static inline u32 periph_clk_source_mask(struct clk *c)
 {
 	if (c->flags & MUX8)
-		 return 7 << 29;
+		return 7 << 29;
 	else if (c->flags & MUX_PWM)
 		return 3 << 28;
 	else if (c->flags & MUX_CLK_OUT)
@@ -2116,7 +2145,7 @@ static inline u32 periph_clk_source_mask(struct clk *c)
 static inline u32 periph_clk_source_shift(struct clk *c)
 {
 	if (c->flags & MUX8)
-		 return 29;
+		return 29;
 	else if (c->flags & MUX_PWM)
 		return 28;
 	else if (c->flags & MUX_CLK_OUT)
@@ -2130,7 +2159,7 @@ static inline u32 periph_clk_source_shift(struct clk *c)
 static void tegra30_periph_clk_init(struct clk *c)
 {
 	u32 val = clk_readl(c->reg);
-	const struct clk_mux_sel *mux = NULL;
+	const struct clk_mux_sel *mux = 0;
 	const struct clk_mux_sel *sel;
 	if (c->flags & MUX) {
 		for (sel = c->inputs; sel->input != NULL; sel++) {
@@ -2520,7 +2549,7 @@ static DEFINE_SPINLOCK(clk_out_lock);
 
 static void tegra30_clk_out_init(struct clk *c)
 {
-	const struct clk_mux_sel *mux = NULL;
+	const struct clk_mux_sel *mux = 0;
 	const struct clk_mux_sel *sel;
 	u32 val = pmc_readl(c->reg);
 
@@ -3438,6 +3467,7 @@ static struct clk tegra_pll_p = {
 		.vco_max   = 1400000000,
 		.freq_table = tegra_pll_p_freq_table,
 		.lock_delay = 300,
+		.fixed_rate = 408000000,
 	},
 };
 
@@ -3960,7 +3990,7 @@ static struct clk_mux_sel mux_sclk[] = {
 	{ .input = &tegra_pll_p_out4,	.value = 2},
 	{ .input = &tegra_pll_p_out3,	.value = 3},
 	{ .input = &tegra_pll_p_out2,	.value = 4},
-	/* { .input = &tegra_clk_d,	.value = 5}, - no use on tegra3 */
+	/* { .input = &tegra_clk_d,	.value = 5}, - no use on tegra30 */
 	{ .input = &tegra_clk_32k,	.value = 6},
 	{ .input = &tegra_pll_m_out1,	.value = 7},
 	{ 0, 0},
@@ -4137,7 +4167,7 @@ static struct clk_mux_sel mux_pllp_pllm_plld_plla_pllc_plld2_clkm[] = {
 
 static struct clk_mux_sel mux_plla_pllc_pllp_clkm[] = {
 	{ .input = &tegra_pll_a_out0, .value = 0},
-	/* { .input = &tegra_pll_c, .value = 1}, no use on tegra3 */
+	/* { .input = &tegra_pll_c, .value = 1}, no use on tegra30 */
 	{ .input = &tegra_pll_p, .value = 2},
 	{ .input = &tegra_clk_m, .value = 3},
 	{ 0, 0},
@@ -4260,7 +4290,7 @@ static struct clk tegra_clk_cbus = {
 	}
 
 #define PERIPH_CLK_EX(_name, _dev, _con, _clk_num, _reg, _max, _inputs,	\
-			_flags, _ops) 					\
+			_flags, _ops)					\
 	{						\
 		.name      = _name,			\
 		.lookup    = {				\
@@ -5373,7 +5403,7 @@ static void __init vclk_init(int tag, u32 src, u32 rebit)
 	clk_clrbit(rst, rebit);
 }
 
-static int __init tegra_soc_preinit_clocks(void)
+static int __init tegra30_preinit_clocks(void)
 {
 	/*
 	 * Make sure host1x clock configuration has:
@@ -5461,13 +5491,13 @@ static int __init tegra_soc_preinit_clocks(void)
 }
 #endif /* CONFIG_TEGRA_PREINIT_CLOCKS */
 
-void __init tegra_soc_init_clocks(void)
+void __init tegra30_init_clocks(void)
 {
 	int i;
 	struct clk *c;
 
 #ifdef CONFIG_TEGRA_PREINIT_CLOCKS
-	tegra_soc_preinit_clocks();
+	tegra30_preinit_clocks();
 #endif /* CONFIG_TEGRA_PREINIT_CLOCKS */
 
 	for (i = 0; i < ARRAY_SIZE(tegra_ptr_clks); i++)

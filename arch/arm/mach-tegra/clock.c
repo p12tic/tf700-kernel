@@ -696,7 +696,11 @@ void __init tegra_init_clock(void)
 	struct clk *cpu;
 	struct clk *twd;
 
-	tegra_soc_init_clocks();
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+	tegra20_init_clocks();
+#else
+	tegra30_init_clocks();
+#endif
 	tegra_soc_init_dvfs();
 
 	/* The twd clock is a detached child of the CPU complex clock.
