@@ -2889,7 +2889,7 @@ int mxt_stress_release(struct inode *inode, struct file *filp)
 	return 0;          /* success */
 }
 
-int mxt_stress_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+int __devinit mxt_stress_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct mxt_data *mxt;
 	u8 firmware_id[MXT_ID_BLOCK_SIZE];

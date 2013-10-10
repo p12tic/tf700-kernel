@@ -11,7 +11,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
        u16 address;
        struct mxt_object *object;
        printk("Touch: init register in function:%s, vendor=%2.2X version=0x%2.2X\n", __func__, touch_vendor_id, version);
-	  
+
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt), 0x0F);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt)+1, 0xFF);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt)+2, 0x0A);
@@ -23,7 +23,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
           break;
       case TPK_75_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt), 0x4B);
-      }	  	
+      }
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+1, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+2, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+3, 0);
@@ -46,7 +46,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
 	if(touch_vendor_id == HANNSTOUCH_SINTEK_PANEL)
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x03);
 	else
-	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x07);    	
+	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x07);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+10, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+11, 0x14);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+12, 0x03);//3
@@ -74,7 +74,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+34, 0);
 	for(i = 0; i < 35; i++) // set TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 1 all zero
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+35+i, 0);
-		
+
       object = get_object(MXT_TOUCH_KEYARRAY_T15, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -89,7 +89,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_SELFTEST_T25, mxt), 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_SELFTEST_T25, mxt)+1, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_SELFTEST_T25, mxt)+2, 0xC8);
@@ -105,7 +105,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       object = get_object(MXT_PROCI_GRIPSUPPRESSION_T40, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -122,9 +122,9 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+7, 0);
 	  mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+8, 0x03);
 	  mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+9, 0);
-	for(i = 0; i < 10; i++) // set instance 1 
+	for(i = 0; i < 10; i++) // set instance 1
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+10+i, 0);
-	  
+
       object = get_object(MXT_SPT_DIGITIZER_T43, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -144,7 +144,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       case TPK_75_OHM_PANEL:
       case TPK_50_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+6, 0);
-      }	  		    	
+      }
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+7, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+8, 0);
 
@@ -159,7 +159,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt), 0x07);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 1, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 2, 0x42);
@@ -172,7 +172,7 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
           break;
       case TPK_75_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 3, 0x19);
-      }	  	
+      }
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 8, 0x0A);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 9, 0x14);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 10, 0x90);
@@ -204,19 +204,19 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 44, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 46, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 47, 0);
-      mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 48, 0);	
+      mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 48, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 49, 0x40);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 50, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 51, 0x64);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 52, 0x0F);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 53, 0);
-	
+
       object = get_object(MXT_TOUCH_PROXKEY_T52, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	
+
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt), 0x01);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt)+1, 0x20);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt)+2, 0x01);
@@ -235,13 +235,13 @@ int init_touch_config_v2(struct mxt_data *mxt, u8 touch_vendor_id){
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       object = get_object(MXT_PROCI_EXTRATOUCHAREADATA_T57, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
 	mxt_write_byte(mxt->client,MXT_BASE_ADDR(MXT_GEN_COMMANDPROCESSOR_T6, mxt) + MXT_ADR_T6_CALIBRATE, 1);
 	return 0;
 }
@@ -251,12 +251,12 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
        int i, object_size;
        u8 version = mxt->device_info.major << 4 | mxt->device_info.minor;
        u16 address;
-       struct mxt_object *object;   
-	   
+       struct mxt_object *object;
+
 	printk("Touch: init register in function:%s, vendor=%2.2X version=0x%2.2X\n", __func__, touch_vendor_id, version);
       if(version & 0x20)
           return init_touch_config_v2(mxt, touch_vendor_id);
-	  
+
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt), 0x0F);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt)+1, 0xFF);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_POWERCONFIG_T7, mxt)+2, 0x0A);
@@ -268,7 +268,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       case TPK_75_OHM_PANEL:
       case TPK_50_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt), 0x4B);
-      }	  	
+      }
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+1, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+2, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_ACQUIRECONFIG_T8, mxt)+3, 0);
@@ -291,7 +291,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
 	if(touch_vendor_id == HANNSTOUCH_SINTEK_PANEL)
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x03);
 	else
-	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x07);    	
+	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+9, 0x07);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+10, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+11, 0x00);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+12, 0x03);//3
@@ -319,7 +319,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+34, 0);
 	for(i = 0; i < 35; i++) // set TOUCH_MULTITOUCHSCREEN_T9 INSTANCE 1 all zero
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_TOUCH_MULTITOUCHSCREEN_T9, mxt)+35+i, 0);
-		
+
       object = get_object(MXT_TOUCH_KEYARRAY_T15, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -334,7 +334,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       object = get_object(MXT_PROCI_ONETOUCHGESTUREPROCESSOR_T24, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -362,7 +362,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       object = get_object(MXT_PROCI_GRIPSUPPRESSION_T40, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -379,9 +379,9 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+7, 0);
 	  mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+8, 0x03);
 	  mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+9, 0);
-	for(i = 0; i < 10; i++) // set instance 1 
+	for(i = 0; i < 10; i++) // set instance 1
 	    mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCI_TOUCHSUPPRESSION_T42, mxt)+10+i, 0);
-	  
+
       object = get_object(MXT_SPT_DIGITIZER_T43, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
@@ -401,7 +401,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       case TPK_75_OHM_PANEL:
       case TPK_50_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+6, 0);
-      }	  		    	
+      }
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+7, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_SPT_CTECONFIG_T46, mxt)+8, 0);
 
@@ -416,7 +416,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	  
+
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt), 0x03);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 1, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 2, 0x40);
@@ -427,7 +427,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       case TPK_75_OHM_PANEL:
       case TPK_50_OHM_PANEL:
           mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 3, 0x19);
-      }	  	
+      }
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 8, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 9, 0);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 13, 0x06);
@@ -443,7 +443,7 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 25, 0x2E);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 26, 0x00);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 27, 0);
-	
+
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 34, 0x60);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 35, 0x3C);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 36, 0x02);
@@ -457,19 +457,19 @@ int init_touch_config(struct mxt_data *mxt, u8 touch_vendor_id)
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 44, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 46, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 47, 0);
-      mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 48, 0);	
+      mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 48, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 49, 0x40);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 50, 0);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 51, 0x64);
       mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 52, 0x0F);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_PROCG_NOISESUPPRESSION_T48, mxt) + 53, 0);
-	  
+
       object = get_object(MXT_TOUCH_PROXKEY_T52, mxt);
       address = object->chip_addr;
       object_size = object->size * object->instances;
       for(i = 0; i < object_size; i++)
           mxt_write_byte(mxt->client, address + i, 0);
-	
+
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt), 0x01);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt)+1, 0x20);
 	mxt_write_byte(mxt->client, MXT_BASE_ADDR(MXT_GEN_DATASOURCE_T53, mxt)+2, 0x01);
@@ -498,7 +498,7 @@ static int mxt_unlock_bootloader(struct i2c_client *client)
 
 static int mxt_check_boot_status(struct i2c_client *client, u8 state){
       u8 val;
-	  
+
       msleep(20);
 recheck:
 	if (i2c_master_recv(client, &val, 1) != 1) {
@@ -527,7 +527,7 @@ recheck:
 	return 0;
 }
 
-int mxt_update_firmware(struct mxt_data *mxt, bool inBoot)
+int __devinit mxt_update_firmware(struct mxt_data *mxt, bool inBoot)
 {
     u8 firmware_id[MXT_ID_BLOCK_SIZE];
     int ret, retry = 0;
@@ -540,13 +540,13 @@ int mxt_update_firmware(struct mxt_data *mxt, bool inBoot)
     firmware_data = mXT768E_2_0_firmware;
     firmware_size = sizeof(mXT768E_2_0_firmware);
     if(inBoot) goto mxt_boot_start; // if already in boot loader mode
-    	
+
     /*checkout firmware version and don't update if the version is equal to firmware ID in header file */
     mxt_identify(mxt->client, mxt, firmware_id);
     if(firmware_id[2] == MXT768_FIRMWARE_ID){
-        dev_info(&client->dev, "Firware is the latest version %d.%d. No need to update!\n", 
+        dev_info(&client->dev, "Firware is the latest version %d.%d. No need to update!\n",
 			mxt->device_info.major, mxt->device_info.major);
-	  return FW_VERSION_HAS_UPDATED; 
+	  return FW_VERSION_HAS_UPDATED;
     }
     /* start get into boot loader mode*/
     mxt_write_byte(client, MXT_BASE_ADDR(MXT_GEN_COMMANDPROCESSOR_T6, mxt) + MXT_ADR_T6_RESET,
@@ -556,9 +556,9 @@ mxt_boot_start:
     if (client->addr == MXT_I2C_ADDRESS) {
 		dev_info(&client->dev,"Change I2C address from 0x%02X to 0x%02X\n",
 			MXT_I2C_ADDRESS, MXT_BL_ADDRESS);
-		client->addr = MXT_BL_ADDRESS;  
+		client->addr = MXT_BL_ADDRESS;
     }
-    
+
     ret = mxt_check_boot_status(client,  MXT_WAITING_BOOTLOAD_COMMAND);
     if(ret < 0){
         dev_info(&client->dev, "Error to get into state MXT_WAITING_BOOTLOAD_COMMAND\n");
@@ -573,7 +573,7 @@ mxt_boot_start:
             dev_err(&client->dev, "Error to get into state: MXT_WAITING_FRAME_DATA\n");
             goto mxt_boot_exit;
         }
-			
+
         frame_size = ((*(firmware_data + pos) << 8) | *(firmware_data + pos + 1));
         /* We should add 2 at frame size as the the firmware data is not
         * included the CRC bytes.*/
@@ -589,18 +589,18 @@ mxt_send_boot_frame:
             }
             goto mxt_boot_exit;
 	  }
-			
+
          pos += frame_size;
-         dev_info(&client->dev, "Updated %d bytes / %zd bytes\n", pos, firmware_size);		
+         dev_info(&client->dev, "Updated %d bytes / %zd bytes\n", pos, firmware_size);
     }
     msleep(1000);
-mxt_boot_exit: 
+mxt_boot_exit:
     if (client->addr == MXT_BL_ADDRESS) {
         dev_info(&client->dev,"Change I2C address from 0x%02X to 0x%02X\n", MXT_BL_ADDRESS, MXT_I2C_ADDRESS);
-        client->addr = MXT_I2C_ADDRESS;  
-    }  
+        client->addr = MXT_I2C_ADDRESS;
+    }
     dev_info(&client->dev, "QT_Boot end\n");
-    return 0;  
+    return 0;
 }
 
 

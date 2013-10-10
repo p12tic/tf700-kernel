@@ -426,7 +426,7 @@ static const struct file_operations stats_fops = {
 	.release	= single_release,
 };
 
-static void __devexit tegra_dc_remove_debugfs(struct tegra_dc *dc)
+static void tegra_dc_remove_debugfs(struct tegra_dc *dc)
 {
 	if (dc->debugdir)
 		debugfs_remove_recursive(dc->debugdir);
@@ -464,7 +464,7 @@ remove_out:
 
 #else /* !CONFIG_DEBUGFS */
 static inline void tegra_dc_create_debugfs(struct tegra_dc *dc) { };
-static inline void __devexit tegra_dc_remove_debugfs(struct tegra_dc *dc) { };
+static inline void tegra_dc_remove_debugfs(struct tegra_dc *dc) { };
 #endif /* CONFIG_DEBUGFS */
 
 #ifdef CONFIG_DEBUG_FS
@@ -2078,7 +2078,7 @@ err_free:
 	return ret;
 }
 
-static int tegra_dc_remove(struct nvhost_device *ndev)
+static int __devexit tegra_dc_remove(struct nvhost_device *ndev)
 {
 	struct tegra_dc *dc = nvhost_get_drvdata(ndev);
 

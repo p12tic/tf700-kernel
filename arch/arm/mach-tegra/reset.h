@@ -29,6 +29,7 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/init.h>
 #include <linux/cpumask.h>
 
 extern unsigned long __tegra_cpu_reset_handler_data[TEGRA_RESET_DATA_SIZE];
@@ -36,7 +37,7 @@ extern unsigned long __tegra_cpu_reset_handler_data[TEGRA_RESET_DATA_SIZE];
 void __tegra_cpu_reset_handler_start(void);
 void __tegra_cpu_reset_handler(void);
 void __tegra_cpu_reset_handler_end(void);
-void tegra_secondary_startup(void);
+void __cpuinit tegra_secondary_startup(void);
 
 #ifdef CONFIG_PM_SLEEP
 #define tegra_cpu_lp1_mask ((unsigned long *)(IO_ADDRESS(TEGRA_RESET_HANDLER_BASE + \

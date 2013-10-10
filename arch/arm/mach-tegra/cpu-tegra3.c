@@ -471,7 +471,7 @@ void tegra_auto_hotplug_governor(unsigned int cpu_freq, bool suspend)
 	}
 }
 
-int tegra_auto_hotplug_init(struct mutex *cpu_lock)
+int __cpuinit tegra_auto_hotplug_init(struct mutex *cpu_lock)
 {
 	/*
 	 * Not bound to the issuer CPU (=> high-priority), has rescue worker

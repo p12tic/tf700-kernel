@@ -185,7 +185,7 @@ void __cpuinit platform_secondary_init(unsigned int cpu)
 			tegra_all_cpus_booted = true;
 }
 
-int boot_secondary(unsigned int cpu, struct task_struct *idle)
+int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
 	int status;
 

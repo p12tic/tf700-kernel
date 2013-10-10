@@ -178,7 +178,7 @@ static void tegra_cpuquiet_work_func(struct work_struct *work)
 	}
 }
 
-static void min_max_constraints_workfunc(struct work_struct *work)
+static void __cpuinit min_max_constraints_workfunc(struct work_struct *work)
 {
 	int count = -1;
 	bool up = false;
@@ -378,7 +378,7 @@ static int tegra_auto_sysfs(void)
 	return err;
 }
 
-int tegra_auto_hotplug_init(struct mutex *cpu_lock)
+int __cpuinit tegra_auto_hotplug_init(struct mutex *cpu_lock)
 {
 	int err;
 
