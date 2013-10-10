@@ -1049,6 +1049,7 @@ int regmap_get_val_bytes(struct regmap *map)
 }
 EXPORT_SYMBOL_GPL(regmap_get_val_bytes);
 
+
 static int __init regmap_initcall(void)
 {
 	regmap_debugfs_initcall();

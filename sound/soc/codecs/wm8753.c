@@ -39,6 +39,7 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/of_device.h>
+#include <linux/regmap.h>
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
 #include <sound/core.h>
@@ -48,7 +49,6 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <asm/div64.h>
-#include <sound/jack.h>
 
 #include "wm8753.h"
 
@@ -66,28 +66,86 @@ static int wm8753_voice_write_dai_fmt(struct snd_soc_codec *codec,
  * We can't read the WM8753 register space when we
  * are using 2 wire for device control, so we cache them instead.
  */
-static const u16 wm8753_reg[] = {
-	0x0000, 0x0008, 0x0000, 0x000a,
-	0x000a, 0x0033, 0x0000, 0x0007,
-	0x00ff, 0x00ff, 0x000f, 0x000f,
-	0x007b, 0x0000, 0x0032, 0x0000,
-	0x00c3, 0x00c3, 0x00c0, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000,
-	0x0055, 0x0005, 0x0050, 0x0055,
-	0x0050, 0x0055, 0x0050, 0x0055,
-	0x0079, 0x0079, 0x0079, 0x0079,
-	0x0079, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0097, 0x0097, 0x0000,
-	0x0004, 0x0000, 0x0083, 0x0024,
-	0x01ba, 0x0000, 0x0083, 0x0024,
-	0x01ba, 0x0000, 0x0000, 0x0000
+static const struct reg_default wm8753_reg_defaults[] = {
+	{ 0x00, 0x0000 },
+	{ 0x01, 0x0008 },
+	{ 0x02, 0x0000 },
+	{ 0x03, 0x000a },
+	{ 0x04, 0x000a },
+	{ 0x05, 0x0033 },
+	{ 0x06, 0x0000 },
+	{ 0x07, 0x0007 },
+	{ 0x08, 0x00ff },
+	{ 0x09, 0x00ff },
+	{ 0x0a, 0x000f },
+	{ 0x0b, 0x000f },
+	{ 0x0c, 0x007b },
+	{ 0x0d, 0x0000 },
+	{ 0x0e, 0x0032 },
+	{ 0x0f, 0x0000 },
+	{ 0x10, 0x00c3 },
+	{ 0x11, 0x00c3 },
+	{ 0x12, 0x00c0 },
+	{ 0x13, 0x0000 },
+	{ 0x14, 0x0000 },
+	{ 0x15, 0x0000 },
+	{ 0x16, 0x0000 },
+	{ 0x17, 0x0000 },
+	{ 0x18, 0x0000 },
+	{ 0x19, 0x0000 },
+	{ 0x1a, 0x0000 },
+	{ 0x1b, 0x0000 },
+	{ 0x1c, 0x0000 },
+	{ 0x1d, 0x0000 },
+	{ 0x1e, 0x0000 },
+	{ 0x1f, 0x0000 },
+	{ 0x20, 0x0055 },
+	{ 0x21, 0x0005 },
+	{ 0x22, 0x0050 },
+	{ 0x23, 0x0055 },
+	{ 0x24, 0x0050 },
+	{ 0x25, 0x0055 },
+	{ 0x26, 0x0050 },
+	{ 0x27, 0x0055 },
+	{ 0x28, 0x0079 },
+	{ 0x29, 0x0079 },
+	{ 0x2a, 0x0079 },
+	{ 0x2b, 0x0079 },
+	{ 0x2c, 0x0079 },
+	{ 0x2d, 0x0000 },
+	{ 0x2e, 0x0000 },
+	{ 0x2f, 0x0000 },
+	{ 0x30, 0x0000 },
+	{ 0x31, 0x0097 },
+	{ 0x32, 0x0097 },
+	{ 0x33, 0x0000 },
+	{ 0x34, 0x0004 },
+	{ 0x35, 0x0000 },
+	{ 0x36, 0x0083 },
+	{ 0x37, 0x0024 },
+	{ 0x38, 0x01ba },
+	{ 0x39, 0x0000 },
+	{ 0x3a, 0x0083 },
+	{ 0x3b, 0x0024 },
+	{ 0x3c, 0x01ba },
+	{ 0x3d, 0x0000 },
+	{ 0x3e, 0x0000 },
+	{ 0x3f, 0x0000 },
 };
+
+static bool wm8753_volatile(struct device *dev, unsigned int reg)
+{
+	return reg == WM8753_RESET;
+}
+
+static bool wm8753_writeable(struct device *dev, unsigned int reg)
+{
+	return reg <= WM8753_ADCTL2;
+}
 
 /* codec private data */
 struct wm8753_priv {
-	enum snd_soc_control_type control_type;
+	struct regmap *regmap;
 	unsigned int sysclk;
 	unsigned int pcmclk;
 
@@ -95,9 +153,6 @@ struct wm8753_priv {
 	unsigned int hifi_fmt;
 
 	int dai_func;
-	int irq;
-	struct snd_soc_jack *headset_jack;
-	unsigned int debounce_time_hp;
 };
 
 #define wm8753_reset(c) snd_soc_write(c, WM8753_RESET, 0)
@@ -197,8 +252,7 @@ static int wm8753_set_dai(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	if (codec->active)
-		printk(KERN_WARNING
-			"Trying to Change the Dai Mode when codec is active\n");
+		return -EBUSY;
 
 	ioctl = snd_soc_read(codec, WM8753_IOCTL);
 
@@ -901,10 +955,6 @@ static int wm8753_pcm_hw_params(struct snd_pcm_substream *substream,
 	/* sample rate */
 	if (params_rate(params) * 384 == wm8753->pcmclk)
 		srate |= 0x80;
-
-	/* ADC and V-DAC at same sample rate */
-	srate |= 1<<8;
-
 	snd_soc_write(codec, WM8753_SRATE1, srate);
 
 	snd_soc_write(codec, WM8753_PCM, voice);
@@ -1124,10 +1174,6 @@ static int wm8753_i2s_hw_params(struct snd_pcm_substream *substream,
 		printk(KERN_ERR "wm8753 invalid MCLK or rate\n");
 		return coeff;
 	}
-
-	/* ADC and HiFi-DAC at same sample rate */
-	srate &= ~(1<<8);
-
 	snd_soc_write(codec, WM8753_SRATE1, srate | (coeff_div[coeff].sr << 1) |
 		coeff_div[coeff].usb);
 
@@ -1395,35 +1441,18 @@ static void wm8753_work(struct work_struct *work)
 
 static int wm8753_suspend(struct snd_soc_codec *codec)
 {
-	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
-
 	wm8753_set_bias_level(codec, SND_SOC_BIAS_OFF);
-	disable_irq(wm8753->irq);
-
+	codec->cache_sync = 1;
 	return 0;
 }
 
 static int wm8753_resume(struct snd_soc_codec *codec)
 {
-	u16 *reg_cache = codec->reg_cache;
 	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
-	int i;
 
-	/* Sync reg_cache with the hardware */
-	for (i = 1; i < ARRAY_SIZE(wm8753_reg); i++) {
-		if (i == WM8753_RESET)
-			continue;
-
-		/* No point in writing hardware default values back */
-		if (reg_cache[i] == wm8753_reg[i])
-			continue;
-
-		snd_soc_write(codec, i, reg_cache[i]);
-	}
+	regcache_sync(wm8753->regmap);
 
 	wm8753_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-
-	enable_irq(wm8753->irq);
 
 	/* charge wm8753 caps */
 	if (codec->dapm.suspend_bias_level == SND_SOC_BIAS_ON) {
@@ -1436,70 +1465,6 @@ static int wm8753_resume(struct snd_soc_codec *codec)
 	return 0;
 }
 
-static irqreturn_t wm8753_jack_handler(int irq, void *data)
-{
-	struct snd_soc_codec *codec = data;
-	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
-	unsigned int value;
-
-	/* GPIO4 interrupt disable */
-	snd_soc_update_bits(codec, WM8753_INTEN, WM8753_GPIO4IEN_MASK,
-		WM8753_GPIO4IEN_DIS);
-
-	/* sleep for debounce time */
-	msleep(wm8753->debounce_time_hp);
-
-	/* Invert GPIO4 interrupt polarity */
-	value = snd_soc_read(codec, WM8753_INTPOL);
-	if (value & WM8753_GPIO4IPOL_LOW) {
-		snd_soc_jack_report(wm8753->headset_jack, SND_JACK_HEADPHONE,
-			SND_JACK_HEADPHONE);
-		/* interupt when high i.e Headphone disconnected */
-		snd_soc_update_bits(codec, WM8753_INTPOL, WM8753_GPIO4IPOL_MASK,
-			WM8753_GPIO4IPOL_HIGH);
-	} else {
-		snd_soc_jack_report(wm8753->headset_jack, 0,
-			SND_JACK_HEADPHONE);
-		/* interupt when low i.e Headphone connected */
-		snd_soc_update_bits(codec, WM8753_INTPOL, WM8753_GPIO4IPOL_MASK,
-			WM8753_GPIO4IPOL_LOW);
-	}
-
-	/* GPIO4 interrupt enable */
-	snd_soc_update_bits(codec, WM8753_INTEN, WM8753_GPIO4IEN_MASK,
-		WM8753_GPIO4IEN_EN);
-
-	return IRQ_HANDLED;
-}
-
-int wm8753_headphone_detect(struct snd_soc_codec *codec,
-	struct snd_soc_jack *jack, enum snd_jack_types type,
-	unsigned int debounce_time_hp)
-{
-	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
-
-	wm8753->headset_jack = jack;
-	wm8753->debounce_time_hp = debounce_time_hp;
-
-	if (wm8753->irq && (type & SND_JACK_HEADPHONE)) {
-		/* Configure GPIO2 pin to generate the interrupt */
-		snd_soc_update_bits(codec, WM8753_GPIO2, WM8753_GP2M_MASK,
-			WM8753_GP2M_INT);
-		/* Active low Interrupt */
-		snd_soc_update_bits(codec, WM8753_GPIO1, WM8753_INTCON_MASK,
-			WM8753_INTCON_AL);
-		/* interupt when low i.e Headphone connected */
-		snd_soc_update_bits(codec, WM8753_INTPOL, WM8753_GPIO4IPOL_MASK,
-			WM8753_GPIO4IPOL_LOW);
-		/* GPIO4 interrupt enable */
-		snd_soc_update_bits(codec, WM8753_INTEN, WM8753_GPIO4IEN_MASK,
-			WM8753_GPIO4IEN_EN);
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(wm8753_headphone_detect);
-
 static int wm8753_probe(struct snd_soc_codec *codec)
 {
 	struct wm8753_priv *wm8753 = snd_soc_codec_get_drvdata(codec);
@@ -1507,7 +1472,8 @@ static int wm8753_probe(struct snd_soc_codec *codec)
 
 	INIT_DELAYED_WORK(&codec->dapm.delayed_work, wm8753_work);
 
-	ret = snd_soc_codec_set_cache_io(codec, 7, 9, wm8753->control_type);
+	codec->control_data = wm8753->regmap;
+	ret = snd_soc_codec_set_cache_io(codec, 7, 9, SND_SOC_REGMAP);
 	if (ret < 0) {
 		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
 		return ret;
@@ -1517,19 +1483,6 @@ static int wm8753_probe(struct snd_soc_codec *codec)
 	if (ret < 0) {
 		dev_err(codec->dev, "Failed to issue reset: %d\n", ret);
 		return ret;
-	}
-
-	if (wm8753->irq) {
-	    /* register an audio interrupt */
-		ret = request_threaded_irq(wm8753->irq, NULL,
-			wm8753_jack_handler,
-			IRQF_TRIGGER_FALLING,
-			"wm8753", codec);
-
-		if (ret) {
-			dev_err(codec->dev, "Failed to request IRQ: %d\n", ret);
-			return ret;
-		}
 	}
 
 	wm8753_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
@@ -1570,9 +1523,6 @@ static struct snd_soc_codec_driver soc_codec_dev_wm8753 = {
 	.suspend =	wm8753_suspend,
 	.resume =	wm8753_resume,
 	.set_bias_level = wm8753_set_bias_level,
-	.reg_cache_size = ARRAY_SIZE(wm8753_reg),
-	.reg_word_size = sizeof(u16),
-	.reg_cache_default = wm8753_reg,
 
 	.controls = wm8753_snd_controls,
 	.num_controls = ARRAY_SIZE(wm8753_snd_controls),
@@ -1588,6 +1538,19 @@ static const struct of_device_id wm8753_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, wm8753_of_match);
 
+static const struct regmap_config wm8753_regmap = {
+	.reg_bits = 7,
+	.val_bits = 9,
+
+	.max_register = WM8753_ADCTL2,
+	.writeable_reg = wm8753_writeable,
+	.volatile_reg = wm8753_volatile,
+
+	.cache_type = REGCACHE_RBTREE,
+	.reg_defaults = wm8753_reg_defaults,
+	.num_reg_defaults = ARRAY_SIZE(wm8753_reg_defaults),
+};
+
 #if defined(CONFIG_SPI_MASTER)
 static int __devinit wm8753_spi_probe(struct spi_device *spi)
 {
@@ -1598,20 +1561,36 @@ static int __devinit wm8753_spi_probe(struct spi_device *spi)
 	if (wm8753 == NULL)
 		return -ENOMEM;
 
-	wm8753->control_type = SND_SOC_SPI;
 	spi_set_drvdata(spi, wm8753);
 
-	ret = snd_soc_register_codec(&spi->dev,
-			&soc_codec_dev_wm8753, wm8753_dai, ARRAY_SIZE(wm8753_dai));
-	if (ret < 0)
-		kfree(wm8753);
+	wm8753->regmap = regmap_init_spi(spi, &wm8753_regmap);
+	if (IS_ERR(wm8753->regmap)) {
+		ret = PTR_ERR(wm8753->regmap);
+		dev_err(&spi->dev, "Failed to allocate register map: %d\n",
+			ret);
+		goto err;
+	}
+
+	ret = snd_soc_register_codec(&spi->dev, &soc_codec_dev_wm8753,
+				     wm8753_dai, ARRAY_SIZE(wm8753_dai));
+	if (ret != 0) {
+		dev_err(&spi->dev, "Failed to register CODEC: %d\n", ret);
+		goto err_regmap;
+	}
+err_regmap:
+	regmap_exit(wm8753->regmap);
+err:
+	kfree(wm8753);
 	return ret;
 }
 
 static int __devexit wm8753_spi_remove(struct spi_device *spi)
 {
+	struct wm8753_priv *wm8753 = spi_get_drvdata(spi);
+
 	snd_soc_unregister_codec(&spi->dev);
-	kfree(spi_get_drvdata(spi));
+	regmap_exit(wm8753->regmap);
+	kfree(wm8753);
 	return 0;
 }
 
@@ -1638,20 +1617,35 @@ static __devinit int wm8753_i2c_probe(struct i2c_client *i2c,
 		return -ENOMEM;
 
 	i2c_set_clientdata(i2c, wm8753);
-	wm8753->control_type = SND_SOC_I2C;
-	wm8753->irq = i2c->irq;
 
-	ret =  snd_soc_register_codec(&i2c->dev,
-			&soc_codec_dev_wm8753, wm8753_dai, ARRAY_SIZE(wm8753_dai));
-	if (ret < 0)
-		kfree(wm8753);
+	wm8753->regmap = regmap_init_i2c(i2c, &wm8753_regmap);
+	if (IS_ERR(wm8753->regmap)) {
+		ret = PTR_ERR(wm8753->regmap);
+		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
+			ret);
+		goto err;
+	}
+
+	ret = snd_soc_register_codec(&i2c->dev, &soc_codec_dev_wm8753,
+				     wm8753_dai, ARRAY_SIZE(wm8753_dai));
+	if (ret != 0) {
+		dev_err(&i2c->dev, "Failed to register CODEC: %d\n", ret);
+		goto err_regmap;
+	}
+err_regmap:
+	regmap_exit(wm8753->regmap);
+err:
+	kfree(wm8753);
 	return ret;
 }
 
 static __devexit int wm8753_i2c_remove(struct i2c_client *client)
 {
+	struct wm8753_priv *wm8753 = i2c_get_clientdata(client);
+
 	snd_soc_unregister_codec(&client->dev);
-	kfree(i2c_get_clientdata(client));
+	regmap_exit(wm8753->regmap);
+	kfree(wm8753);
 	return 0;
 }
 
