@@ -623,7 +623,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 	machine->bias_level = SND_SOC_BIAS_STANDBY;
 
 	if (machine_is_cardhu()) {
-		ret = snd_soc_add_controls(codec, cardhu_controls,
+		ret = snd_soc_add_codec_controls(codec, cardhu_controls,
 				ARRAY_SIZE(cardhu_controls));
 		if (ret < 0)
 			return ret;
@@ -632,7 +632,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 				ARRAY_SIZE(cardhu_dapm_widgets));
 	}
 	else {
-		ret = snd_soc_add_controls(codec,
+		ret = snd_soc_add_codec_controls(codec,
 				tegra_wm8903_default_controls,
 				ARRAY_SIZE(tegra_wm8903_default_controls));
 		if (ret < 0)

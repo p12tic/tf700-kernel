@@ -1377,7 +1377,6 @@ static int aic3x_probe(struct snd_soc_codec *codec)
 
 	INIT_LIST_HEAD(&aic3x->list);
 	aic3x->codec = codec;
-	codec->dapm.idle_bias_off = 1;
 
 	ret = snd_soc_codec_set_cache_io(codec, 8, 8, aic3x->control_type);
 	if (ret != 0) {
@@ -1426,10 +1425,10 @@ static int aic3x_probe(struct snd_soc_codec *codec)
 			      (aic3x->setup->gpio_func[1] & 0xf) << 4);
 	}
 
-	snd_soc_add_controls(codec, aic3x_snd_controls,
+	snd_soc_add_codec_controls(codec, aic3x_snd_controls,
 			     ARRAY_SIZE(aic3x_snd_controls));
 	if (aic3x->model == AIC3X_MODEL_3007)
-		snd_soc_add_controls(codec, &aic3x_classd_amp_gain_ctrl, 1);
+		snd_soc_add_codec_controls(codec, &aic3x_classd_amp_gain_ctrl, 1);
 
 	aic3x_add_widgets(codec);
 	list_add(&aic3x->list, &reset_list);
@@ -1471,6 +1470,7 @@ static int aic3x_remove(struct snd_soc_codec *codec)
 
 static struct snd_soc_codec_driver soc_codec_dev_aic3x = {
 	.set_bias_level = aic3x_set_bias_level,
+	.idle_bias_off = true,
 	.reg_cache_size = ARRAY_SIZE(aic3x_reg),
 	.reg_word_size = sizeof(u8),
 	.reg_cache_default = aic3x_reg,

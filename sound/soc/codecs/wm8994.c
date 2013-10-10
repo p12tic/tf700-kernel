@@ -2871,7 +2871,7 @@ static void wm8994_handle_retune_mobile_pdata(struct wm8994_priv *wm8994)
 	wm8994->retune_mobile_enum.max = wm8994->num_retune_mobile_texts;
 	wm8994->retune_mobile_enum.texts = wm8994->retune_mobile_texts;
 
-	ret = snd_soc_add_controls(wm8994->codec, controls,
+	ret = snd_soc_add_codec_controls(wm8994->codec, controls,
 				   ARRAY_SIZE(controls));
 	if (ret != 0)
 		dev_err(wm8994->codec->dev,
@@ -2924,7 +2924,7 @@ static void wm8994_handle_pdata(struct wm8994_priv *wm8994)
 		wm8994->drc_enum.max = pdata->num_drc_cfgs;
 		wm8994->drc_enum.texts = wm8994->drc_texts;
 
-		ret = snd_soc_add_controls(wm8994->codec, controls,
+		ret = snd_soc_add_codec_controls(wm8994->codec, controls,
 					   ARRAY_SIZE(controls));
 		if (ret != 0)
 			dev_err(wm8994->codec->dev,
@@ -2940,7 +2940,7 @@ static void wm8994_handle_pdata(struct wm8994_priv *wm8994)
 	if (pdata->num_retune_mobile_cfgs)
 		wm8994_handle_retune_mobile_pdata(wm8994);
 	else
-		snd_soc_add_controls(wm8994->codec, wm8994_eq_controls,
+		snd_soc_add_codec_controls(wm8994->codec, wm8994_eq_controls,
 				     ARRAY_SIZE(wm8994_eq_controls));
 
 	for (i = 0; i < ARRAY_SIZE(pdata->micbias); i++) {
@@ -3093,7 +3093,7 @@ static void wm8958_default_micdet(u16 status, void *data)
 	}
 
 
-	if (wm8994->mic_detecting && status & 0x4) {
+	if (wm8994->mic_detecting && status & 0xfc) {
 		dev_dbg(codec->dev, "Detected headphone\n");
 		wm8994->mic_detecting = false;
 
@@ -3400,10 +3400,18 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	pm_runtime_enable(codec->dev);
 	pm_runtime_resume(codec->dev);
 
+	/* By default use idle_bias_off, will override for WM8994 */
+	codec->dapm.idle_bias_off = 1;
+
 	/* Set revision-specific configuration */
 	wm8994->revision = snd_soc_read(codec, WM8994_CHIP_REVISION);
 	switch (control->type) {
 	case WM8994:
+		/* Single ended line outputs should have VMID on. */
+		if (!wm8994->pdata->lineout1_diff ||
+		    !wm8994->pdata->lineout2_diff)
+			codec->dapm.idle_bias_off = 0;
+
 		switch (wm8994->revision) {
 		case 2:
 		case 3:
@@ -3648,7 +3656,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 	wm8994_handle_pdata(wm8994);
 
 	wm_hubs_add_analogue_controls(codec);
-	snd_soc_add_controls(codec, wm8994_snd_controls,
+	snd_soc_add_codec_controls(codec, wm8994_snd_controls,
 			     ARRAY_SIZE(wm8994_snd_controls));
 	snd_soc_dapm_new_controls(dapm, wm8994_dapm_widgets,
 				  ARRAY_SIZE(wm8994_dapm_widgets));
@@ -3674,7 +3682,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 		}
 		break;
 	case WM8958:
-		snd_soc_add_controls(codec, wm8958_snd_controls,
+		snd_soc_add_codec_controls(codec, wm8958_snd_controls,
 				     ARRAY_SIZE(wm8958_snd_controls));
 		snd_soc_dapm_new_controls(dapm, wm8958_dapm_widgets,
 					  ARRAY_SIZE(wm8958_dapm_widgets));
@@ -3696,7 +3704,7 @@ static int wm8994_codec_probe(struct snd_soc_codec *codec)
 		break;
 
 	case WM1811:
-		snd_soc_add_controls(codec, wm8958_snd_controls,
+		snd_soc_add_codec_controls(codec, wm8958_snd_controls,
 				     ARRAY_SIZE(wm8958_snd_controls));
 		snd_soc_dapm_new_controls(dapm, wm8958_dapm_widgets,
 					  ARRAY_SIZE(wm8958_dapm_widgets));

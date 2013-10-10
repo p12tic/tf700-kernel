@@ -216,7 +216,7 @@ static int rt5640_dsp_done(struct snd_soc_codec *codec)
 		if(count > 10)
 			return -EBUSY;
 		dsp_val = snd_soc_read(codec, RT5640_DSP_CTRL3);
-		count ++;		
+		count ++;
 	}
 
 	return 0;
@@ -268,7 +268,7 @@ static int rt5640_dsp_write(struct snd_soc_codec *codec,
 	}
 	mdelay(10);
 	return 0;
-	
+
 err:
 	return ret;
 }
@@ -397,7 +397,7 @@ static int rt5640_dsp_put(struct snd_kcontrol *kcontrol,
 	return 0;
 	}
 
-static int rt5640_dsp_play_bp_get(struct snd_kcontrol *kcontrol, 
+static int rt5640_dsp_play_bp_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -408,7 +408,7 @@ static int rt5640_dsp_play_bp_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_dsp_play_bp_put(struct snd_kcontrol *kcontrol, 
+static int rt5640_dsp_play_bp_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -434,7 +434,7 @@ static int rt5640_dsp_play_bp_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_dsp_rec_bp_get(struct snd_kcontrol *kcontrol, 
+static int rt5640_dsp_rec_bp_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -445,7 +445,7 @@ static int rt5640_dsp_rec_bp_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_dsp_rec_bp_put(struct snd_kcontrol *kcontrol, 
+static int rt5640_dsp_rec_bp_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
@@ -471,13 +471,13 @@ static int rt5640_dsp_rec_bp_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_dac_active_get(struct snd_kcontrol *kcontrol, 
+static int rt5640_dac_active_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dapm_widget *w;
-	
+
 	list_for_each_entry(w, &dapm->card->widgets, list)
 	{
 		if (!w->sname || w->dapm != dapm)
@@ -491,13 +491,13 @@ static int rt5640_dac_active_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_dac_active_put(struct snd_kcontrol *kcontrol, 
+static int rt5640_dac_active_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dapm_widget *w;
-	
+
 	list_for_each_entry(w, &dapm->card->widgets, list)
 	{
 		if (!w->sname || w->dapm != dapm)
@@ -510,13 +510,13 @@ static int rt5640_dac_active_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_adc_active_get(struct snd_kcontrol *kcontrol, 
+static int rt5640_adc_active_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dapm_widget *w;
-	
+
 	list_for_each_entry(w, &dapm->card->widgets, list)
 	{
 		if (!w->sname || w->dapm != dapm)
@@ -530,13 +530,13 @@ static int rt5640_adc_active_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int rt5640_adc_active_put(struct snd_kcontrol *kcontrol, 
+static int rt5640_adc_active_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	struct snd_soc_dapm_widget *w;
-	
+
 	list_for_each_entry(w, &dapm->card->widgets, list)
 	{
 		if (!w->sname || w->dapm != dapm)
@@ -965,7 +965,7 @@ static int rt5640_dsp_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct rt5640_priv *rt5640 = snd_soc_codec_get_drvdata(codec);
 	static unsigned int power_on;
-	
+
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMD:
 		pr_info("%s(): PMD\n", __func__);
@@ -994,7 +994,7 @@ static int rt5640_dsp_event(struct snd_soc_dapm_widget *w,
 
 	default:
 		return 0;
-	}	
+	}
 
 	return 0;
 }
@@ -1109,7 +1109,7 @@ int rt5640_dsp_probe(struct snd_soc_codec *codec)
 	if (codec == NULL)
 		return -EINVAL;
 
-	snd_soc_add_controls(codec, rt5640_dsp_snd_controls,
+	snd_soc_add_codec_controls(codec, rt5640_dsp_snd_controls,
 			ARRAY_SIZE(rt5640_dsp_snd_controls));
 	snd_soc_dapm_new_controls(&codec->dapm, rt5640_dsp_dapm_widgets,
 			ARRAY_SIZE(rt5640_dsp_dapm_widgets));
@@ -1201,7 +1201,7 @@ int rt56xx_dsp_ioctl_common(struct snd_hwdep *hw, struct file *file, unsigned in
 	int *p;
 	int ret;
 	struct rt5640_dsp_param param;
-	
+
 	//int mask1 = 0, mask2 = 0;
 
 	struct rt56xx_cmd __user *_rt56xx =(struct rt56xx_cmd *)arg;
@@ -1219,7 +1219,7 @@ int rt56xx_dsp_ioctl_common(struct snd_hwdep *hw, struct file *file, unsigned in
 	if (copy_from_user(buf, rt56xx.buf, sizeof(*buf) * rt56xx.number)) {
 		goto err;
 	}
-	
+
 	ret = snd_soc_update_bits(codec, RT5640_PWR_DIG2,
 		RT5640_PWR_I2S_DSP, RT5640_PWR_I2S_DSP);
 	if (ret < 0) {
@@ -1232,22 +1232,22 @@ int rt56xx_dsp_ioctl_common(struct snd_hwdep *hw, struct file *file, unsigned in
 	if (ret < 0)
 		goto err;
 	*/
-	
+
 	switch (cmd) {
 	case RT_READ_CODEC_DSP_IOCTL:
 		if(DBG) printk(" case RT_READ_CODEC_DSP_IOCTL\n");
-		
+
 		for (p = buf; p < buf + rt56xx.number/2; p++)
 		{
 			*(p+rt56xx.number/2) = rt5640_dsp_read(codec, *p);
 		}
 		if (copy_to_user(rt56xx.buf, buf, sizeof(*buf) * rt56xx.number))
 			goto err;
-			
+
 		break;
 	case RT_WRITE_CODEC_DSP_IOCTL:
 		if(DBG) printk(" case RT_WRITE_CODEC_DSP_IOCTL\n");
-		
+
 		param.cmd_fmt =  0x00e0;
 		param.cmd =  RT5640_DSP_CMD_MW;
 		p = buf;
@@ -1263,7 +1263,7 @@ int rt56xx_dsp_ioctl_common(struct snd_hwdep *hw, struct file *file, unsigned in
 		break;
 	case RT_GET_CODEC_DSP_MODE_IOCTL:
 		if(DBG) printk("case RT_GET_CODEC_DSP_MODE_IOCTL\n");
-		
+
 		*buf = rt5640->dsp_sw;
 		if (copy_to_user(rt56xx.buf, buf, sizeof(*buf) * rt56xx.number))
 			goto err;

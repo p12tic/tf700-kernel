@@ -2405,13 +2405,13 @@ static int wm8962_add_widgets(struct snd_soc_codec *codec)
 	struct wm8962_pdata *pdata = dev_get_platdata(codec->dev);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 
-	snd_soc_add_controls(codec, wm8962_snd_controls,
+	snd_soc_add_codec_controls(codec, wm8962_snd_controls,
 			     ARRAY_SIZE(wm8962_snd_controls));
 	if (pdata && pdata->spk_mono)
-		snd_soc_add_controls(codec, wm8962_spk_mono_controls,
+		snd_soc_add_codec_controls(codec, wm8962_spk_mono_controls,
 				     ARRAY_SIZE(wm8962_spk_mono_controls));
 	else
-		snd_soc_add_controls(codec, wm8962_spk_stereo_controls,
+		snd_soc_add_codec_controls(codec, wm8962_spk_stereo_controls,
 				     ARRAY_SIZE(wm8962_spk_stereo_controls));
 
 
@@ -3636,6 +3636,14 @@ static struct snd_soc_codec_driver soc_codec_dev_wm8962 = {
 	.set_pll = wm8962_set_fll,
 	.reg_cache_size	= WM8962_MAX_REGISTER,
 	.volatile_register = wm8962_soc_volatile,
+	.idle_bias_off = true,
+};
+
+/* Improve power consumption for IN4 DC measurement mode */
+static const struct reg_default wm8962_dc_measure[] = {
+	{ 0xfd, 0x1 },
+	{ 0xcc, 0x40 },
+	{ 0xfd, 0 },
 };
 
 static const struct regmap_config wm8962_regmap = {
@@ -3653,6 +3661,7 @@ static const struct regmap_config wm8962_regmap = {
 static __devinit int wm8962_i2c_probe(struct i2c_client *i2c,
 				      const struct i2c_device_id *id)
 {
+	struct wm8962_pdata *pdata = dev_get_platdata(&i2c->dev);
 	struct wm8962_priv *wm8962;
 	unsigned int reg;
 	int ret, i;
@@ -3729,6 +3738,16 @@ static __devinit int wm8962_i2c_probe(struct i2c_client *i2c,
 	if (ret < 0) {
 		dev_err(&i2c->dev, "Failed to issue reset\n");
 		goto err_regmap;
+	}
+
+	if (pdata && pdata->in4_dc_measure) {
+		ret = regmap_register_patch(wm8962->regmap,
+					    wm8962_dc_measure,
+					    ARRAY_SIZE(wm8962_dc_measure));
+		if (ret != 0)
+			dev_err(&i2c->dev,
+				"Failed to configure for DC mesurement: %d\n",
+				ret);
 	}
 
 	regcache_cache_only(wm8962->regmap, true);

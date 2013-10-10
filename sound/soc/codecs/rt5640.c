@@ -3511,7 +3511,7 @@ static int rt5640_probe(struct snd_soc_codec *codec)
 		audio_codec_status = 1;
 	else
 		printk("%s: incorrect audio codec rt5642 vendor ID\n", __func__);
-	snd_soc_add_controls(codec, rt5640_snd_controls,ARRAY_SIZE(rt5640_snd_controls));
+	snd_soc_add_codec_controls(codec, rt5640_snd_controls,ARRAY_SIZE(rt5640_snd_controls));
 	snd_soc_dapm_new_controls(&codec->dapm, rt5640_dapm_widgets,
 			ARRAY_SIZE(rt5640_dapm_widgets));
 	snd_soc_dapm_add_routes(&codec->dapm, rt5640_dapm_routes,
@@ -3684,7 +3684,7 @@ static int __devinit rt5640_i2c_probe(struct i2c_client *i2c,
 	struct rt5640_priv *rt5640;
 	int ret;
 	audio_codec_status = 0;
-	
+
 	printk("%s\n", __func__);
 
 	rt5640 = kzalloc(sizeof(struct rt5640_priv), GFP_KERNEL);

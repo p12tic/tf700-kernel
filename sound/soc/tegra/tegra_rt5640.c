@@ -536,7 +536,7 @@ static int tegra_rt5640_init(struct snd_soc_pcm_runtime *rtd)
 	machine->bias_level = SND_SOC_BIAS_STANDBY;
 	machine->clock_enabled = 1;
 
-	ret = snd_soc_add_controls(codec, cardhu_controls,
+	ret = snd_soc_add_codec_controls(codec, cardhu_controls,
 			ARRAY_SIZE(cardhu_controls));
 	if (ret < 0)
 		return ret;

@@ -167,7 +167,7 @@ static int tegra_rt5631_init(struct snd_soc_pcm_runtime *rtd)
 	int ret;
 	printk("%s+\n", __func__);
 	if (machine_is_cardhu()) {
-		ret = snd_soc_add_controls(codec, cardhu_controls,
+		ret = snd_soc_add_codec_controls(codec, cardhu_controls,
 				ARRAY_SIZE(cardhu_controls));
 		if (ret < 0)
 			return ret;
@@ -176,7 +176,7 @@ static int tegra_rt5631_init(struct snd_soc_pcm_runtime *rtd)
 				ARRAY_SIZE(cardhu_dapm_widgets));
 	}
 	else {
-		ret = snd_soc_add_controls(codec,
+		ret = snd_soc_add_codec_controls(codec,
 				tegra_rt5631_default_controls,
 				ARRAY_SIZE(tegra_rt5631_default_controls));
 		if (ret < 0)

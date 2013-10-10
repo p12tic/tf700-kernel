@@ -2726,7 +2726,7 @@ static int rt5631_probe(struct snd_soc_codec *codec)
 	codec->dapm.bias_level = SND_SOC_BIAS_STANDBY;
 	rt5631_codec = codec;
 	rt5631_audio_codec = codec;
-	snd_soc_add_controls(codec, rt5631_snd_controls,
+	snd_soc_add_codec_controls(codec, rt5631_snd_controls,
 		ARRAY_SIZE(rt5631_snd_controls));
 	rt5631_add_widgets(codec);
 
