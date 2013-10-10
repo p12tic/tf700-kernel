@@ -819,10 +819,10 @@ static struct tegra_asoc_platform_data cardhu_audio_wm8903_pdata = {
 
 static struct platform_device cardhu_audio_device = {
 	.name	= "tegra-snd-codec",
-        .id     = 0,
-        .dev    = {
-                .platform_data = &cardhu_audio_wm8903_pdata,
-        },
+	.id     = 0,
+	.dev    = {
+		.platform_data = &cardhu_audio_wm8903_pdata,
+	},
 };
 static struct tegra_rt5640_platform_data cardhu_audio_rt5640_pdata = {
 	.gpio_spkr_en		= -1,
@@ -1120,22 +1120,22 @@ static struct i2c_board_info __initdata atmel_i2c_info[] = {
 #include <linux/i2c/ektf3k.h>
 
 struct elan_ktf3k_i2c_platform_data ts_elan_ktf3k_data[] = {
-        {
-                .version = 0x0001,
-		   .abs_x_min = 0,
-                .abs_x_max = ELAN_X_MAX,   //LG 9.7" Dpin 2368, Spin 2112
-                .abs_y_min = 0,
-                .abs_y_max = ELAN_Y_MAX,   //LG 9.7" Dpin 1728, Spin 1600
-                .intr_gpio = TEGRA_GPIO_PH4,
-                .rst_gpio = TEGRA_GPIO_PH6,
-        },
+	{
+		.version = 0x0001,
+			.abs_x_min = 0,
+		.abs_x_max = ELAN_X_MAX,   //LG 9.7" Dpin 2368, Spin 2112
+		.abs_y_min = 0,
+		.abs_y_max = ELAN_Y_MAX,   //LG 9.7" Dpin 1728, Spin 1600
+		.intr_gpio = TEGRA_GPIO_PH4,
+		.rst_gpio = TEGRA_GPIO_PH6,
+	},
 };
 static struct i2c_board_info elan_i2c_devices[] = {
-        {
-                I2C_BOARD_INFO(ELAN_KTF3K_NAME, 0x10),
-                .platform_data = &ts_elan_ktf3k_data,
-                .irq = (INT_GPIO_BASE + TEGRA_GPIO_PH4),
-        },
+	{
+		I2C_BOARD_INFO(ELAN_KTF3K_NAME, 0x10),
+		.platform_data = &ts_elan_ktf3k_data,
+		.irq = (INT_GPIO_BASE + TEGRA_GPIO_PH4),
+	},
 
 };
 #endif
@@ -1147,57 +1147,57 @@ static struct i2c_board_info  sis9200_i2c2_boardinfo[] =
 };
 static int __init cardhu_touch_init(void)
 {
-      struct board_info BoardInfo;
+	struct board_info BoardInfo;
 #if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
-      struct elan_ktf3k_i2c_platform_data *platform;
+	struct elan_ktf3k_i2c_platform_data *platform;
 #endif
 
-      tegra_gpio_enable(TEGRA_GPIO_PH4);
-      tegra_gpio_enable(TEGRA_GPIO_PH6);
+	tegra_gpio_enable(TEGRA_GPIO_PH4);
+	tegra_gpio_enable(TEGRA_GPIO_PH6);
 
-      gpio_request(TEGRA_GPIO_PH4, "atmel-irq");
-      gpio_direction_input(TEGRA_GPIO_PH4);
+	gpio_request(TEGRA_GPIO_PH4, "atmel-irq");
+	gpio_direction_input(TEGRA_GPIO_PH4);
 
-      gpio_request(TEGRA_GPIO_PH6, "atmel-reset");
-      gpio_direction_output(TEGRA_GPIO_PH6, 0);
-      msleep(1);
-      gpio_set_value(TEGRA_GPIO_PH6, 1);
-      msleep(100);
+	gpio_request(TEGRA_GPIO_PH6, "atmel-reset");
+	gpio_direction_output(TEGRA_GPIO_PH6, 0);
+	msleep(1);
+	gpio_set_value(TEGRA_GPIO_PH6, 1);
+	msleep(100);
 
-      switch(tegra3_get_project_id()){
-      case TEGRA3_PROJECT_TF201:
-	    i2c_register_board_info(TOUCH_BUS_ATMEL_T9, atmel_i2c_info, 1);
-	    break;
+	switch(tegra3_get_project_id()) {
+	case TEGRA3_PROJECT_TF201:
+		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, atmel_i2c_info, 1);
+		break;
 	case TEGRA3_PROJECT_TF300T:
 	case TEGRA3_PROJECT_TF300TG:
 	case TEGRA3_PROJECT_TF300TL:
 #if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
-	    i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
+		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
 #endif
-	    break;
+		break;
 	case TEGRA3_PROJECT_TF500T:
-	    tegra_gpio_enable(TEGRA_GPIO_PR3);
-	    tegra_gpio_enable(TEGRA_GPIO_PBB7);
-	    tegra_gpio_enable(TEGRA_GPIO_PO7);
-	    gpio_request(TEGRA_GPIO_PR3, "ts_power");
-	    gpio_direction_output(TEGRA_GPIO_PR3, 0);
-            gpio_request(TEGRA_GPIO_PBB7, "tp_vendor_ID0");
-            gpio_direction_input(TEGRA_GPIO_PBB7);
-            gpio_request(TEGRA_GPIO_PO7, "tp_vendor_ID1");
-            gpio_direction_input(TEGRA_GPIO_PO7);
-            printk("TF500T: TP vender ID0=%d, TP vender ID1=%d\n", gpio_get_value(TEGRA_GPIO_PBB7), gpio_get_value(TEGRA_GPIO_PO7));
+		tegra_gpio_enable(TEGRA_GPIO_PR3);
+		tegra_gpio_enable(TEGRA_GPIO_PBB7);
+		tegra_gpio_enable(TEGRA_GPIO_PO7);
+		gpio_request(TEGRA_GPIO_PR3, "ts_power");
+		gpio_direction_output(TEGRA_GPIO_PR3, 0);
+		gpio_request(TEGRA_GPIO_PBB7, "tp_vendor_ID0");
+		gpio_direction_input(TEGRA_GPIO_PBB7);
+		gpio_request(TEGRA_GPIO_PO7, "tp_vendor_ID1");
+		gpio_direction_input(TEGRA_GPIO_PO7);
+		printk("TF500T: TP vender ID0=%d, TP vender ID1=%d\n", gpio_get_value(TEGRA_GPIO_PBB7), gpio_get_value(TEGRA_GPIO_PO7));
 #if defined(CONFIG_TOUCHSCREEN_SIS_I2C)
-	    i2c_register_board_info(TOUCH_BUS_ATMEL_T9, sis9200_i2c2_boardinfo, 1);
+		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, sis9200_i2c2_boardinfo, 1);
 #endif
-	    break;
+		break;
 	case TEGRA3_PROJECT_TF700T:
 #if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
-	    platform = (struct elan_ktf3k_i2c_platform_data *)elan_i2c_devices[0].platform_data;
-	    platform->abs_x_max = ELAN_X_MAX_202T;
-	    platform->abs_y_max = ELAN_Y_MAX_202T;
-	    i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
+		platform = (struct elan_ktf3k_i2c_platform_data *)elan_i2c_devices[0].platform_data;
+		platform->abs_x_max = ELAN_X_MAX_202T;
+		platform->abs_y_max = ELAN_Y_MAX_202T;
+		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
 #endif
-	    break;
+		break;
 	}
 
 	return 0;
@@ -1580,7 +1580,7 @@ static void cardhu_usb_init(void)
 			tegra_ehci2_utmi_pdata.u_data.host.power_off_on_suspend = false;
 			tegra_ehci2_device.dev.platform_data =
 					 &tegra_ehci2_hsic_xmm_pdata;
-                /* ehci2 registration happens in baseband-xmm-power  */
+		/* ehci2 registration happens in baseband-xmm-power  */
 		}
 		/*
 		tegra_ehci2_device.dev.platform_data = &tegra_ehci2_utmi_pdata;
@@ -1823,7 +1823,7 @@ static void __init tegra_cardhu_init(void)
 	cardhu_dtv_init();
 	cardhu_suspend_init();
 	cardhu_touch_init();
-        cardhu_gps_init();
+	cardhu_gps_init();
 	cardhu_modem_init();
 	cardhu_keys_init();
 	cardhu_panel_init();
