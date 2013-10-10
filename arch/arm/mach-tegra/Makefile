@@ -69,7 +69,6 @@ obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra2_speedo.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += tegra3_speedo.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += tegra3_actmon.o
 
-obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += wakeups-t2.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += wakeups-t3.o
 obj-y                                   += wakeups.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += pm-t2.o
