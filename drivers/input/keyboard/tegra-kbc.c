@@ -651,7 +651,8 @@ tegra_kbc_dt_parse_pdata(struct platform_device *pdev)
 	int i;
 	struct tegra_kbc_platform_data *pdata;
 	struct device_node *np = pdev->dev.of_node;
-	unsigned int prop;
+	u32 prop;
+	int i;
 
 	if (!np)
 		return NULL;
@@ -659,16 +660,16 @@ tegra_kbc_dt_parse_pdata(struct platform_device *pdev)
 	if (!pdata)
 		return NULL;
 
-	if (!of_property_read_u32(np, "debounce-delay", &prop))
+	if (!of_property_read_u32(np, "nvidia,debounce-delay-ms", &prop))
 		pdata->debounce_cnt = prop;
 
-	if (!of_property_read_u32(np, "repeat-delay", &prop))
+	if (!of_property_read_u32(np, "nvidia,repeat-delay-ms", &prop))
 		pdata->repeat_cnt = prop;
 
-	if (of_find_property(np, "needs-ghost-filter", NULL))
+	if (of_find_property(np, "nvidia,needs-ghost-filter", NULL))
 		pdata->use_ghost_filter = true;
 
-	if (of_find_property(np, "wakeup-source", NULL))
+	if (of_find_property(np, "nvidia,wakeup-source", NULL))
 		pdata->wakeup = true;
 
 	/*
@@ -684,6 +685,10 @@ tegra_kbc_dt_parse_pdata(struct platform_device *pdev)
 		pdata->pin_cfg[KBC_MAX_ROW + i].num = i;
 		pdata->pin_cfg[KBC_MAX_ROW + i].type = PIN_CFG_COL;
 	}
+
+	pdata->keymap_data = matrix_keyboard_of_fill_keymap(np, "linux,keymap");
+
+	/* FIXME: Add handling of linux,fn-keymap here */
 
 	return pdata;
 }
@@ -846,6 +851,9 @@ static int __devinit tegra_kbc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, kbc);
 	device_init_wakeup(&pdev->dev, pdata->wakeup);
 
+	if (!pdev->dev.platform_data)
+		matrix_keyboard_of_free_keymap(pdata->keymap_data);
+
 	return 0;
 
 err_free_irq:
@@ -860,8 +868,10 @@ err_free_mem:
 	input_free_device(input_dev);
 	kfree(kbc);
 err_free_pdata:
-	if (!pdev->dev.platform_data)
+	if (!pdev->dev.platform_data) {
+		matrix_keyboard_of_free_keymap(pdata->keymap_data);
 		kfree(pdata);
+	}
 
 	return err;
 }
