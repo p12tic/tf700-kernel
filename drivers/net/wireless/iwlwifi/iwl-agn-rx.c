@@ -671,12 +671,8 @@ static int iwlagn_rx_card_state_notif(struct iwl_priv *priv,
 		wiphy_rfkill_set_hw_state(priv->hw->wiphy,
 			test_bit(STATUS_RF_KILL_HW, &priv->status));
 	else
-<<<<<<< HEAD:drivers/net/wireless/iwlwifi/iwl-rx.c
-		wake_up(&priv->wait_command_queue);
-=======
-		wake_up(&priv->shrd->wait_command_queue);
+		wake_up(&trans(priv)->wait_command_queue);
 	return 0;
->>>>>>> 8a9ea3237e7eb5c25f09e429ad242ae5a3d5ea22:drivers/net/wireless/iwlwifi/iwl-agn-rx.c
 }
 
 static int iwlagn_rx_missed_beacon_notif(struct iwl_priv *priv,

@@ -679,7 +679,13 @@ void gigaset_if_initdriver(struct gigaset_driver *drv, const char *procname,
 	if (tty == NULL)
 		goto enomem;
 
+<<<<<<< HEAD
 	tty->magic =		TTY_DRIVER_MAGIC;
+||||||| merged common ancestors
+<<<<<<< Temporary merge branch 1
+	tty->magic =		TTY_DRIVER_MAGIC;
+=======
+>>>>>>> 3b59bf0816
 	tty->type =		TTY_DRIVER_TYPE_SERIAL;
 	tty->subtype =		SERIAL_TYPE_NORMAL;
 	tty->flags =		TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV;

@@ -447,17 +447,18 @@ ddp_out:
 /**
  * ixgbe_fso - ixgbe FCoE Sequence Offload (FSO)
  * @tx_ring: tx desc ring
- * @skb: associated skb
- * @tx_flags: tx flags
+ * @first: first tx_buffer structure containing skb, tx_flags, and protocol
  * @hdr_len: hdr_len to be returned
  *
  * This sets up large send offload for FCoE
  *
- * Returns : 0 indicates no FSO, > 0 for FSO, < 0 for error
+ * Returns : 0 indicates success, < 0 for error
  */
-int ixgbe_fso(struct ixgbe_ring *tx_ring, struct sk_buff *skb,
-              u32 tx_flags, u8 *hdr_len)
+int ixgbe_fso(struct ixgbe_ring *tx_ring,
+	      struct ixgbe_tx_buffer *first,
+	      u8 *hdr_len)
 {
+	struct sk_buff *skb = first->skb;
 	struct fc_frame_header *fh;
 	u32 vlan_macip_lens;
 	u32 fcoe_sof_eof = 0;
@@ -530,9 +531,18 @@ int ixgbe_fso(struct ixgbe_ring *tx_ring, struct sk_buff *skb,
 	*hdr_len = sizeof(struct fcoe_crc_eof);
 
 	/* hdr_len includes fc_hdr if FCoE LSO is enabled */
-	if (skb_is_gso(skb))
-		*hdr_len += (skb_transport_offset(skb) +
-			     sizeof(struct fc_frame_header));
+	if (skb_is_gso(skb)) {
+		*hdr_len += skb_transport_offset(skb) +
+			    sizeof(struct fc_frame_header);
+		/* update gso_segs and bytecount */
+		first->gso_segs = DIV_ROUND_UP(skb->len - *hdr_len,
+					       skb_shinfo(skb)->gso_size);
+		first->bytecount += (first->gso_segs - 1) * *hdr_len;
+		first->tx_flags |= IXGBE_TX_FLAGS_FSO;
+	}
+
+	/* set flag indicating FCOE to ixgbe_tx_map call */
+	first->tx_flags |= IXGBE_TX_FLAGS_FCOE;
 
 	/* mss_l4len_id: use 1 for FSO as TSO, no need for L4LEN */
 	mss_l4len_idx = skb_shinfo(skb)->gso_size << IXGBE_ADVTXD_MSS_SHIFT;
@@ -543,13 +553,13 @@ int ixgbe_fso(struct ixgbe_ring *tx_ring, struct sk_buff *skb,
 			  sizeof(struct fc_frame_header);
 	vlan_macip_lens |= (skb_transport_offset(skb) - 4)
 			   << IXGBE_ADVTXD_MACLEN_SHIFT;
-	vlan_macip_lens |= tx_flags & IXGBE_TX_FLAGS_VLAN_MASK;
+	vlan_macip_lens |= first->tx_flags & IXGBE_TX_FLAGS_VLAN_MASK;
 
 	/* write context desc */
 	ixgbe_tx_ctxtdesc(tx_ring, vlan_macip_lens, fcoe_sof_eof,
 			  IXGBE_ADVTXT_TUCMD_FCOE, mss_l4len_idx);
 
-	return skb_is_gso(skb);
+	return 0;
 }
 
 static void ixgbe_fcoe_ddp_pools_free(struct ixgbe_fcoe *fcoe)

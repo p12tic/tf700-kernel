@@ -51,6 +51,7 @@ static struct kmem_cache *qeth_qdio_outbuf_cache;
 static struct device *qeth_core_root_dev;
 static unsigned int known_devices[][6] = QETH_MODELLIST_ARRAY;
 static struct lock_class_key qdio_out_skb_queue_key;
+static struct mutex qeth_mod_mutex;
 
 static void qeth_send_control_data_cb(struct qeth_channel *,
 			struct qeth_cmd_buffer *);
@@ -2944,8 +2945,8 @@ static int qeth_query_ipassists_cb(struct qeth_card *card,
 		card->options.ipa6.enabled_funcs = cmd->hdr.ipa_enabled;
 	}
 	QETH_DBF_TEXT(SETUP, 2, "suppenbl");
-	QETH_DBF_TEXT_(SETUP, 2, "%x", cmd->hdr.ipa_supported);
-	QETH_DBF_TEXT_(SETUP, 2, "%x", cmd->hdr.ipa_enabled);
+	QETH_DBF_TEXT_(SETUP, 2, "%08x", (__u32)cmd->hdr.ipa_supported);
+	QETH_DBF_TEXT_(SETUP, 2, "%08x", (__u32)cmd->hdr.ipa_enabled);
 	return 0;
 }
 
@@ -4321,7 +4322,7 @@ static int qeth_snmp_command_cb(struct qeth_card *card,
 	/* check if there is enough room in userspace */
 	if ((qinfo->udata_len - qinfo->udata_offset) < data_len) {
 		QETH_CARD_TEXT_(card, 4, "scer3%i", -ENOMEM);
-		cmd->hdr.return_code = -ENOMEM;
+		cmd->hdr.return_code = IPA_RC_ENOMEM;
 		return 0;
 	}
 	QETH_CARD_TEXT_(card, 4, "snore%i",
@@ -5040,6 +5041,7 @@ int qeth_core_load_discipline(struct qeth_card *card,
 		enum qeth_discipline_id discipline)
 {
 	int rc = 0;
+	mutex_lock(&qeth_mod_mutex);
 	switch (discipline) {
 	case QETH_DISCIPLINE_LAYER3:
 		card->discipline.ccwgdriver = try_then_request_module(
@@ -5057,6 +5059,7 @@ int qeth_core_load_discipline(struct qeth_card *card,
 			"support discipline %d\n", discipline);
 		rc = -EINVAL;
 	}
+	mutex_unlock(&qeth_mod_mutex);
 	return rc;
 }
 
@@ -5540,6 +5543,7 @@ static int __init qeth_core_init(void)
 	pr_info("loading core functions\n");
 	INIT_LIST_HEAD(&qeth_core_card_list.list);
 	rwlock_init(&qeth_core_card_list.rwlock);
+	mutex_init(&qeth_mod_mutex);
 
 	rc = qeth_register_dbf_views();
 	if (rc)

@@ -315,7 +315,8 @@ struct bnx2x_vlan_mac_obj {
 	 * @return zero if the element may be added
 	 */
 
-	int (*check_add)(struct bnx2x_vlan_mac_obj *o,
+	int (*check_add)(struct bnx2x *bp,
+			 struct bnx2x_vlan_mac_obj *o,
 			 union bnx2x_classification_ramrod_data *data);
 
 	/**
@@ -324,7 +325,8 @@ struct bnx2x_vlan_mac_obj {
 	 * @return true if the element may be deleted
 	 */
 	struct bnx2x_vlan_mac_registry_elem *
-		(*check_del)(struct bnx2x_vlan_mac_obj *o,
+		(*check_del)(struct bnx2x *bp,
+			     struct bnx2x_vlan_mac_obj *o,
 			     union bnx2x_classification_ramrod_data *data);
 
 	/**
@@ -332,7 +334,8 @@ struct bnx2x_vlan_mac_obj {
 	 *
 	 * @return true if the element may be deleted
 	 */
-	bool (*check_move)(struct bnx2x_vlan_mac_obj *src_o,
+	bool (*check_move)(struct bnx2x *bp,
+			   struct bnx2x_vlan_mac_obj *src_o,
 			   struct bnx2x_vlan_mac_obj *dst_o,
 			   union bnx2x_classification_ramrod_data *data);
 
@@ -422,6 +425,13 @@ struct bnx2x_vlan_mac_obj {
 	 */
 	int (*wait)(struct bnx2x *bp, struct bnx2x_vlan_mac_obj *o);
 };
+
+enum {
+	BNX2X_LLH_CAM_ISCSI_ETH_LINE = 0,
+	BNX2X_LLH_CAM_ETH_LINE,
+	BNX2X_LLH_CAM_MAX_PF_LINE = NIG_REG_LLH1_FUNC_MEM_SIZE / 2
+};
+
 
 /** RX_MODE verbs:DROP_ALL/ACCEPT_ALL/ACCEPT_ALL_MULTI/ACCEPT_ALL_VLAN/NORMAL */
 
@@ -889,6 +899,9 @@ struct bnx2x_rxq_setup_params {
 	u8		max_sges_pkt;
 	u8		max_tpa_queues;
 	u8		rss_engine_id;
+
+	/* valid iff BNX2X_Q_FLG_MCAST */
+	u8		mcast_engine_id;
 
 	u8		cache_line_log;
 

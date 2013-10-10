@@ -75,7 +75,7 @@ static void bnx2x_storm_stats_post(struct bnx2x *bp)
 		bp->fw_stats_req->hdr.drv_stats_counter =
 			cpu_to_le16(bp->stats_counter++);
 
-		DP(NETIF_MSG_TIMER, "Sending statistics ramrod %d\n",
+		DP(BNX2X_MSG_STATS, "Sending statistics ramrod %d\n",
 			bp->fw_stats_req->hdr.drv_stats_counter);
 
 
@@ -128,6 +128,8 @@ static void bnx2x_hw_stats_post(struct bnx2x *bp)
 
 	} else if (bp->func_stx) {
 		*stats_comp = 0;
+		memcpy(bnx2x_sp(bp, func_stats), &bp->func_stats,
+		       sizeof(bp->func_stats));
 		bnx2x_post_dmae(bp, dmae, INIT_DMAE_C(bp));
 	}
 }
@@ -802,7 +804,7 @@ static int bnx2x_storm_stats_update(struct bnx2x *bp)
 				&bp->fw_stats_data->port.tstorm_port_statistics;
 	struct tstorm_per_pf_stats *tfunc =
 				&bp->fw_stats_data->pf.tstorm_pf_statistics;
-	struct host_func_stats *fstats = bnx2x_sp(bp, func_stats);
+	struct host_func_stats *fstats = &bp->func_stats;
 	struct bnx2x_eth_stats *estats = &bp->eth_stats;
 	struct bnx2x_eth_stats_old *estats_old = &bp->eth_stats_old;
 	struct stats_counter *counters = &bp->fw_stats_data->storm_counters;
@@ -818,29 +820,29 @@ static int bnx2x_storm_stats_update(struct bnx2x *bp)
 
 	/* are storm stats valid? */
 	if (le16_to_cpu(counters->xstats_counter) != cur_stats_counter) {
-		DP(BNX2X_MSG_STATS, "stats not updated by xstorm"
-		   "  xstorm counter (0x%x) != stats_counter (0x%x)\n",
+		DP(BNX2X_MSG_STATS,
+		   "stats not updated by xstorm  xstorm counter (0x%x) != stats_counter (0x%x)\n",
 		   le16_to_cpu(counters->xstats_counter), bp->stats_counter);
 		return -EAGAIN;
 	}
 
 	if (le16_to_cpu(counters->ustats_counter) != cur_stats_counter) {
-		DP(BNX2X_MSG_STATS, "stats not updated by ustorm"
-		   "  ustorm counter (0x%x) != stats_counter (0x%x)\n",
+		DP(BNX2X_MSG_STATS,
+		   "stats not updated by ustorm  ustorm counter (0x%x) != stats_counter (0x%x)\n",
 		   le16_to_cpu(counters->ustats_counter), bp->stats_counter);
 		return -EAGAIN;
 	}
 
 	if (le16_to_cpu(counters->cstats_counter) != cur_stats_counter) {
-		DP(BNX2X_MSG_STATS, "stats not updated by cstorm"
-		   "  cstorm counter (0x%x) != stats_counter (0x%x)\n",
+		DP(BNX2X_MSG_STATS,
+		   "stats not updated by cstorm  cstorm counter (0x%x) != stats_counter (0x%x)\n",
 		   le16_to_cpu(counters->cstats_counter), bp->stats_counter);
 		return -EAGAIN;
 	}
 
 	if (le16_to_cpu(counters->tstats_counter) != cur_stats_counter) {
-		DP(BNX2X_MSG_STATS, "stats not updated by tstorm"
-		   "  tstorm counter (0x%x) != stats_counter (0x%x)\n",
+		DP(BNX2X_MSG_STATS,
+		   "stats not updated by tstorm  tstorm counter (0x%x) != stats_counter (0x%x)\n",
 		   le16_to_cpu(counters->tstats_counter), bp->stats_counter);
 		return -EAGAIN;
 	}
@@ -867,8 +869,7 @@ static int bnx2x_storm_stats_update(struct bnx2x *bp)
 
 		u32 diff;
 
-		DP(BNX2X_MSG_STATS, "queue[%d]: ucast_sent 0x%x, "
-				    "bcast_sent 0x%x mcast_sent 0x%x\n",
+		DP(BNX2X_MSG_STATS, "queue[%d]: ucast_sent 0x%x, bcast_sent 0x%x mcast_sent 0x%x\n",
 		   i, xclient->ucast_pkts_sent,
 		   xclient->bcast_pkts_sent, xclient->mcast_pkts_sent);
 
@@ -1147,51 +1148,9 @@ static void bnx2x_stats_update(struct bnx2x *bp)
 
 	if (netif_msg_timer(bp)) {
 		struct bnx2x_eth_stats *estats = &bp->eth_stats;
-		int i, cos;
 
 		netdev_dbg(bp->dev, "brb drops %u  brb truncate %u\n",
 		       estats->brb_drop_lo, estats->brb_truncate_lo);
-
-		for_each_eth_queue(bp, i) {
-			struct bnx2x_fastpath *fp = &bp->fp[i];
-			struct bnx2x_eth_q_stats *qstats = &fp->eth_q_stats;
-
-			pr_debug("%s: rx usage(%4u)  *rx_cons_sb(%u)  rx pkt(%lu)  rx calls(%lu %lu)\n",
-				 fp->name, (le16_to_cpu(*fp->rx_cons_sb) -
-					    fp->rx_comp_cons),
-				 le16_to_cpu(*fp->rx_cons_sb),
-				 bnx2x_hilo(&qstats->
-					    total_unicast_packets_received_hi),
-				 fp->rx_calls, fp->rx_pkt);
-		}
-
-		for_each_eth_queue(bp, i) {
-			struct bnx2x_fastpath *fp = &bp->fp[i];
-			struct bnx2x_fp_txdata *txdata;
-			struct bnx2x_eth_q_stats *qstats = &fp->eth_q_stats;
-			struct netdev_queue *txq;
-
-			pr_debug("%s: tx pkt(%lu) (Xoff events %u)",
-				 fp->name,
-				 bnx2x_hilo(
-					 &qstats->total_unicast_packets_transmitted_hi),
-				 qstats->driver_xoff);
-
-			for_each_cos_in_tx_queue(fp, cos) {
-				txdata = &fp->txdata[cos];
-				txq = netdev_get_tx_queue(bp->dev,
-						FP_COS_TO_TXQ(fp, cos));
-
-				pr_debug("%d: tx avail(%4u)  *tx_cons_sb(%u)  tx calls (%lu)  %s\n",
-					 cos,
-					 bnx2x_tx_avail(bp, txdata),
-					 le16_to_cpu(*txdata->tx_cons_sb),
-					 txdata->tx_pkt,
-					 (netif_tx_queue_stopped(txq) ?
-					  "Xoff" : "Xon")
-					);
-			}
-		}
 	}
 
 	bnx2x_hw_stats_post(bp);
@@ -1341,36 +1300,6 @@ static void bnx2x_port_stats_base_init(struct bnx2x *bp)
 	dmae->dst_addr_lo = bp->port.port_stx >> 2;
 	dmae->dst_addr_hi = 0;
 	dmae->len = bnx2x_get_port_stats_dma_len(bp);
-	dmae->comp_addr_lo = U64_LO(bnx2x_sp_mapping(bp, stats_comp));
-	dmae->comp_addr_hi = U64_HI(bnx2x_sp_mapping(bp, stats_comp));
-	dmae->comp_val = DMAE_COMP_VAL;
-
-	*stats_comp = 0;
-	bnx2x_hw_stats_post(bp);
-	bnx2x_stats_comp(bp);
-}
-
-static void bnx2x_func_stats_base_update(struct bnx2x *bp)
-{
-	struct dmae_command *dmae = &bp->stats_dmae;
-	u32 *stats_comp = bnx2x_sp(bp, stats_comp);
-
-	/* sanity */
-	if (!bp->func_stx) {
-		BNX2X_ERR("BUG!\n");
-		return;
-	}
-
-	bp->executer_idx = 0;
-	memset(dmae, 0, sizeof(struct dmae_command));
-
-	dmae->opcode = bnx2x_dmae_opcode(bp, DMAE_SRC_GRC, DMAE_DST_PCI,
-					 true, DMAE_COMP_PCI);
-	dmae->src_addr_lo = bp->func_stx >> 2;
-	dmae->src_addr_hi = 0;
-	dmae->dst_addr_lo = U64_LO(bnx2x_sp_mapping(bp, func_stats));
-	dmae->dst_addr_hi = U64_HI(bnx2x_sp_mapping(bp, func_stats));
-	dmae->len = sizeof(struct host_func_stats) >> 2;
 	dmae->comp_addr_lo = U64_LO(bnx2x_sp_mapping(bp, stats_comp));
 	dmae->comp_addr_hi = U64_HI(bnx2x_sp_mapping(bp, stats_comp));
 	dmae->comp_val = DMAE_COMP_VAL;
@@ -1571,6 +1500,7 @@ void bnx2x_stats_init(struct bnx2x *bp)
 		memset(&bp->fw_stats_old, 0, sizeof(bp->fw_stats_old));
 		memset(&bp->eth_stats_old, 0, sizeof(bp->eth_stats_old));
 		memset(&bp->eth_stats, 0, sizeof(bp->eth_stats));
+		memset(&bp->func_stats, 0, sizeof(bp->func_stats));
 
 		/* Clean SP from previous statistics */
 		if (bp->func_stx) {
@@ -1586,10 +1516,6 @@ void bnx2x_stats_init(struct bnx2x *bp)
 
 	if (bp->port.pmf && bp->port.port_stx)
 		bnx2x_port_stats_base_init(bp);
-
-	/* On a non-init, retrieve previous statistics from SP */
-	if (!bp->stats_init && bp->func_stx)
-		bnx2x_func_stats_base_update(bp);
 
 	/* mark the end of statistics initializiation */
 	bp->stats_init = false;

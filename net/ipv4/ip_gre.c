@@ -10,6 +10,8 @@
  *
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/capability.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -1716,7 +1718,7 @@ static int __init ipgre_init(void)
 {
 	int err;
 
-	printk(KERN_INFO "GRE over IPv4 tunneling driver\n");
+	pr_info("GRE over IPv4 tunneling driver\n");
 
 	err = register_pernet_device(&ipgre_net_ops);
 	if (err < 0)
@@ -1724,7 +1726,7 @@ static int __init ipgre_init(void)
 
 	err = gre_add_protocol(&ipgre_protocol, GREPROTO_CISCO);
 	if (err < 0) {
-		printk(KERN_INFO "ipgre init: can't add protocol\n");
+		pr_info("%s: can't add protocol\n", __func__);
 		goto add_proto_failed;
 	}
 
@@ -1753,7 +1755,7 @@ static void __exit ipgre_fini(void)
 	rtnl_link_unregister(&ipgre_tap_ops);
 	rtnl_link_unregister(&ipgre_link_ops);
 	if (gre_del_protocol(&ipgre_protocol, GREPROTO_CISCO) < 0)
-		printk(KERN_INFO "ipgre close: can't remove protocol\n");
+		pr_info("%s: can't remove protocol\n", __func__);
 	unregister_pernet_device(&ipgre_net_ops);
 }
 

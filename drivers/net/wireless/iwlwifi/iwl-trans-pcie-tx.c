@@ -928,11 +928,7 @@ void iwl_tx_cmd_complete(struct iwl_trans *trans, struct iwl_rx_cmd_buffer *rxb,
 		clear_bit(STATUS_HCMD_ACTIVE, &trans->shrd->status);
 		IWL_DEBUG_INFO(trans, "Clearing HCMD_ACTIVE for command %s\n",
 			       get_cmd_string(cmd->hdr.cmd));
-<<<<<<< HEAD:drivers/net/wireless/iwlwifi/iwl-trans-tx-pcie.c
-		wake_up(&priv->wait_command_queue);
-=======
-		wake_up(&trans->shrd->wait_command_queue);
->>>>>>> 8a9ea3237e7eb5c25f09e429ad242ae5a3d5ea22:drivers/net/wireless/iwlwifi/iwl-trans-pcie-tx.c
+		wake_up(&trans->wait_command_queue);
 	}
 
 	meta->flags = 0;
@@ -996,13 +992,8 @@ static int iwl_send_cmd_sync(struct iwl_trans *trans, struct iwl_host_cmd *cmd)
 		return ret;
 	}
 
-<<<<<<< HEAD:drivers/net/wireless/iwlwifi/iwl-trans-tx-pcie.c
-	ret = wait_event_timeout(priv->wait_command_queue,
-			!test_bit(STATUS_HCMD_ACTIVE, &priv->status),
-=======
-	ret = wait_event_timeout(trans->shrd->wait_command_queue,
+	ret = wait_event_timeout(trans->wait_command_queue,
 			!test_bit(STATUS_HCMD_ACTIVE, &trans->shrd->status),
->>>>>>> 8a9ea3237e7eb5c25f09e429ad242ae5a3d5ea22:drivers/net/wireless/iwlwifi/iwl-trans-pcie-tx.c
 			HOST_COMPLETE_TIMEOUT);
 	if (!ret) {
 		if (test_bit(STATUS_HCMD_ACTIVE, &trans->shrd->status)) {
