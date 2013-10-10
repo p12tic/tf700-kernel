@@ -21,7 +21,6 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 
-#include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -30,10 +29,14 @@
 #include <plat/usb.h>
 #include <plat/board.h>
 #include <plat/keypad.h>
-#include "common.h"
+#include <plat/hwa742.h>
 #include <plat/lcd_mipid.h>
 #include <plat/mmc.h>
 #include <plat/clock.h>
+
+#include <mach/hardware.h>
+
+#include "common.h"
 
 #define ADS7846_PENDOWN_GPIO	15
 
@@ -98,16 +101,15 @@ static struct mipid_platform_data nokia770_mipid_platform_data = {
 	.shutdown = mipid_shutdown,
 };
 
-static struct omap_lcd_config nokia770_lcd_config __initdata = {
-	.ctrl_name	= "hwa742",
-};
-
 static void __init mipid_dev_init(void)
 {
-	nokia770_mipid_platform_data.nreset_gpio = 13;
-	nokia770_mipid_platform_data.data_lines = 16;
+	const struct omap_lcd_config *conf;
 
-	omapfb_set_lcd_config(&nokia770_lcd_config);
+	conf = omap_get_config(OMAP_TAG_LCD, struct omap_lcd_config);
+	if (conf != NULL) {
+		nokia770_mipid_platform_data.nreset_gpio = conf->nreset_gpio;
+		nokia770_mipid_platform_data.data_lines = conf->data_lines;
+	}
 }
 
 static void __init ads7846_dev_init(void)
@@ -150,9 +152,14 @@ static struct spi_board_info nokia770_spi_board_info[] __initdata = {
 	},
 };
 
+static struct hwa742_platform_data nokia770_hwa742_platform_data = {
+	.te_connected		= 1,
+};
+
 static void __init hwa742_dev_init(void)
 {
 	clk_add_alias("hwa_sys_ck", NULL, "bclk", NULL);
+	omapfb_set_ctrl_platform_data(&nokia770_hwa742_platform_data);
 }
 
 /* assume no Mini-AB port */

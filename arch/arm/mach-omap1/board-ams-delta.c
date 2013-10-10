@@ -20,26 +20,27 @@
 #include <linux/platform_device.h>
 #include <linux/serial_8250.h>
 #include <linux/export.h>
-#include <linux/omapfb.h>
+#include <linux/io.h>
 
 #include <media/soc_camera.h>
 
 #include <asm/serial.h>
-#include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
-#include <plat/io.h>
 #include <plat/board-ams-delta.h>
 #include <plat/keypad.h>
 #include <plat/mux.h>
 #include <plat/usb.h>
 #include <plat/board.h>
-#include "common.h"
+
+#include <mach/hardware.h>
+#include <mach/ams-delta-fiq.h>
 #include <mach/camera.h>
 
-#include <mach/ams-delta-fiq.h>
+#include "iomap.h"
+#include "common.h"
 
 static u8 ams_delta_latch1_reg;
 static u16 ams_delta_latch2_reg;
@@ -168,6 +169,10 @@ static struct omap_usb_config ams_delta_usb_config __initdata = {
 	.register_host	= 1,
 	.hmc_mode	= 16,
 	.pins[0]	= 2,
+};
+
+static struct omap_board_config_kernel ams_delta_config[] __initdata = {
+	{ OMAP_TAG_LCD,		&ams_delta_lcd_config },
 };
 
 static struct resource ams_delta_nand_resources[] = {
@@ -299,6 +304,8 @@ static void __init ams_delta_init(void)
 	omap_cfg_reg(J19_1610_CAM_D6);
 	omap_cfg_reg(J18_1610_CAM_D7);
 
+	omap_board_config = ams_delta_config;
+	omap_board_config_size = ARRAY_SIZE(ams_delta_config);
 	omap_serial_init();
 	omap_register_i2c_bus(1, 100, NULL, 0);
 
@@ -316,8 +323,6 @@ static void __init ams_delta_init(void)
 	ams_delta_init_fiq();
 
 	omap_writew(omap_readw(ARM_RSTCT1) | 0x0004, ARM_RSTCT1);
-
-	omapfb_set_lcd_config(&ams_delta_lcd_config);
 }
 
 static struct plat_serial8250_port ams_delta_modem_ports[] = {
