@@ -49,26 +49,26 @@
 #define ICTLR_COP_IER_CLR	0x38
 #define ICTLR_COP_IEP_CLASS	0x3c
 
-#define NUM_ICTLRS (INT_MAIN_NR/32)
 #define FIRST_LEGACY_IRQ 32
+
+static int num_ictlrs;
 
 static void __iomem *ictlr_reg_base[] = {
 	IO_ADDRESS(TEGRA_PRIMARY_ICTLR_BASE),
 	IO_ADDRESS(TEGRA_SECONDARY_ICTLR_BASE),
 	IO_ADDRESS(TEGRA_TERTIARY_ICTLR_BASE),
 	IO_ADDRESS(TEGRA_QUATERNARY_ICTLR_BASE),
-#if (NUM_ICTLRS > 4)
 	IO_ADDRESS(TEGRA_QUINARY_ICTLR_BASE),
-#endif
 };
 
 #ifdef CONFIG_PM_SLEEP
-static u32 cop_ier[NUM_ICTLRS];
-static u32 cop_iep[NUM_ICTLRS];
-static u32 cpu_ier[NUM_ICTLRS];
-static u32 cpu_iep[NUM_ICTLRS];
+#define NUM_ICTLRS_MAX (INT_MAIN_NR/32)
+static u32 cop_ier[NUM_ICTLRS_MAX];
+static u32 cop_iep[NUM_ICTLRS_MAX];
+static u32 cpu_ier[NUM_ICTLRS_MAX];
+static u32 cpu_iep[NUM_ICTLRS_MAX];
 
-static u32 ictlr_wake_mask[NUM_ICTLRS];
+static u32 ictlr_wake_mask[NUM_ICTLRS_MAX];
 #endif
 
 int tegra_update_lp1_irq_wake(unsigned int irq, bool enable)
@@ -78,7 +78,7 @@ int tegra_update_lp1_irq_wake(unsigned int irq, bool enable)
 	u32 mask;
 
 	if (irq < FIRST_LEGACY_IRQ ||
-		irq >= FIRST_LEGACY_IRQ + NUM_ICTLRS * 32)
+		irq >= FIRST_LEGACY_IRQ + num_ictlrs * 32)
 		return -EINVAL;
 
 	index = ((irq - FIRST_LEGACY_IRQ) >> 5);
@@ -98,7 +98,7 @@ static inline void tegra_irq_write_mask(unsigned int irq, unsigned long reg)
 	u32 mask;
 
 	BUG_ON(irq < FIRST_LEGACY_IRQ ||
-		irq >= FIRST_LEGACY_IRQ + NUM_ICTLRS * 32);
+		irq >= FIRST_LEGACY_IRQ + num_ictlrs * 32);
 
 	base = ictlr_reg_base[(irq - FIRST_LEGACY_IRQ) / 32];
 	mask = BIT((irq - FIRST_LEGACY_IRQ) % 32);
@@ -183,7 +183,7 @@ static int tegra_legacy_irq_suspend(void)
 	int i;
 
 	local_irq_save(flags);
-	for (i = 0; i < NUM_ICTLRS; i++) {
+	for (i = 0; i < num_ictlrs; i++) {
 		void __iomem *ictlr = ictlr_reg_base[i];
 		/* save interrupt state */
 		cpu_ier[i] = readl(ictlr + ICTLR_CPU_IER);
@@ -211,7 +211,7 @@ static void tegra_legacy_irq_resume(void)
 	int i;
 
 	local_irq_save(flags);
-	for (i = 0; i < NUM_ICTLRS; i++) {
+	for (i = 0; i < num_ictlrs; i++) {
 		void __iomem *ictlr = ictlr_reg_base[i];
 		writel(cpu_iep[i], ictlr + ICTLR_CPU_IEP_CLASS);
 		writel(~0ul, ictlr + ICTLR_CPU_IER_CLR);
@@ -243,7 +243,18 @@ void __init tegra_init_irq(void)
 {
 	int i;
 
-	for (i = 0; i < NUM_ICTLRS; i++) {
+	void __iomem *distbase;
+
+	distbase = IO_ADDRESS(TEGRA_ARM_INT_DIST_BASE);
+	num_ictlrs = readl_relaxed(distbase + GIC_DIST_CTR) & 0x1f;
+
+	if (num_ictlrs > ARRAY_SIZE(ictlr_reg_base)) {
+		WARN(1, "Too many (%d) interrupt controllers found. Maximum is %d.",
+			num_ictlrs, ARRAY_SIZE(ictlr_reg_base));
+		num_ictlrs = ARRAY_SIZE(ictlr_reg_base);
+	}
+
+	for (i = 0; i < num_ictlrs; i++) {
 		void __iomem *ictlr = ictlr_reg_base[i];
 		writel(~0, ictlr + ICTLR_CPU_IER_CLR);
 		writel(0, ictlr + ICTLR_CPU_IEP_CLASS);
@@ -264,7 +275,7 @@ void __init tegra_init_irq(void)
 	 * initialized elsewhere under DT.
 	 */
 	if (!of_have_populated_dt())
-		gic_init(0, 29, IO_ADDRESS(TEGRA_ARM_INT_DIST_BASE),
+		gic_init(0, 29, distbase,
 			IO_ADDRESS(TEGRA_ARM_PERIF_BASE + 0x100));
 }
 
@@ -272,7 +283,7 @@ void tegra_init_legacy_irq_cop(void)
 {
 	int i;
 
-	for (i = 0; i < NUM_ICTLRS; i++) {
+	for (i = 0; i < num_ictlrs; i++) {
 		void __iomem *ictlr = ictlr_reg_base[i];
 		writel(~0, ictlr + ICTLR_COP_IER_CLR);
 		writel(0, ictlr + ICTLR_COP_IEP_CLASS);
