@@ -16,19 +16,17 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/device.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/platform_device.h>
+#include <linux/platform_data/tegra_emc.h>
 
 #include <mach/iomap.h>
 
 #include "tegra2_emc.h"
-
-#define TEGRA_MRR_DIVLD        (1<<20)
-#define TEGRA_EMC_STATUS       0x02b4
-#define TEGRA_EMC_MRR          0x00ec
-static DEFINE_MUTEX(tegra_emc_mrr_lock);
 
 #ifdef CONFIG_TEGRA_EMC_SCALING_ENABLE
 static bool emc_enable = true;
@@ -37,50 +35,17 @@ static bool emc_enable;
 #endif
 module_param(emc_enable, bool, 0644);
 
-static void __iomem *emc = IO_ADDRESS(TEGRA_EMC_BASE);
-static const struct tegra_emc_table *tegra_emc_table;
-static int tegra_emc_table_size;
-
-static unsigned long tegra_emc_max_bus_rate;  /* 2 * 1000 * maximum emc_clock rate */
-static unsigned long tegra_emc_min_bus_rate;  /* 2 * 1000 * minimum emc_clock rate */
+static struct platform_device *emc_pdev;
+static void __iomem *emc_regbase;
 
 static inline void emc_writel(u32 val, unsigned long addr)
 {
-	writel(val, emc + addr);
+	writel(val, emc_regbase + addr);
 }
 
 static inline u32 emc_readl(unsigned long addr)
 {
-	return readl(emc + addr);
-}
-
-/* read LPDDR2 memory modes */
-static int tegra_emc_read_mrr(unsigned long addr)
-{
-	u32 value;
-	int count = 100;
-
-	mutex_lock(&tegra_emc_mrr_lock);
-	do {
-		emc_readl(TEGRA_EMC_MRR);
-	} while (--count && (emc_readl(TEGRA_EMC_STATUS) & TEGRA_MRR_DIVLD));
-	if (count == 0) {
-		pr_err("%s: Failed to read memory type\n", __func__);
-		BUG();
-	}
-	value = (1 << 30) | (addr << 16);
-	emc_writel(value, TEGRA_EMC_MRR);
-
-	count = 100;
-	while (--count && !(emc_readl(TEGRA_EMC_STATUS) & TEGRA_MRR_DIVLD));
-	if (count == 0) {
-		pr_err("%s: Failed to read memory type\n", __func__);
-		BUG();
-	}
-	value = emc_readl(TEGRA_EMC_MRR) & 0xFFFF;
-	mutex_unlock(&tegra_emc_mrr_lock);
-
-	return value;
+	return readl(emc_regbase + addr);
 }
 
 static const unsigned long emc_reg_addr[TEGRA_EMC_NUM_REGS] = {
@@ -135,23 +100,15 @@ static const unsigned long emc_reg_addr[TEGRA_EMC_NUM_REGS] = {
 /* Select the closest EMC rate that is higher than the requested rate */
 long tegra_emc_round_rate(unsigned long rate)
 {
+	struct tegra_emc_pdata *pdata;
 	int i;
 	int best = -1;
 	unsigned long distance = ULONG_MAX;
 
-	if (!tegra_emc_table)
+	if (!emc_pdev)
 		return -EINVAL;
 
-	if (!emc_enable)
-		return -EINVAL;
-
-	if (rate >= tegra_emc_max_bus_rate) {
-		best = tegra_emc_table_size - 1;
-		goto round_out;
-	} else if (rate <= tegra_emc_min_bus_rate) {
-		best = 0;
-		goto round_out;
-	}
+	pdata = emc_pdev->dev.platform_data;
 
 	pr_debug("%s: %lu\n", __func__, rate);
 
@@ -161,20 +118,20 @@ long tegra_emc_round_rate(unsigned long rate)
 	 */
 	rate = rate / 2 / 1000;
 
-	for (i = 0; i < tegra_emc_table_size; i++) {
-		if (tegra_emc_table[i].rate >= rate &&
-		    (tegra_emc_table[i].rate - rate) < distance) {
-			distance = tegra_emc_table[i].rate - rate;
+	for (i = 0; i < pdata->num_tables; i++) {
+		if (pdata->tables[i].rate >= rate &&
+		    (pdata->tables[i].rate - rate) < distance) {
+			distance = pdata->tables[i].rate - rate;
 			best = i;
 		}
 	}
 
 	if (best < 0)
 		return -EINVAL;
-round_out:
-	pr_debug("%s: using %lu\n", __func__, tegra_emc_table[best].rate);
 
-	return tegra_emc_table[best].rate * 2 * 1000;
+	pr_debug("%s: using %lu\n", __func__, pdata->tables[best].rate);
+
+	return pdata->tables[best].rate * 2 * 1000;
 }
 
 /*
@@ -187,11 +144,14 @@ round_out:
  */
 int tegra_emc_set_rate(unsigned long rate)
 {
+	struct tegra_emc_pdata *pdata;
 	int i;
 	int j;
 
-	if (!tegra_emc_table)
+	if (!emc_pdev)
 		return -EINVAL;
+
+	pdata = emc_pdev->dev.platform_data;
 
 	/*
 	 * The EMC clock rate is twice the bus rate, and the bus rate is
@@ -199,74 +159,66 @@ int tegra_emc_set_rate(unsigned long rate)
 	 */
 	rate = rate / 2 / 1000;
 
-	for (i = tegra_emc_table_size - 1; i >= 0; i--)
-		if (tegra_emc_table[i].rate == rate)
+	for (i = 0; i < pdata->num_tables; i++)
+		if (pdata->tables[i].rate == rate)
 			break;
 
-	if (i < 0)
+	if (i >= pdata->num_tables)
 		return -EINVAL;
 
 	pr_debug("%s: setting to %lu\n", __func__, rate);
 
 	for (j = 0; j < TEGRA_EMC_NUM_REGS; j++)
-		emc_writel(tegra_emc_table[i].regs[j], emc_reg_addr[j]);
+		emc_writel(pdata->tables[i].regs[j], emc_reg_addr[j]);
 
-	emc_readl(tegra_emc_table[i].regs[TEGRA_EMC_NUM_REGS - 1]);
+	emc_readl(pdata->tables[i].regs[TEGRA_EMC_NUM_REGS - 1]);
 
 	return 0;
 }
 
-void tegra_init_emc(const struct tegra_emc_chip *chips, int chips_size)
+static int __devinit tegra_emc_probe(struct platform_device *pdev)
 {
-	int i;
-	int vid;
-	int rev_id1;
-	int rev_id2;
-	int pid;
-	int chip_matched = -1;
+	struct tegra_emc_pdata *pdata;
+	struct resource *res;
 
-	vid = tegra_emc_read_mrr(5);
-	rev_id1 = tegra_emc_read_mrr(6);
-	rev_id2 = tegra_emc_read_mrr(7);
-	pid = tegra_emc_read_mrr(8);
-
-	for (i = 0; i < chips_size; i++) {
-		if (chips[i].mem_manufacturer_id >= 0) {
-			if (chips[i].mem_manufacturer_id != vid)
-				continue;
-		}
-		if (chips[i].mem_revision_id1 >= 0) {
-			if (chips[i].mem_revision_id1 != rev_id1)
-				continue;
-		}
-		if (chips[i].mem_revision_id2 >= 0) {
-			if (chips[i].mem_revision_id2 != rev_id2)
-				continue;
-		}
-		if (chips[i].mem_pid >= 0) {
-			if (chips[i].mem_pid != pid)
-				continue;
-		}
-
-		chip_matched = i;
-		break;
+	if (!emc_enable) {
+		dev_err(&pdev->dev, "disabled per module parameter\n");
+		return -ENODEV;
 	}
 
-	if (chip_matched >= 0) {
-		pr_info("%s: %s memory found\n", __func__,
-			chips[chip_matched].description);
-		tegra_emc_table = chips[chip_matched].table;
-		tegra_emc_table_size = chips[chip_matched].table_size;
+	pdata = pdev->dev.platform_data;
 
-		tegra_emc_min_bus_rate = tegra_emc_table[0].rate * 2 * 1000;
-		tegra_emc_max_bus_rate = tegra_emc_table[tegra_emc_table_size - 1].rate * 2 * 1000;
-
-	} else {
-		pr_err("%s: Memory not recognized, memory scaling disabled\n",
-			__func__);
-		pr_info("%s: Memory vid     = 0x%04x", __func__, vid);
-		pr_info("%s: Memory rev_id1 = 0x%04x", __func__, rev_id1);
-		pr_info("%s: Memory rev_id2 = 0x%04x", __func__, rev_id2);
-		pr_info("%s: Memory pid     = 0x%04x", __func__, pid);
+	if (!pdata) {
+		dev_err(&pdev->dev, "missing platform data\n");
+		return -ENXIO;
 	}
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		dev_err(&pdev->dev, "missing register base\n");
+		return -ENOMEM;
+	}
+
+	emc_regbase = devm_request_and_ioremap(&pdev->dev, res);
+	if (!emc_regbase) {
+		dev_err(&pdev->dev, "failed to remap registers\n");
+		return -ENOMEM;
+	}
+	emc_pdev = pdev;
+
+	return 0;
 }
+
+static struct platform_driver tegra_emc_driver = {
+	.driver         = {
+		.name   = "tegra-emc",
+		.owner  = THIS_MODULE,
+	},
+	.probe          = tegra_emc_probe,
+};
+
+static int __init tegra_emc_init(void)
+{
+	return platform_driver_register(&tegra_emc_driver);
+}
+device_initcall(tegra_emc_init);
