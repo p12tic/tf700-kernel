@@ -28,7 +28,8 @@
 #define TPS65910_SUPPLY_STATE_ENABLED	0x1
 #define EXT_SLEEP_CONTROL (TPS65910_SLEEP_CONTROL_EXT_INPUT_EN1 |	\
 			TPS65910_SLEEP_CONTROL_EXT_INPUT_EN2 |		\
-			TPS65910_SLEEP_CONTROL_EXT_INPUT_EN3)
+			TPS65910_SLEEP_CONTROL_EXT_INPUT_EN3 |		\
+			TPS65911_SLEEP_CONTROL_EXT_INPUT_SLEEP)
 
 /* supported VIO voltages in milivolts */
 static const u16 VIO_VSEL_table[] = {
@@ -674,8 +675,9 @@ static int tps65911_get_voltage(struct regulator_dev *dev)
 		step_mv = 100;
 		break;
 	case TPS65910_REG_VIO:
+		value &= LDO_SEL_MASK;
+		value >>= LDO_SEL_SHIFT;
 		return pmic->info[id]->voltage_table[value] * 1000;
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -767,9 +769,11 @@ static int tps65911_set_voltage(struct regulator_dev *dev, unsigned selector)
 	case TPS65911_REG_LDO6:
 	case TPS65911_REG_LDO7:
 	case TPS65911_REG_LDO8:
-	case TPS65910_REG_VIO:
 		return tps65910_modify_bits(pmic, reg,
 				(selector << LDO_SEL_SHIFT), LDO3_SEL_MASK);
+	case TPS65910_REG_VIO:
+		return tps65910_modify_bits(pmic, reg,
+				(selector << LDO_SEL_SHIFT), LDO_SEL_MASK);
 	}
 
 	return -EINVAL;
@@ -919,6 +923,8 @@ static int tps65910_set_ext_sleep_config(struct tps65910_reg *pmic,
 				TPS65910_SLEEP_CONTROL_EXT_INPUT_EN2) != 0);
 		en_count += ((ext_sleep_config &
 				TPS65910_SLEEP_CONTROL_EXT_INPUT_EN3) != 0);
+		en_count += ((ext_sleep_config &
+				TPS65911_SLEEP_CONTROL_EXT_INPUT_SLEEP) != 0);
 		if (en_count > 1) {
 			dev_err(mfd->dev,
 				"External sleep control flag is not proper\n");
@@ -1015,12 +1021,18 @@ static int tps65910_set_ext_sleep_config(struct tps65910_reg *pmic,
 
 	ret = tps65910_clear_bits(mfd,
 			TPS65910_SLEEP_KEEP_LDO_ON + regoffs, bit_pos);
-	if (!ret)
-		ret = tps65910_set_bits(mfd,
-			TPS65910_SLEEP_SET_LDO_OFF + regoffs, bit_pos);
+	if (!ret) {
+		if (ext_sleep_config & TPS65911_SLEEP_CONTROL_EXT_INPUT_SLEEP)
+			ret = tps65910_set_bits(mfd,
+				TPS65910_SLEEP_SET_LDO_OFF + regoffs, bit_pos);
+		else
+			ret = tps65910_clear_bits(mfd,
+				TPS65910_SLEEP_SET_LDO_OFF + regoffs, bit_pos);
+	}
 	if (ret < 0)
 		dev_err(mfd->dev,
 			"Error in configuring SLEEP register\n");
+
 	return ret;
 }
 
@@ -1232,6 +1244,6 @@ static void __exit tps65910_cleanup(void)
 module_exit(tps65910_cleanup);
 
 MODULE_AUTHOR("Graeme Gregory <gg@slimlogic.co.uk>");
-MODULE_DESCRIPTION("TPS6507x voltage regulator driver");
+MODULE_DESCRIPTION("TPS65910/TPS65911 voltage regulator driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:tps65910-pmic");
