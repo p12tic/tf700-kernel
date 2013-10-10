@@ -34,6 +34,8 @@
 #include <mach/iomap.h>
 #include <mach/clk.h>
 
+#include "apbio.h"
+
 #define APB_DMA_GEN				0x000
 #define GEN_ENABLE				(1<<31)
 

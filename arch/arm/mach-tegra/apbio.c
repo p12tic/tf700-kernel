@@ -1,6 +1,4 @@
 /*
- * arch/arm/mach-tegra/apbio.c
- *
  * Copyright (C) 2010 NVIDIA Corporation.
  * Copyright (C) 2010 Google, Inc.
  *
@@ -66,7 +64,7 @@ static inline u32 apb_readl(unsigned long offset)
 	req.source_addr = offset;
 	req.source_bus_width = 32;
 	req.source_wrap = 4;
-	req.req_sel = 0;
+	req.req_sel = TEGRA_DMA_REQ_SEL_CNTR;
 	req.size = 4;
 	dma_sync_single_for_device(NULL, tegra_apb_bb_phys,
 			sizeof(u32), DMA_FROM_DEVICE);
@@ -85,10 +83,10 @@ static inline u32 apb_readl(unsigned long offset)
 
 	dma_sync_single_for_cpu(NULL, tegra_apb_bb_phys,
 			sizeof(u32), DMA_FROM_DEVICE);
+
 	mutex_unlock(&tegra_apb_dma_lock);
 	return *((u32 *)tegra_apb_bb);
 }
-
 
 static inline void apb_writel(u32 value, unsigned long offset)
 {
@@ -112,7 +110,7 @@ static inline void apb_writel(u32 value, unsigned long offset)
 	req.source_addr = tegra_apb_bb_phys;
 	req.source_bus_width = 32;
 	req.source_wrap = 1;
-	req.req_sel = 0;
+	req.req_sel = TEGRA_DMA_REQ_SEL_CNTR;
 	req.size = 4;
 
 	INIT_COMPLETION(tegra_apb_wait);

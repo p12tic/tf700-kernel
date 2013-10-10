@@ -1,6 +1,4 @@
 /*
- * arch/arm/mach-tegra/apbio.h
- *
  * Copyright (C) 2010 NVIDIA Corporation.
  * Copyright (C) 2010 Google, Inc.
  *
@@ -14,18 +12,27 @@
  * GNU General Public License for more details.
  *
  */
+#ifndef __MACH_TEGRA_APBIO_H
+#define __MACH_TEGRA_APBIO_H
 
 #if defined(CONFIG_TEGRA_SYSTEM_DMA) && defined(CONFIG_ARCH_TEGRA_2x_SOC)
+
 u32 tegra_apb_readl(unsigned long offset);
 void tegra_apb_writel(u32 value, unsigned long offset);
+
 #else
+#include <asm/io.h>
+#include <mach/io.h>
+
 static inline u32 tegra_apb_readl(unsigned long offset)
 {
-	return readl(IO_TO_VIRT(offset));
+        return readl(IO_TO_VIRT(offset));
 }
 
 static inline void tegra_apb_writel(u32 value, unsigned long offset)
 {
-	writel(value, IO_TO_VIRT(offset));
+        writel(value, IO_TO_VIRT(offset));
 }
+#endif
+
 #endif
