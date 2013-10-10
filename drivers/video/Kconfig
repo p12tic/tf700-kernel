@@ -2015,19 +2015,6 @@ config FB_SH_MOBILE_HDMI
 	---help---
 	  Driver for the on-chip SH-Mobile HDMI controller.
 
-config FB_SH_MOBILE_MERAM
-	tristate "SuperH Mobile MERAM read ahead support for LCDC"
-	depends on FB_SH_MOBILE_LCDC
-	select GENERIC_ALLOCATOR
-	default y
-	---help---
-	  Enable MERAM support for the SH-Mobile LCD controller.
-
-	  This will allow for caching of the framebuffer to provide more
-	  reliable access under heavy main memory bus traffic situations.
-	  Up to 4 memory channels can be configured, allowing 4 RGB or
-	  2 YCbCr framebuffers to be configured.
-
 config FB_TMIO
 	tristate "Toshiba Mobile IO FrameBuffer support"
 	depends on FB && MFD_CORE
@@ -2248,6 +2235,7 @@ config FB_DA8XX
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
+	select FB_CFB_REV_PIXELS_IN_BYTE
 	---help---
 	  This is the frame buffer device driver for the TI LCD controller
 	  found on DA8xx/OMAP-L1xx SoCs.
@@ -2438,5 +2426,17 @@ endif
 if FB || SGI_NEWPORT_CONSOLE
 	source "drivers/video/logo/Kconfig"
 endif
+
+config FB_SH_MOBILE_MERAM
+	tristate "SuperH Mobile MERAM read ahead support"
+	depends on (SUPERH || ARCH_SHMOBILE)
+	select GENERIC_ALLOCATOR
+	---help---
+	  Enable MERAM support for the SuperH controller.
+
+	  This will allow for caching of the framebuffer to provide more
+	  reliable access under heavy main memory bus traffic situations.
+	  Up to 4 memory channels can be configured, allowing 4 RGB or
+	  2 YCbCr framebuffers to be configured.
 
 endmenu
