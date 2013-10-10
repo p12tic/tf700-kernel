@@ -76,17 +76,18 @@
 #define DEBUG_UART_DLL_408		0xdd
 #define DEBUG_UART_DLL_204		0x6f
 
+#define DEBUG_UART_SHIFT 2
+
 static void putc(int c)
 {
 	volatile u8 *uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
-	int shift = 2;
 
 	if (uart == NULL)
 		return;
 
-	while (!(uart[UART_LSR << shift] & UART_LSR_THRE))
+	while (!(uart[UART_LSR << DEBUG_UART_SHIFT] & UART_LSR_THRE))
 		barrier();
-	uart[UART_TX << shift] = c;
+	uart[UART_TX << DEBUG_UART_SHIFT] = c;
 }
 
 static inline void flush(void)
@@ -106,7 +107,6 @@ static inline void konk_delay(int delay)
 static inline void arch_decomp_setup(void)
 {
 	volatile u8 *uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
-	int shift = 2;
 	volatile u32 *addr;
 	u8 uart_dll = DEBUG_UART_DLL_216;
 	u32 val;
@@ -159,10 +159,10 @@ static inline void arch_decomp_setup(void)
 	}
 
 	/* Set up debug UART. */
-	uart[UART_LCR << shift] |= UART_LCR_DLAB;
-	uart[UART_DLL << shift] = uart_dll;
-	uart[UART_DLM << shift] = 0x0;
-	uart[UART_LCR << shift] = 3;
+	uart[UART_LCR << DEBUG_UART_SHIFT] |= UART_LCR_DLAB;
+	uart[UART_DLL << DEBUG_UART_SHIFT] = uart_dll;
+	uart[UART_DLM << DEBUG_UART_SHIFT] = 0x0;
+	uart[UART_LCR << DEBUG_UART_SHIFT] = 3;
 }
 
 static inline void arch_decomp_wdog(void)
