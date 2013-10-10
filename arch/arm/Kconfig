@@ -1662,6 +1662,7 @@ config ARCH_NR_GPIO
 	default 512 if ARCH_TEGRA
 	default 1024 if ARCH_SHMOBILE
 	default 355 if ARCH_U8500
+	default 264 if MACH_H4700
 	default 0
 	help
 	  Maximum number of GPIOs in the system.
