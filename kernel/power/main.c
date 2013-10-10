@@ -306,11 +306,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 		}
 #else
 		error = enter_state(state);
-		if (error) {
-			suspend_stats.fail++;
-			dpm_save_failed_errno(error);
-		} else
-			suspend_stats.success++;
+		suspend_stats_update(error);
 #endif
 	}
 #endif
