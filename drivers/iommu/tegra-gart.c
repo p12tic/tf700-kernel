@@ -158,7 +158,7 @@ static int gart_iommu_attach_dev(struct iommu_domain *domain,
 	struct gart_client *client, *c;
 	int err = 0;
 
-	gart = gart_handle;
+	gart = dev_get_drvdata(dev->parent);
 	if (!gart)
 		return -EINVAL;
 	domain->priv = gart;
@@ -427,7 +427,7 @@ static struct platform_driver tegra_gart_driver = {
 	.remove		= tegra_gart_remove,
 	.driver = {
 		.owner	= THIS_MODULE,
-		.name	= "tegra_gart",
+		.name	= "tegra-gart",
 		.pm	= &tegra_gart_pm_ops,
 	},
 };
@@ -445,3 +445,7 @@ static void __exit tegra_gart_exit(void)
 
 subsys_initcall(tegra_gart_init);
 module_exit(tegra_gart_exit);
+
+MODULE_DESCRIPTION("IOMMU API for GART in Tegra20");
+MODULE_AUTHOR("Hiroshi DOYU <hdoyu@nvidia.com>");
+MODULE_LICENSE("GPL v2");
