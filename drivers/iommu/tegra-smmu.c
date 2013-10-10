@@ -747,7 +747,7 @@ static int smmu_iommu_attach_dev(struct iommu_domain *domain,
 		pr_info("Reserve \"page zero\" for AVP vectors using a common dummy\n");
 	}
 
-	dev_dbg(smmu->dev, "%s is attached\n", dev_name(dev));
+	dev_dbg(smmu->dev, "%s is attached\n", dev_name(c->dev));
 	return 0;
 
 err_client:
@@ -1025,7 +1025,7 @@ static struct platform_driver tegra_smmu_driver = {
 	.remove		= tegra_smmu_remove,
 	.driver = {
 		.owner	= THIS_MODULE,
-		.name	= "tegra_smmu",
+		.name	= "tegra-smmu",
 		.pm	= &tegra_smmu_pm_ops,
 	},
 };
@@ -1041,5 +1041,9 @@ static void __exit tegra_smmu_exit(void)
 	platform_driver_unregister(&tegra_smmu_driver);
 }
 
-core_initcall(tegra_smmu_init);
+subsys_initcall(tegra_smmu_init);
 module_exit(tegra_smmu_exit);
+
+MODULE_DESCRIPTION("IOMMU API for SMMU in Tegra30");
+MODULE_AUTHOR("Hiroshi DOYU <hdoyu@nvidia.com>");
+MODULE_LICENSE("GPL v2");
