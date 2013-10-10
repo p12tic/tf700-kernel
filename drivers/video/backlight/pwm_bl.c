@@ -597,7 +597,7 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 			return ret;
 	}
 
-	pb = kzalloc(sizeof(*pb), GFP_KERNEL);
+	pb = devm_kzalloc(&pdev->dev, sizeof(*pb), GFP_KERNEL);
 	if (!pb) {
 		dev_err(&pdev->dev, "no memory for state\n");
 		ret = -ENOMEM;
@@ -627,7 +627,7 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 	if (IS_ERR(pb->pwm)) {
 		dev_err(&pdev->dev, "unable to request PWM for backlight\n");
 		ret = PTR_ERR(pb->pwm);
-		goto err_pwm;
+		goto err_alloc;
 	} else
 		dev_dbg(&pdev->dev, "got pwm for backlight\n");
 
@@ -651,8 +651,6 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 
 err_bl:
 	pwm_free(pb->pwm);
-err_pwm:
-	kfree(pb);
 err_alloc:
 	if (data->exit)
 		data->exit(&pdev->dev);
@@ -669,7 +667,6 @@ static int pwm_backlight_remove(struct platform_device *pdev)
 	pwm_config(pb->pwm, 0, pb->period);
 	pwm_disable(pb->pwm);
 	pwm_free(pb->pwm);
-	kfree(pb);
 	if (data->exit)
 		data->exit(&pdev->dev);
 	return 0;
