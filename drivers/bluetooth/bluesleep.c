@@ -278,7 +278,7 @@ static int bluesleep_hci_event(struct notifier_block *this,
 		if (!bluesleep_hdev) {
 			bluesleep_hdev = hdev;
 			if (bsi->has_ext_wake == 1) {
-				hu  = (struct hci_uart *) hdev->driver_data;
+				hu  = (struct hci_uart *) hci_get_drvdata(hdev);
 				state = (struct uart_state *) \
 							 hu->tty->driver_data;
 				bsi->uport = state->uart_port;
@@ -817,7 +817,6 @@ static int __init bluesleep_init(void)
 		gpio_set_value(bsi->ext_wake, 1);
 		set_bit(BT_EXT_WAKE, &flags);
 	}
-	hci_register_notifier(&hci_event_nblock);
 
 	return 0;
 
@@ -853,7 +852,6 @@ static void __exit bluesleep_exit(void)
 		free_irq(bsi->host_wake_irq, NULL);
 	}
 
-	hci_unregister_notifier(&hci_event_nblock);
 	platform_driver_unregister(&bluesleep_driver);
 
 	remove_proc_entry("asleep", sleep_dir);
