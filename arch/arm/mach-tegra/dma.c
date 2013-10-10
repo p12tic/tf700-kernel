@@ -620,7 +620,7 @@ struct tegra_dma_channel *tegra_dma_allocate_channel(int mode,
 	va_list args;
 	dma_isr_handler isr_handler = NULL;
 
-	if (WARN_ON(!tegra_dma_initialized))
+	if (!tegra_dma_initialized)
 		return NULL;
 
 	mutex_lock(&tegra_dma_lock);
