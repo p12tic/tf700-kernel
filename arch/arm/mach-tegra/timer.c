@@ -33,7 +33,6 @@
 #include <linux/rtc.h>
 
 #include <asm/mach/time.h>
-#include <asm/localtimer.h>
 #include <asm/smp_twd.h>
 #include <asm/sched_clock.h>
 
@@ -155,6 +154,21 @@ static struct irqaction tegra_timer_irq = {
 	.handler	= tegra_timer_interrupt,
 	.dev_id		= &tegra_clockevent,
 };
+
+#ifdef CONFIG_HAVE_ARM_TWD
+static DEFINE_TWD_LOCAL_TIMER(twd_local_timer,
+			      TEGRA_ARM_PERIF_BASE + 0x600,
+			      IRQ_LOCALTIMER);
+
+static void __init tegra_twd_init(void)
+{
+	int err = twd_local_timer_register(&twd_local_timer);
+	if (err)
+		pr_err("twd_local_timer_register failed %d\n", err);
+}
+#else
+#define tegra_twd_init()	do {} while(0)
+#endif
 
 static int tegra_timer_suspend(void)
 {
@@ -325,10 +339,6 @@ static void __init tegra_init_timer(void)
 	else
 		clk_enable(clk);
 
-#ifdef CONFIG_HAVE_ARM_TWD
-	twd_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE + 0x600);
-#endif
-
 #ifdef CONFIG_ARCH_TEGRA_2x_SOC
 	tegra2_init_timer(&system_timer, &tegra_timer_irq.irq);
 #else
@@ -359,6 +369,7 @@ static void __init tegra_init_timer(void)
 	clockevents_register_device(&tegra_clockevent);
 
 	register_syscore_ops(&tegra_timer_syscore_ops);
+	tegra_twd_init();
 }
 
 struct sys_timer tegra_timer = {
