@@ -834,10 +834,10 @@ static void tegra_pcie_setup_translations(void)
 	afi_writel(0, AFI_MSI_BAR_SZ);
 }
 
-static void tegra_pcie_enable_controller(void)
+static int tegra_pcie_enable_controller(void)
 {
 	u32 val, reg;
-	int i;
+	int i, timeout;
 	void __iomem *reg_mselect_base;
 
 	reg_mselect_base = IO_ADDRESS(TEGRA_MSELECT_BASE);
@@ -910,8 +910,14 @@ static void tegra_pcie_enable_controller(void)
 	pads_writel(0x0000FA5C, PADS_REFCLK_CFG1);
 
 	/* Wait for the PLL to lock */
+	timeout = 2000;
 	do {
 		val = pads_readl(PADS_PLL_CTL);
+		mdelay(1);
+		if (--timeout == 0) {
+			pr_err("Tegra PCIe error: timeout waiting for PLL\n");
+			return -EBUSY;
+		}
 	} while (!(val & PADS_PLL_CTL_LOCKDET));
 
 	/* turn off IDDQ override */
@@ -1317,7 +1323,10 @@ static int tegra_pcie_init(void)
 	err = tegra_pcie_get_resources();
 	if (err)
 		return err;
-	tegra_pcie_enable_controller();
+
+	err = tegra_pcie_enable_controller();
+	if (err)
+		return err;
 
 	/* setup the AFI address translations */
 	tegra_pcie_setup_translations();
