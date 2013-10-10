@@ -56,9 +56,14 @@
 #define KBC_PIN_GPIO_22		22
 #define KBC_PIN_GPIO_23		23
 
+enum tegra_pin_type {
+	PIN_CFG_IGNORE,
+	PIN_CFG_COL,
+	PIN_CFG_ROW,
+};
+
 struct tegra_kbc_pin_cfg {
-	bool is_row;
-	bool en;
+	enum tegra_pin_type type;
 	unsigned char num;
 };
 
