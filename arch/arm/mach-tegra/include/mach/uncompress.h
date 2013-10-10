@@ -2,7 +2,7 @@
  * arch/arm/mach-tegra/include/mach/uncompress.h
  * Copyright (C) 2010 Google, Inc.
  * Copyright (C) 2011 Google, Inc.
- * Copyright (C) 2011 NVIDIA CORPORATION. All Rights Reserved.
+ * Copyright (C) 2011-2012 NVIDIA CORPORATION. All Rights Reserved.
  *
  * Author:
  *	Colin Cross <ccross@google.com>
@@ -30,6 +30,7 @@
 #include <linux/serial_reg.h>
 
 #include <mach/iomap.h>
+#include <mach/irammap.h>
 
 #if defined(CONFIG_TEGRA_DEBUG_UARTA)
 #define DEBUG_UART_CLK_SRC		(TEGRA_CLK_RESET_BASE + 0x178)
@@ -104,6 +105,17 @@ static inline void konk_delay(int delay)
 	for (i = 0; i < (1000 * delay); i++) {
 		barrier();
 	}
+}
+
+static inline void save_uart_address(void)
+{
+	u32 *buf = (u32 *)(TEGRA_IRAM_BASE + TEGRA_IRAM_DEBUG_UART_OFFSET);
+
+	if (uart) {
+		buf[0] = TEGRA_IRAM_DEBUG_UART_COOKIE;
+		buf[1] = (u32)uart;
+	} else
+		buf[0] = 0;
 }
 
 /*
@@ -183,6 +195,7 @@ static inline void arch_decomp_setup(void)
 	}
 	if (i == ARRAY_SIZE(uarts))
 		uart = (volatile u8 *)TEGRA_DEBUG_UART_BASE;
+	save_uart_address();
  	if (uart == NULL)
  		return;
 

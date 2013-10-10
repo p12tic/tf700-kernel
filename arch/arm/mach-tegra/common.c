@@ -31,6 +31,7 @@
 #include <linux/cpufreq.h>
 
 #include <asm/hardware/cache-l2x0.h>
+#include <asm/hardware/gic.h>
 #include <asm/system.h>
 
 #include <mach/gpio-tegra.h>
@@ -48,6 +49,36 @@
 #include "devices.h"
 
 #define MC_SECURITY_CFG2	0x7c
+
+/*
+ * Storage for debug-macro.S's state.
+ *
+ * This must be in .data not .bss so that it gets initialized each time the
+ * kernel is loaded. The data is declared here rather than debug-macro.S so
+ * that multiple inclusions of debug-macro.S point at the same data.
+ */
+#define TEGRA_DEBUG_UART_OFFSET (TEGRA_DEBUG_UART_BASE & 0xFFFF)
+u32 tegra_uart_config[3] = {
+	/* Debug UART initialization required */
+	1,
+	/* Debug UART physical address */
+	(u32)(IO_APB_PHYS + TEGRA_DEBUG_UART_OFFSET),
+	/* Debug UART virtual address */
+	(u32)(IO_APB_VIRT + TEGRA_DEBUG_UART_OFFSET),
+};
+
+#ifdef CONFIG_OF
+static const struct of_device_id tegra_dt_irq_match[] __initconst = {
+	{ .compatible = "arm,cortex-a9-gic", .data = gic_of_init },
+	{ }
+};
+
+void __init tegra_dt_init_irq(void)
+{
+	tegra_init_irq();
+	of_irq_init(tegra_dt_irq_match);
+}
+#endif
 
 #define AHB_ARBITRATION_PRIORITY_CTRL		0x4
 #define   AHB_PRIORITY_WEIGHT(x)	(((x) & 0x7) << 29)
