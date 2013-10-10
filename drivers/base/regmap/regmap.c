@@ -1034,7 +1034,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(regmap_register_patch);
 
-/**
+/*
  * regmap_get_val_bytes(): Report the size of a register value
  *
  * Report the size of a register value, mainly intended to for use by
@@ -1048,7 +1048,6 @@ int regmap_get_val_bytes(struct regmap *map)
 	return map->format.val_bytes;
 }
 EXPORT_SYMBOL_GPL(regmap_get_val_bytes);
-
 
 static int __init regmap_initcall(void)
 {

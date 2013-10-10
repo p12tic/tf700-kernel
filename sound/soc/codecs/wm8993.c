@@ -61,8 +61,9 @@ static struct reg_default wm8993_reg_defaults[] = {
 	{ 18,  0x0000 },     /* R18  - GPIO CTRL 1 */
 	{ 19,  0x0010 },     /* R19  - GPIO1 */
 	{ 20,  0x0000 },     /* R20  - IRQ_DEBOUNCE */
-	{ 21,  0x8000 },     /* R22  - GPIOCTRL 2 */
-	{ 22,  0x0800 },     /* R23  - GPIO_POL */
+	{ 21,  0x0000 },     /* R21  - Inputs Clamp */
+	{ 22,  0x8000 },     /* R22  - GPIOCTRL 2 */
+	{ 23,  0x0800 },     /* R23  - GPIO_POL */
 	{ 24,  0x008B },     /* R24  - Left Line Input 1&2 Volume */
 	{ 25,  0x008B },     /* R25  - Left Line Input 3&4 Volume */
 	{ 26,  0x008B },     /* R26  - Right Line Input 1&2 Volume */
@@ -1057,6 +1058,8 @@ static int wm8993_set_bias_level(struct snd_soc_codec *codec,
 	struct wm8993_priv *wm8993 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
+	wm_hubs_set_bias_level(codec, level);
+
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 	case SND_SOC_BIAS_PREPARE:
@@ -1076,6 +1079,8 @@ static int wm8993_set_bias_level(struct snd_soc_codec *codec,
 
 			regcache_cache_only(wm8993->regmap, false);
 			regcache_sync(wm8993->regmap);
+
+			wm_hubs_vmid_ena(codec);
 
 			/* Bring up VMID with fast soft start */
 			snd_soc_update_bits(codec, WM8993_ANTIPOP2,
@@ -1854,24 +1859,7 @@ static struct i2c_driver wm8993_i2c_driver = {
 	.id_table = wm8993_i2c_id,
 };
 
-static int __init wm8993_modinit(void)
-{
-	int ret = 0;
-	ret = i2c_add_driver(&wm8993_i2c_driver);
-	if (ret != 0) {
-		pr_err("WM8993: Unable to register I2C driver: %d\n",
-		       ret);
-	}
-	return ret;
-}
-module_init(wm8993_modinit);
-
-static void __exit wm8993_exit(void)
-{
-	i2c_del_driver(&wm8993_i2c_driver);
-}
-module_exit(wm8993_exit);
-
+module_i2c_driver(wm8993_i2c_driver);
 
 MODULE_DESCRIPTION("ASoC WM8993 driver");
 MODULE_AUTHOR("Mark Brown <broonie@opensource.wolfsonmicro.com>");

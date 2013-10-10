@@ -191,7 +191,7 @@ static int n810_set_input(struct snd_kcontrol *kcontrol,
 		return 0;
 
 	n810_dmic_func = ucontrol->value.integer.value[0];
-	n810_ext_control(codec);
+	n810_ext_control(&card->dapm);
 
 	return 1;
 }
@@ -275,7 +275,7 @@ static int n810_aic33_init(struct snd_soc_pcm_runtime *rtd)
 static struct snd_soc_dai_link n810_dai = {
 	.name = "TLV320AIC33",
 	.stream_name = "AIC33",
-	.cpu_dai_name = "omap-mcbsp-dai.1",
+	.cpu_dai_name = "omap-mcbsp.2",
 	.platform_name = "omap-pcm-audio",
 	.codec_name = "tlv320aic3x-codec.2-0018",
 	.codec_dai_name = "tlv320aic3x-hifi",
