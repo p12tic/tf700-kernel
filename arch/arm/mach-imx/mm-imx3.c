@@ -78,7 +78,7 @@ static void __iomem *imx3_ioremap(unsigned long phys_addr, size_t size,
 	return __arm_ioremap(phys_addr, size, mtype);
 }
 
-void imx3_init_l2x0(void)
+void __init imx3_init_l2x0(void)
 {
 	void __iomem *l2x0_base;
 	void __iomem *clkctl_base;
@@ -158,6 +158,10 @@ static struct sdma_platform_data imx31_sdma_pdata __initdata = {
 	.script_addrs = &imx31_to2_sdma_script,
 };
 
+static const struct resource imx31_audmux_res[] __initconst = {
+	DEFINE_RES_MEM(MX31_AUDMUX_BASE_ADDR, SZ_16K),
+};
+
 void __init imx31_soc_init(void)
 {
 	int to_version = mx31_revision() >> 4;
@@ -178,6 +182,9 @@ void __init imx31_soc_init(void)
 
 	imx_set_aips(MX31_IO_ADDRESS(MX31_AIPS1_BASE_ADDR));
 	imx_set_aips(MX31_IO_ADDRESS(MX31_AIPS2_BASE_ADDR));
+
+	platform_device_register_simple("imx31-audmux", 0, imx31_audmux_res,
+					ARRAY_SIZE(imx31_audmux_res));
 }
 #endif /* ifdef CONFIG_SOC_IMX31 */
 
@@ -244,6 +251,10 @@ static struct sdma_platform_data imx35_sdma_pdata __initdata = {
 	.script_addrs = &imx35_to2_sdma_script,
 };
 
+static const struct resource imx35_audmux_res[] __initconst = {
+	DEFINE_RES_MEM(MX35_AUDMUX_BASE_ADDR, SZ_16K),
+};
+
 void __init imx35_soc_init(void)
 {
 	int to_version = mx35_revision() >> 4;
@@ -266,5 +277,9 @@ void __init imx35_soc_init(void)
 	/* Setup AIPS registers */
 	imx_set_aips(MX35_IO_ADDRESS(MX35_AIPS1_BASE_ADDR));
 	imx_set_aips(MX35_IO_ADDRESS(MX35_AIPS2_BASE_ADDR));
+
+	/* i.mx35 has the i.mx31 type audmux */
+	platform_device_register_simple("imx31-audmux", 0, imx35_audmux_res,
+					ARRAY_SIZE(imx35_audmux_res));
 }
 #endif /* ifdef CONFIG_SOC_IMX35 */
