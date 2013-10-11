@@ -638,7 +638,6 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		err = -ENODEV;
 		goto fail_irq;
 	}
-	set_irq_flags(irq, IRQF_VALID);
 	tegra->irq = irq;
 
 	/* This is pretty ugly and needs to be fixed when we do only
