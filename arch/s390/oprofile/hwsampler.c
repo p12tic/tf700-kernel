@@ -17,7 +17,16 @@
 #include <linux/semaphore.h>
 #include <linux/oom.h>
 #include <linux/oprofile.h>
+<<<<<<< HEAD
 #include <asm/cpu_mf.h>
+||||||| merged common ancestors
+
+#include <asm/lowcore.h>
+=======
+
+#include <asm/facility.h>
+#include <asm/lowcore.h>
+>>>>>>> 34484277b1
 #include <asm/irq.h>
 
 #include "hwsampler.h"
