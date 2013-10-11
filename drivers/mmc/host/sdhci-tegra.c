@@ -44,6 +44,9 @@
 #include "sdhci-pltfm.h"
 #include "../debug_mmc.h"
 
+#define NVQUIRK_FORCE_SDHCI_SPEC_200	BIT(0)
+#define NVQUIRK_ENABLE_BLOCK_GAP_DET	BIT(1)
+
 #define SDHCI_VENDOR_CLOCK_CNTRL	0x100
 #define SDHCI_VENDOR_CLOCK_CNTRL_SDMMC_CLK	0x1
 #define SDHCI_VENDOR_CLOCK_CNTRL_PADPIPE_CLKEN_OVERRIDE	0x8
@@ -997,16 +1000,9 @@ static struct sdhci_ops tegra_sdhci_ops = {
 	.execute_freq_tuning = sdhci_tegra_execute_tuning,
 };
 
-static struct sdhci_pltfm_data sdhci_tegra_pdata = {
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+static struct sdhci_pltfm_data sdhci_tegra20_pdata = {
 	.quirks = SDHCI_QUIRK_BROKEN_TIMEOUT_VAL |
-#ifndef CONFIG_ARCH_TEGRA_2x_SOC
-		  SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK |
-		  SDHCI_QUIRK_NON_STD_VOLTAGE_SWITCHING |
-#endif
-#ifdef CONFIG_ARCH_TEGRA_3x_SOC
-		  SDHCI_QUIRK_NONSTANDARD_CLOCK |
-		  SDHCI_QUIRK_NON_STANDARD_TUNING |
-#endif
 		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
 		  SDHCI_QUIRK_NO_HISPD_BIT |
 		  SDHCI_QUIRK_BROKEN_ADMA_ZEROLEN_DESC |
@@ -1014,6 +1010,22 @@ static struct sdhci_pltfm_data sdhci_tegra_pdata = {
 		  SDHCI_QUIRK_BROKEN_CARD_DETECTION,
 	.ops  = &tegra_sdhci_ops,
 };
+#endif
+#ifdef CONFIG_ARCH_TEGRA_3x_SOC
+static struct sdhci_pltfm_data sdhci_tegra30_pdata = {
+	.quirks = SDHCI_QUIRK_BROKEN_TIMEOUT_VAL |
+		  SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK |
+		  SDHCI_QUIRK_NON_STD_VOLTAGE_SWITCHING |
+		  SDHCI_QUIRK_NONSTANDARD_CLOCK |
+		  SDHCI_QUIRK_NON_STANDARD_TUNING |
+		  SDHCI_QUIRK_SINGLE_POWER_WRITE |
+		  SDHCI_QUIRK_NO_HISPD_BIT |
+		  SDHCI_QUIRK_BROKEN_ADMA_ZEROLEN_DESC |
+		  SDHCI_QUIRK_NO_CALC_MAX_DISCARD_TO |
+		  SDHCI_QUIRK_BROKEN_CARD_DETECTION,
+	.ops  = &tegra_sdhci_ops,
+};
+#endif
 
 static const struct of_device_id sdhci_tegra_dt_match[] __devinitdata = {
 	{ .compatible = "nvidia,tegra20-sdhci", },
@@ -1055,7 +1067,11 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	struct clk *clk;
 	int rc;
 
-	host = sdhci_pltfm_init(pdev, &sdhci_tegra_pdata);
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+	host = sdhci_pltfm_init(pdev, &sdhci_tegra20_pdata);
+#else
+	host = sdhci_pltfm_init(pdev, &sdhci_tegra30_pdata);
+#endif
 	if (IS_ERR(host))
 		return PTR_ERR(host);
 
