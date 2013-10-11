@@ -471,11 +471,6 @@ static struct clk exynos4_init_clocks_off[] = {
 		.enable		= exynos4_clk_ip_cam_ctrl,
 		.ctrlbit	= (1 << 5),
 	}, {
-		.name		= "jpeg",
-		.id		= 0,
-		.enable		= exynos4_clk_ip_cam_ctrl,
-		.ctrlbit	= (1 << 6),
-	}, {
 		.name		= "fimc",
 		.devname	= "exynos4-fimc.0",
 		.enable		= exynos4_clk_ip_cam_ctrl,
@@ -495,11 +490,6 @@ static struct clk exynos4_init_clocks_off[] = {
 		.devname	= "exynos4-fimc.3",
 		.enable		= exynos4_clk_ip_cam_ctrl,
 		.ctrlbit	= (1 << 3),
-	}, {
-		.name		= "fimd",
-		.devname	= "exynos4-fb.0",
-		.enable		= exynos4_clk_ip_lcd0_ctrl,
-		.ctrlbit	= (1 << 0),
 	}, {
 		.name		= "hsmmc",
 		.devname	= "s3c-sdhci.0",
@@ -787,6 +777,20 @@ static struct clk exynos4_clk_pdma1 = {
 	.devname	= "dma-pl330.1",
 	.enable		= exynos4_clk_ip_fsys_ctrl,
 	.ctrlbit	= (1 << 1),
+};
+
+static struct clk exynos4_clk_mdma1 = {
+	.name		= "dma",
+	.devname	= "dma-pl330.2",
+	.enable		= exynos4_clk_ip_image_ctrl,
+	.ctrlbit	= ((1 << 8) | (1 << 5) | (1 << 2)),
+};
+
+static struct clk exynos4_clk_fimd0 = {
+	.name		= "fimd",
+	.devname	= "exynos4-fb.0",
+	.enable		= exynos4_clk_ip_lcd0_ctrl,
+	.ctrlbit	= (1 << 0),
 };
 
 struct clk *exynos4_clkset_group_list[] = {
@@ -1307,6 +1311,8 @@ static struct clksrc_clk *exynos4_sysclks[] = {
 static struct clk *exynos4_clk_cdev[] = {
 	&exynos4_clk_pdma0,
 	&exynos4_clk_pdma1,
+	&exynos4_clk_mdma1,
+	&exynos4_clk_fimd0,
 };
 
 static struct clksrc_clk *exynos4_clksrc_cdev[] = {
@@ -1333,8 +1339,10 @@ static struct clk_lookup exynos4_clk_lookup[] = {
 	CLKDEV_INIT("s3c-sdhci.1", "mmc_busclk.2", &exynos4_clk_sclk_mmc1.clk),
 	CLKDEV_INIT("s3c-sdhci.2", "mmc_busclk.2", &exynos4_clk_sclk_mmc2.clk),
 	CLKDEV_INIT("s3c-sdhci.3", "mmc_busclk.2", &exynos4_clk_sclk_mmc3.clk),
+	CLKDEV_INIT("exynos4-fb.0", "lcd", &exynos4_clk_fimd0),
 	CLKDEV_INIT("dma-pl330.0", "apb_pclk", &exynos4_clk_pdma0),
 	CLKDEV_INIT("dma-pl330.1", "apb_pclk", &exynos4_clk_pdma1),
+	CLKDEV_INIT("dma-pl330.2", "apb_pclk", &exynos4_clk_mdma1),
 	CLKDEV_INIT("s3c64xx-spi.0", "spi_busclk0", &exynos4_clk_sclk_spi0.clk),
 	CLKDEV_INIT("s3c64xx-spi.1", "spi_busclk0", &exynos4_clk_sclk_spi1.clk),
 	CLKDEV_INIT("s3c64xx-spi.2", "spi_busclk0", &exynos4_clk_sclk_spi2.clk),
