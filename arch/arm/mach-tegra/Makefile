@@ -26,6 +26,7 @@ obj-y                                   += sleep.o
 
 obj-y					+= fuse.o
 obj-y					+= powergate.o
+obj-y					+= flowctrl.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)         += tegra2_clocks.o
 obj-$(CONFIG_ARCH_TEGRA_3x_SOC)         += tegra30_clocks.o
 ifeq ($(CONFIG_ARCH_TEGRA_2x_SOC),y)
