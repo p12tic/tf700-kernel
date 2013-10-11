@@ -1095,40 +1095,6 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 	}
 
 	/*
-	 * Enable HPI feature (if supported)
-	 */
-	if (card->ext_csd.hpi && (card->host->caps2 & MMC_CAP2_BKOPS)) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-			EXT_CSD_HPI_MGMT, 1, 0);
-		if (err && err != -EBADMSG)
-			goto free_card;
-		if (err) {
-			pr_warning("%s: Enabling HPI failed\n",
-				   mmc_hostname(card->host));
-			err = 0;
-		} else {
-			card->ext_csd.hpi_en = 1;
-		}
-	}
-
-	/*
-	 * Enable Background ops feature (if supported)
-	 */
-	if (card->ext_csd.bk_ops && (card->host->caps2 & MMC_CAP2_BKOPS)) {
-		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-			EXT_CSD_BKOPS_EN, 1, 0);
-		if (err && err != -EBADMSG)
-			goto free_card;
-		if (err) {
-			pr_warning("%s: Enabling BK ops failed\n",
-				   mmc_hostname(card->host));
-			err = 0;
-		} else {
-			card->ext_csd.bk_ops_en = 1;
-		}
-	}
-
-	/*
 	 * Compute bus speed.
 	 */
 	max_dtr = (unsigned int)-1;
@@ -1177,9 +1143,12 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		 * 4. execute tuning for HS200
 		 */
 		if ((host->caps2 & MMC_CAP2_HS200) &&
-		    card->host->ops->execute_tuning)
+		    card->host->ops->execute_tuning) {
+			mmc_host_clk_hold(card->host);
 			err = card->host->ops->execute_tuning(card->host,
 				MMC_SEND_TUNING_BLOCK_HS200);
+			mmc_host_clk_release(card->host);
+		}
 		if (err) {
 			pr_warning("%s: tuning execution failed\n",
 				   mmc_hostname(card->host));
@@ -1295,6 +1264,40 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			mmc_card_set_ddr_mode(card);
 			mmc_set_timing(card->host, MMC_TIMING_UHS_DDR50);
 			mmc_set_bus_width(card->host, bus_width);
+		}
+	}
+
+	/*
+	 * Enable HPI feature (if supported)
+	 */
+	if (card->ext_csd.hpi && (card->host->caps2 & MMC_CAP2_BKOPS)) {
+		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+			EXT_CSD_HPI_MGMT, 1, 0);
+		if (err && err != -EBADMSG)
+			goto free_card;
+		if (err) {
+			pr_warning("%s: Enabling HPI failed\n",
+				   mmc_hostname(card->host));
+			err = 0;
+		} else {
+			card->ext_csd.hpi_en = 1;
+		}
+	}
+
+	/*
+	 * Enable Background ops feature (if supported)
+	 */
+	if (card->ext_csd.bk_ops && (card->host->caps2 & MMC_CAP2_BKOPS)) {
+		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
+			EXT_CSD_BKOPS_EN, 1, 0);
+		if (err && err != -EBADMSG)
+			goto free_card;
+		if (err) {
+			pr_warning("%s: Enabling BK ops failed\n",
+				   mmc_hostname(card->host));
+			err = 0;
+		} else {
+			card->ext_csd.bk_ops_en = 1;
 		}
 	}
 
