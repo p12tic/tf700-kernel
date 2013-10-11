@@ -47,8 +47,8 @@
 
 /* Interrupt mask bits */
 #define CONFIG_ALRT_BIT_ENBL	(1 << 2)
-#define STATUS_INTR_SOC_BIT	(1 << 14)
-#define STATUS_INTR_LOW_SOC_BIT	(1 << 10)
+#define STATUS_INTR_SOCMIN_BIT	(1 << 10)
+#define STATUS_INTR_SOCMAX_BIT	(1 << 14)
 
 #define VFSOC0_LOCK		0x0000
 #define VFSOC0_UNLOCK		0x0080
@@ -179,14 +179,11 @@ static int max17042_get_property(struct power_supply *psy,
 		val->intval = ret >> 8;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		ret = max17042_read_reg(chip->client, MAX17042_RepSOC);
+		ret = max17042_read_reg(chip->client, MAX17042_FullCAP);
 		if (ret < 0)
 			return ret;
 
-		if ((ret >> 8) >= MAX17042_BATTERY_FULL)
-			val->intval = 1;
-		else if (ret >= 0)
-			val->intval = 0;
+		val->intval = ret * 1000 / 2;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		ret = max17042_read_reg(chip->client, MAX17042_TEMP);
@@ -572,19 +569,14 @@ static void max17042_set_soc_threshold(struct max17042_chip *chip, u16 off)
 	max17042_write_reg(chip->client, MAX17042_SALRT_Th, soc_tr);
 }
 
-static irqreturn_t max17042_intr_handler(int id, void *dev)
-{
-	return IRQ_WAKE_THREAD;
-}
-
 static irqreturn_t max17042_thread_handler(int id, void *dev)
 {
 	struct max17042_chip *chip = dev;
 	u16 val;
 
 	val = max17042_read_reg(chip->client, MAX17042_STATUS);
-	if ((val & STATUS_INTR_SOC_BIT) ||
-		(val & STATUS_INTR_LOW_SOC_BIT)) {
+	if ((val & STATUS_INTR_SOCMIN_BIT) ||
+		(val & STATUS_INTR_SOCMAX_BIT)) {
 		dev_info(&chip->client->dev, "SOC threshold INTR\n");
 		max17042_set_soc_threshold(chip, 1);
 	}
@@ -692,9 +684,10 @@ static int __devinit max17042_probe(struct i2c_client *client,
 	}
 
 	if (client->irq) {
-		ret = request_threaded_irq(client->irq, max17042_intr_handler,
+		ret = request_threaded_irq(client->irq, NULL,
 						max17042_thread_handler,
-						0, chip->battery.name, chip);
+						IRQF_TRIGGER_FALLING,
+						chip->battery.name, chip);
 		if (!ret) {
 			reg =  max17042_read_reg(client, MAX17042_CONFIG);
 			reg |= CONFIG_ALRT_BIT_ENBL;
@@ -751,18 +744,7 @@ static struct i2c_driver max17042_i2c_driver = {
 	.remove		= __devexit_p(max17042_remove),
 	.id_table	= max17042_id,
 };
-
-static int __init max17042_init(void)
-{
-	return i2c_add_driver(&max17042_i2c_driver);
-}
-module_init(max17042_init);
-
-static void __exit max17042_exit(void)
-{
-	i2c_del_driver(&max17042_i2c_driver);
-}
-module_exit(max17042_exit);
+module_i2c_driver(max17042_i2c_driver);
 
 MODULE_AUTHOR("MyungJoo Ham <myungjoo.ham@samsung.com>");
 MODULE_DESCRIPTION("MAX17042 Fuel Gauge");

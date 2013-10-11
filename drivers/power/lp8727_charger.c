@@ -480,6 +480,7 @@ static const struct i2c_device_id lp8727_ids[] = {
 	{"lp8727", 0},
 	{ }
 };
+MODULE_DEVICE_TABLE(i2c, lp8727_ids);
 
 static struct i2c_driver lp8727_driver = {
 	.driver = {
@@ -489,19 +490,7 @@ static struct i2c_driver lp8727_driver = {
 	.remove = __devexit_p(lp8727_remove),
 	.id_table = lp8727_ids,
 };
-
-static int __init lp8727_init(void)
-{
-	return i2c_add_driver(&lp8727_driver);
-}
-
-static void __exit lp8727_exit(void)
-{
-	i2c_del_driver(&lp8727_driver);
-}
-
-module_init(lp8727_init);
-module_exit(lp8727_exit);
+module_i2c_driver(lp8727_driver);
 
 MODULE_DESCRIPTION("TI/National Semiconductor LP8727 charger driver");
 MODULE_AUTHOR("Woogyom Kim <milo.kim@ti.com>, "
