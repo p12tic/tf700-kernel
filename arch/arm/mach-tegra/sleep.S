@@ -35,7 +35,7 @@
 #include <asm/asm-offsets.h>
 #include <asm/glue-cache.h>
 #include <asm/glue-proc.h>
-#include <asm/system.h>
+#include <asm/cp15.h>
 
 #include <mach/iomap.h>
 #include <mach/io.h>

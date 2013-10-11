@@ -19,6 +19,7 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 
+#include <asm/cp15.h>
 #include <asm/cputype.h>
 #include <asm/thread_notify.h>
 #include <asm/vfp.h>
