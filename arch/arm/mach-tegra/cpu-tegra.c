@@ -35,7 +35,6 @@
 #include <linux/cpu.h>
 #include <mach/board-cardhu-misc.h>
 
-#include <asm/system.h>
 
 #include <mach/clk.h>
 #include <mach/edp.h>
