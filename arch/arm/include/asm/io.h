@@ -82,6 +82,11 @@ extern void __iomem *__arm_ioremap_pfn(unsigned long, unsigned long, size_t, uns
 extern void __iomem *__arm_ioremap(unsigned long, size_t, unsigned int);
 extern void __iomem *__arm_ioremap_exec(unsigned long, size_t, bool cached);
 extern void __iounmap(volatile void __iomem *addr);
+extern void __arm_iounmap(volatile void __iomem *addr);
+
+extern void __iomem * (*arch_ioremap_caller)(unsigned long, size_t,
+	unsigned int, void *);
+extern void (*arch_iounmap)(volatile void __iomem *);
 
 /*
  * Bad read/write accesses...
@@ -264,16 +269,11 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
  * Documentation/io-mapping.txt.
  *
  */
-#ifndef __arch_ioremap
-#define __arch_ioremap			__arm_ioremap
-#define __arch_iounmap			__iounmap
-#endif
-
-#define ioremap(cookie,size)		__arch_ioremap((cookie), (size), MT_DEVICE)
-#define ioremap_nocache(cookie,size)	__arch_ioremap((cookie), (size), MT_DEVICE)
-#define ioremap_cached(cookie,size)	__arch_ioremap((cookie), (size), MT_DEVICE_CACHED)
-#define ioremap_wc(cookie,size)		__arch_ioremap((cookie), (size), MT_DEVICE_WC)
-#define iounmap				__arch_iounmap
+#define ioremap(cookie,size)		__arm_ioremap((cookie), (size), MT_DEVICE)
+#define ioremap_nocache(cookie,size)	__arm_ioremap((cookie), (size), MT_DEVICE)
+#define ioremap_cached(cookie,size)	__arm_ioremap((cookie), (size), MT_DEVICE_CACHED)
+#define ioremap_wc(cookie,size)		__arm_ioremap((cookie), (size), MT_DEVICE_WC)
+#define iounmap				__arm_iounmap
 
 /*
  * io{read,write}{8,16,32} macros
