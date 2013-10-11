@@ -26,6 +26,7 @@
 #include <linux/bug.h>
 #include <linux/scatterlist.h>
 #include <linux/bitmap.h>
+#include <linux/types.h>
 #include <asm/page.h>
 
 /**
@@ -334,6 +335,9 @@ enum dma_slave_buswidth {
  * may or may not be applicable on memory sources.
  * @dst_maxburst: same as src_maxburst but for destination target
  * mutatis mutandis.
+ * @device_fc: Flow Controller Settings. Only valid for slave channels. Fill
+ * with 'true' if peripheral should be flow controller. Direction will be
+ * selected at Runtime.
  *
  * This struct is passed in as configuration data to a DMA engine
  * in order to set up a certain channel for DMA transport at runtime.
@@ -360,6 +364,7 @@ struct dma_slave_config {
 	enum dma_slave_buswidth dst_addr_width;
 	u32 src_maxburst;
 	u32 dst_maxburst;
+	bool device_fc;
 };
 
 static inline const char *dma_chan_name(struct dma_chan *chan)
@@ -578,10 +583,11 @@ struct dma_device {
 	struct dma_async_tx_descriptor *(*device_prep_slave_sg)(
 		struct dma_chan *chan, struct scatterlist *sgl,
 		unsigned int sg_len, enum dma_transfer_direction direction,
-		unsigned long flags);
+		unsigned long flags, void *context);
 	struct dma_async_tx_descriptor *(*device_prep_dma_cyclic)(
 		struct dma_chan *chan, dma_addr_t buf_addr, size_t buf_len,
-		size_t period_len, enum dma_transfer_direction direction);
+		size_t period_len, enum dma_transfer_direction direction,
+		void *context);
 	struct dma_async_tx_descriptor *(*device_prep_interleaved_dma)(
 		struct dma_chan *chan, struct dma_interleaved_template *xt,
 		unsigned long flags);
@@ -616,7 +622,7 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_slave_single(
 	sg_init_one(&sg, buf, len);
 
 	return chan->device->device_prep_slave_sg(chan, &sg, 1,
-						  dir, flags);
+						  dir, flags, NULL);
 }
 
 static inline struct dma_async_tx_descriptor *dmaengine_prep_slave_sg(
@@ -624,7 +630,7 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_slave_sg(
 	enum dma_transfer_direction dir, unsigned long flags)
 {
 	return chan->device->device_prep_slave_sg(chan, sgl, sg_len,
-						  dir, flags);
+						  dir, flags, NULL);
 }
 
 static inline struct dma_async_tx_descriptor *dmaengine_prep_dma_cyclic(
@@ -632,7 +638,7 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_dma_cyclic(
 		size_t period_len, enum dma_transfer_direction dir)
 {
 	return chan->device->device_prep_dma_cyclic(chan, buf_addr, buf_len,
-						period_len, dir);
+						period_len, dir, NULL);
 }
 
 static inline int dmaengine_terminate_all(struct dma_chan *chan)
