@@ -391,7 +391,9 @@ static int tegra_ehci_hub_control(
 		case ClearPortFeature:
 			if (wValue == USB_PORT_FEAT_SUSPEND) {
 				/* tegra USB controller needs 25 ms to resume the port */
+				set_bit(wIndex-1, &ehci->resuming_ports);
 				ehci->reset_done[wIndex-1] = jiffies + msecs_to_jiffies(25);
+				clear_bit(wIndex-1, &ehci->resuming_ports);
 			}
 			break;
 		}
