@@ -282,6 +282,8 @@ struct sdhci_ops {
 	int	(*execute_freq_tuning)(struct sdhci_host *sdhci);
 
 	void	(*hw_reset)(struct sdhci_host *host);
+	void	(*platform_suspend)(struct sdhci_host *host);
+	void	(*platform_resume)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
