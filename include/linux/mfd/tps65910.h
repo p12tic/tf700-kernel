@@ -17,6 +17,8 @@
 #ifndef __LINUX_MFD_TPS65910_H
 #define __LINUX_MFD_TPS65910_H
 
+#include <linux/gpio.h>
+
 /* TPS chip id list */
 #define TPS65910			0
 #define TPS65911			1
@@ -775,6 +777,12 @@
 /* Max number of TPS65910/11 regulators */
 #define TPS65910_NUM_REGS				13
 
+/* External sleep controls through EN1/EN2/EN3/SLEEP inputs */
+#define TPS65910_SLEEP_CONTROL_EXT_INPUT_EN1		0x1
+#define TPS65910_SLEEP_CONTROL_EXT_INPUT_EN2		0x2
+#define TPS65910_SLEEP_CONTROL_EXT_INPUT_EN3		0x4
+#define TPS65911_SLEEP_CONTROL_EXT_INPUT_SLEEP		0x8
+
 /**
  * struct tps65910_board
  * Board platform data may be used to initialize regulators.
@@ -787,6 +795,7 @@ struct tps65910_board {
 	int vmbch_threshold;
 	int vmbch2_threshold;
 	bool en_gpio_sleep[TPS6591X_MAX_NUM_GPIO];
+	unsigned long regulator_ext_sleep_control[TPS65910_NUM_REGS];
 	struct regulator_init_data *tps65910_pmic_init_data[TPS65910_NUM_REGS];
 };
 
@@ -797,6 +806,7 @@ struct tps65910_board {
 struct tps65910 {
 	struct device *dev;
 	struct i2c_client *i2c_client;
+	struct regmap *regmap;
 	struct mutex io_mutex;
 	unsigned int id;
 	int (*read)(struct tps65910 *tps65910, u8 reg, int size, void *dest);
