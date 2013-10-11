@@ -29,7 +29,6 @@
 #include <linux/clk.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
-#include <linux/prefetch.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 
@@ -561,6 +560,7 @@ static int at91_ep_disable (struct usb_ep * _ep)
 
 	/* restore the endpoint's pristine config */
 	ep->desc = NULL;
+	ep->ep.desc = NULL;
 	ep->ep.maxpacket = ep->maxpacket;
 
 	/* reset fifos and endpoint */
