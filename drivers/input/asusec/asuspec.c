@@ -1,4 +1,4 @@
-/* 
+/*
  * ASUS EC driver.
  */
 
@@ -250,7 +250,7 @@ EXPORT_SYMBOL(asuspec_battery_monitor);
 static void asuspec_dockram_init(struct i2c_client *client){
 	dockram_client.adapter = client->adapter;
 	dockram_client.addr = 0x17;
-	dockram_client.detected = client->detected; 
+	dockram_client.detected = client->detected;
 	dockram_client.dev = client->dev;
 	dockram_client.driver = client->driver;
 	dockram_client.flags = client->flags;
@@ -266,7 +266,7 @@ static int asuspec_dockram_write_data(int cmd, int length)
 		ASUSPEC_ERR("DockRam is not ready.\n");
 		return -1;
 	}
-	
+
 	if (ec_chip->op_mode){
 		ASUSPEC_ERR("It's not allowed to access dockram under FW update mode.\n");
 		return -2;
@@ -419,32 +419,32 @@ static int asuspec_chip_init(struct i2c_client *client)
 		else
 			break;
 	}
-	
+
 	if(ret_val < 0){
 		goto fail_to_access_ec;
-	}	
-	
+	}
+
 	for ( i=0; i<8; i++){
 		asuspec_i2c_read_data(client);
 	}
-		
+
 	if (asuspec_dockram_read_data(0x01) < 0){
 		goto fail_to_access_ec;
 	}
 	strcpy(ec_chip->ec_model_name, &ec_chip->i2c_dm_data[1]);
 	ASUSPEC_NOTICE("Model Name: %s\n", ec_chip->ec_model_name);
-		
+
 	if (asuspec_dockram_read_data(0x02) < 0){
 		goto fail_to_access_ec;
 	}
 	strcpy(ec_chip->ec_version, &ec_chip->i2c_dm_data[1]);
 	ASUSPEC_NOTICE("EC-FW Version: %s\n", ec_chip->ec_version);
-		
+
 	if (asuspec_dockram_read_data(0x03) < 0){
 		goto fail_to_access_ec;
 	}
 	ASUSPEC_INFO("EC-Config Format: %s\n", &ec_chip->i2c_dm_data[1]);
-		
+
 	if (asuspec_dockram_read_data(0x04) < 0){
 		goto fail_to_access_ec;
 	}
@@ -475,7 +475,7 @@ static irqreturn_t asuspec_interrupt_handler(int irq, void *dev_id){
 			queue_delayed_work(asuspec_wq, &ec_chip->asuspec_work, 0);
 		}
 	}
-	return IRQ_HANDLED;	
+	return IRQ_HANDLED;
 }
 
 static int asuspec_irq_ec_request(struct i2c_client *client)
@@ -483,7 +483,7 @@ static int asuspec_irq_ec_request(struct i2c_client *client)
 	int rc = 0 ;
 	unsigned gpio = asuspec_ecreq_gpio;
 	int irq = gpio_to_irq(gpio);
-	const char* label = "asuspec_request" ; 
+	const char* label = "asuspec_request" ;
 
 	ASUSPEC_INFO("gpio = %d, irq = %d\n", gpio,irq);
 	ASUSPEC_INFO("GPIO = %d , state = %d\n", gpio, gpio_get_value(gpio));
@@ -502,7 +502,7 @@ static int asuspec_irq_ec_request(struct i2c_client *client)
 	}
 	ASUSPEC_INFO("GPIO = %d , state = %d\n", gpio, gpio_get_value(gpio));
 	return 0 ;
-	
+
 err_exit:
 	return rc;
 }
@@ -513,38 +513,38 @@ static int asuspec_irq_ec_apwake(struct i2c_client *client)
 	int rc = 0 ;
 	unsigned gpio = asuspec_apwake_gpio;
 	int irq = gpio_to_irq(gpio);
-	const char* label = "asuspec_apwake" ; 
-	
+	const char* label = "asuspec_apwake" ;
+
 	ASUSPEC_INFO("GPIO = %d, irq = %d\n", gpio, irq);
 	ASUSPEC_INFO("GPIO = %d , state = %d\n", gpio, gpio_get_value(gpio));
 
 	tegra_gpio_enable(gpio);
 	rc = gpio_request(gpio, label);
 	if (rc) {
-		ASUSPEC_ERR("gpio_request failed for input %d\n", gpio); 	
+		ASUSPEC_ERR("gpio_request failed for input %d\n", gpio);
 		goto err_request_input_gpio_failed;
 	}
 
 	rc = gpio_direction_input(gpio) ;
 	if (rc) {
-		ASUSPEC_ERR("gpio_direction_input failed for input %d\n", gpio); 		
+		ASUSPEC_ERR("gpio_direction_input failed for input %d\n", gpio);
 		goto err_gpio_direction_input_failed;
 	}
 	ASUSPEC_INFO("GPIO = %d , state = %d\n", gpio, gpio_get_value(gpio));
 
 	rc = request_irq(irq, asuspec_interrupt_handler,/*IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING|IRQF_TRIGGER_HIGH|*/IRQF_TRIGGER_LOW, label, client);
 	if (rc < 0) {
-		ASUSPEC_ERR("Could not register for %s interrupt, irq = %d, rc = %d\n", label, irq, rc); 
+		ASUSPEC_ERR("Could not register for %s interrupt, irq = %d, rc = %d\n", label, irq, rc);
 		rc = -EIO;
 		goto err_gpio_request_irq_fail ;
 	}
 
 	enable_irq_wake(gpio_to_irq(asuspec_apwake_gpio));
-	ASUSPEC_INFO("request irq = %d, rc = %d\n", irq, rc);	
+	ASUSPEC_INFO("request irq = %d, rc = %d\n", irq, rc);
 
 	return 0 ;
 
-err_gpio_request_irq_fail: 
+err_gpio_request_irq_fail:
 	gpio_free(gpio);
 err_gpio_direction_input_failed:
 err_request_input_gpio_failed :
@@ -642,7 +642,7 @@ static void asuspec_fw_update_work_function(struct work_struct *dat)
 	mutex_lock(&ec_chip->lock);
 	smbus_data = i2c_smbus_read_byte_data(&dockram_client, 0);
 	enable_irq(irq);
-	BuffPush(smbus_data);		
+	BuffPush(smbus_data);
 	mutex_unlock(&ec_chip->lock);
 }
 
@@ -688,10 +688,10 @@ static int __devinit asuspec_probe(struct i2c_client *client,
 		err = -ENOMEM;
 		goto exit;
 	}
-		
+
 	i2c_set_clientdata(client, ec_chip);
 	ec_chip->client = client;
-	ec_chip->client->driver = &asuspec_driver;				
+	ec_chip->client->driver = &asuspec_driver;
 	ec_chip->client->flags = 1;
 
 	init_timer(&ec_chip->asuspec_timer);
@@ -717,14 +717,14 @@ static int __devinit asuspec_probe(struct i2c_client *client,
 		ASUSPEC_ERR("switch_dev_register for pad failed!\n");
 	}
 	switch_set_state(&ec_chip->pad_sdev, 0);
-	
+
 	asuspec_wq = create_singlethread_workqueue("asuspec_wq");
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asuspec_work, asuspec_work_function);
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asuspec_init_work, asuspec_init_work_function);
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asuspec_fw_update_work, asuspec_fw_update_work_function);
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asuspec_enter_s3_work, asuspec_enter_s3_work_function);
 	INIT_DELAYED_WORK_DEFERRABLE(&asuspec_stress_work, asuspec_stresstest_work_function);
-	
+
 	asuspec_irq_ec_request(client);
 	asuspec_irq_ec_apwake(client);
 	queue_delayed_work(asuspec_wq, &ec_chip->asuspec_init_work, 0);
@@ -912,7 +912,7 @@ static int asuspec_resume(struct i2c_client *client){
 	printk("asuspec_resume+\n");
 	ec_chip->i2c_err_count = 0;
 	printk("asuspec_resume-\n");
-	return 0;	
+	return 0;
 }
 
 
@@ -986,7 +986,7 @@ static long asuspec_ioctl(struct file *flip,
 			ec_chip->op_mode = 0;
 			queue_delayed_work(asuspec_wq, &ec_chip->asuspec_init_work, 0);
 			switch_set_state(&ec_chip->pad_sdev, !ec_chip->pad_sdev.state);
-			msleep(2500);			
+			msleep(2500);
 			break;
 		case ASUSPEC_FW_DUMMY:
 			ASUSPEC_NOTICE("ASUSPEC_FW_DUMMY\n");
@@ -1042,7 +1042,7 @@ static void asuspec_enter_normal_mode(void){
 }
 
 static int BuffDataSize(void)
-{   
+{
     int in = buff_in_ptr;
     int out = buff_out_ptr;
 
@@ -1065,7 +1065,7 @@ static void BuffPush(char data)
     buff_in_ptr++;
     if (buff_in_ptr >= EC_BUFF_LEN){
         buff_in_ptr = 0;
-    }    
+    }
 }
 
 static char BuffGet(void)
@@ -1073,7 +1073,7 @@ static char BuffGet(void)
     char c = (char)0;
 
     if (BuffDataSize() != 0){
-        c = (char) ec_to_host_buffer[buff_out_ptr];        
+        c = (char) ec_to_host_buffer[buff_out_ptr];
         buff_out_ptr++;
          if (buff_out_ptr >= EC_BUFF_LEN){
              buff_out_ptr = 0;
@@ -1092,7 +1092,7 @@ static ssize_t ec_read(struct file *file, char __user *buf, size_t count, loff_t
 
 	mutex_lock(&ec_chip->lock);
 	mutex_unlock(&ec_chip->lock);
-	
+
     while ((BuffDataSize() > 0) && count)
     {
         tmp_buf[i] = BuffGet();
@@ -1101,7 +1101,7 @@ static ssize_t ec_read(struct file *file, char __user *buf, size_t count, loff_t
         i++;
 		f_counter = 0;
 		total_buf++;
-    }	
+    }
 
     ret = copy_to_user(buf, tmp_buf, i);
     if (ret == 0)
@@ -1114,37 +1114,37 @@ static ssize_t ec_read(struct file *file, char __user *buf, size_t count, loff_t
 
 static ssize_t ec_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
-    int err;    
+    int err;
     int i;
 
-    if (h2ec_count > 0) 
+    if (h2ec_count > 0)
     {                   /* There is still data in the buffer that */
         return -EBUSY;  /* was not sent to the EC */
     }
-    if (count > EC_BUFF_LEN) 
+    if (count > EC_BUFF_LEN)
     {
         return -EINVAL; /* data size is too big */
     }
-    
+
     err = copy_from_user(host_to_ec_buffer, buf, count);
     if (err)
     {
         ASUSPEC_ERR("ec_write copy error\n");
         return err;
     }
-   
+
     h2ec_count = count;
     for (i = 0; i < count ; i++){
 		i2c_smbus_write_byte_data(&dockram_client, host_to_ec_buffer[i],0);
     }
-    h2ec_count = 0;    
+    h2ec_count = 0;
     return count;
 
 }
 
 static int __init asuspec_init(void)
 {
-	int err_code = 0;	
+	int err_code = 0;
 
 	printk(KERN_INFO "%s+ #####\n", __func__);
 
@@ -1160,7 +1160,7 @@ static int __init asuspec_init(void)
 	asuspec_cdev = cdev_alloc() ;
 	asuspec_cdev->owner = THIS_MODULE ;
 	asuspec_cdev->ops = &asuspec_fops ;
-		
+
 	err_code=i2c_add_driver(&asuspec_driver);
 	if(err_code){
 		ASUSPEC_ERR("i2c_add_driver fail\n") ;
@@ -1185,9 +1185,9 @@ static int __init asuspec_init(void)
 	return 0;
 
 device_create_fail :
-	class_destroy(asuspec_class) ;	
+	class_destroy(asuspec_class) ;
 class_create_fail :
-	i2c_del_driver(&asuspec_driver);	
+	i2c_del_driver(&asuspec_driver);
 i2c_add_driver_fail :
 	printk(KERN_INFO "%s- #####\n", __func__);
 	return err_code;
