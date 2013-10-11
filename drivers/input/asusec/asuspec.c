@@ -463,11 +463,12 @@ fail_to_access_ec:
 
 }
 
-static irqreturn_t asuspec_interrupt_handler(int irq, void *dev_id){
-	int gpio = irq_to_gpio(irq);
+static irqreturn_t asuspec_interrupt_handler(int irq, void *dev_id)
+{
+	int apwake_irq = gpio_to_irq(asuspec_apwake_gpio);
 
-	ASUSPEC_INFO("interrupt irq = %d, gpio = %d\n", irq, gpio);
-	if (gpio == asuspec_apwake_gpio){
+	ASUSPEC_INFO("interrupt irq = %d\n", irq);
+	if (apwake_irq == irq){
 		disable_irq_nosync(irq);
 		if (ec_chip->op_mode){
 			queue_delayed_work(asuspec_wq, &ec_chip->asuspec_fw_update_work, 0);

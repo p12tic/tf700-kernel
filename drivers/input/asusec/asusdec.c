@@ -704,10 +704,11 @@ fail_to_access_ec:
 
 
 static irqreturn_t asusdec_interrupt_handler(int irq, void *dev_id){
+	int apwake_irq = gpio_to_irq(asusdec_apwake_gpio);
+	int dock_in_irq = gpio_to_irq(asusdec_dock_in_gpio);
+	int hall_irq = gpio_to_irq(asusdec_hall_sensor_gpio);
 
-	int gpio = irq_to_gpio(irq);
-
-	if (gpio == asusdec_apwake_gpio){
+	if (irq == apwake_irq){
 		disable_irq_nosync(irq);
 		if (ec_chip->op_mode){
 			queue_delayed_work(asusdec_wq, &ec_chip->asusdec_fw_update_work, 0);
@@ -723,11 +724,11 @@ static irqreturn_t asusdec_interrupt_handler(int irq, void *dev_id){
 			queue_delayed_work(asusdec_wq, &ec_chip->asusdec_work, 0);
 		}
 	}
-	else if (gpio == asusdec_dock_in_gpio){
+	else if (irq == dock_in_irq){
 		ec_chip->dock_in = 0;
 		ec_chip->dock_det++;
 		queue_delayed_work(asusdec_wq, &ec_chip->asusdec_dock_init_work, 0);
-	} else if (gpio == asusdec_hall_sensor_gpio){
+	} else if (irq == hall_irq){
 		queue_delayed_work(asusdec_wq, &ec_chip->asusdec_hall_sensor_work, 0);
 	}
 	return IRQ_HANDLED;
