@@ -25,7 +25,6 @@
 #define __MACH_TEGRA_UNCOMPRESS_H
 
 #include <linux/bug.h>
-#include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/serial_reg.h>
 
@@ -79,6 +78,9 @@
 #define DEBUG_UART_DLL_216		0x75
 #define DEBUG_UART_DLL_408		0xdd
 #define DEBUG_UART_DLL_204		0x6f
+
+#define BIT(x) (1 << (x))
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define DEBUG_UART_SHIFT 2
 
