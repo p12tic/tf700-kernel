@@ -22,6 +22,7 @@
 
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <asm/system_info.h>
 #include "board.h"
 
 /* skuinfo is 18 character long xxx-xxxxx-xxxx-xxx
