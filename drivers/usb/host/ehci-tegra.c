@@ -223,54 +223,6 @@ static int alloc_align_buffer(struct urb *urb, gfp_t mem_flags)
 	return 0;
 }
 
-static int tegra_ehci_map_urb_for_dma(struct usb_hcd *hcd,
-	struct urb *urb, gfp_t mem_flags)
-{
-	int ret;
-
-	ret = alloc_align_buffer(urb, mem_flags);
-	if (ret)
-		return ret;
-
-	ret = usb_hcd_map_urb_for_dma(hcd, urb, mem_flags);
-
-	/* Control packets over dma */
-	if (urb->setup_dma)
-		dma_sync_single_for_device(hcd->self.controller,
-			urb->setup_dma, sizeof(struct usb_ctrlrequest),
-			DMA_TO_DEVICE);
-
-	/* urb buffers over dma */
-	if (urb->transfer_dma) {
-		enum dma_data_direction dir;
-		dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
-
-		dma_sync_single_for_device(hcd->self.controller,
-			urb->transfer_dma, urb->transfer_buffer_length, dir);
-	}
-
-	if (ret)
-		free_align_buffer(urb);
-
-	return ret;
-}
-
-static void tegra_ehci_unmap_urb_for_dma(struct usb_hcd *hcd,
-	struct urb *urb)
-{
-	usb_hcd_unmap_urb_for_dma(hcd, urb);
-	free_align_buffer(urb);
-
-	if (urb->transfer_dma) {
-		enum dma_data_direction dir;
-		dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
-		if (dir == DMA_FROM_DEVICE)
-			dma_sync_single_for_cpu(hcd->self.controller,
-				urb->transfer_dma, urb->transfer_buffer_length,
-									   DMA_FROM_DEVICE);
-	}
-}
-
 static irqreturn_t tegra_ehci_irq(struct usb_hcd *hcd)
 {
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
@@ -309,17 +261,17 @@ static irqreturn_t tegra_ehci_irq(struct usb_hcd *hcd)
 
 static int tegra_ehci_hub_control(
 	struct usb_hcd	*hcd,
-	u16	typeReq,
-	u16	wValue,
-	u16	wIndex,
-	char	*buf,
-	u16	wLength
+	u16		typeReq,
+	u16		wValue,
+	u16		wIndex,
+	char		*buf,
+	u16		wLength
 )
 {
+	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-	int	retval = 0;
 	u32 __iomem	*status_reg;
+	int	retval = 0;
 
 	if (!tegra_usb_phy_hw_accessible(tegra->phy)) {
 		if (buf)
@@ -501,36 +453,82 @@ static int tegra_ehci_bus_resume(struct usb_hcd *hcd)
 }
 #endif
 
+static int tegra_ehci_map_urb_for_dma(struct usb_hcd *hcd, struct urb *urb,
+				      gfp_t mem_flags)
+{
+	int ret;
+
+	ret = alloc_align_buffer(urb, mem_flags);
+	if (ret)
+		return ret;
+
+	ret = usb_hcd_map_urb_for_dma(hcd, urb, mem_flags);
+
+	/* Control packets over dma */
+	if (urb->setup_dma)
+		dma_sync_single_for_device(hcd->self.controller,
+			urb->setup_dma, sizeof(struct usb_ctrlrequest),
+			DMA_TO_DEVICE);
+
+	/* urb buffers over dma */
+	if (urb->transfer_dma) {
+		enum dma_data_direction dir;
+		dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+
+		dma_sync_single_for_device(hcd->self.controller,
+			urb->transfer_dma, urb->transfer_buffer_length, dir);
+	}
+
+	if (ret)
+		free_align_buffer(urb);
+
+	return ret;
+}
+
+static void tegra_ehci_unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
+{
+	usb_hcd_unmap_urb_for_dma(hcd, urb);
+	free_align_buffer(urb);
+
+	if (urb->transfer_dma) {
+		enum dma_data_direction dir;
+		dir = usb_urb_dir_in(urb) ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+		if (dir == DMA_FROM_DEVICE)
+			dma_sync_single_for_cpu(hcd->self.controller,
+				urb->transfer_dma, urb->transfer_buffer_length,
+									   DMA_FROM_DEVICE);
+	}
+}
+
 static const struct hc_driver tegra_ehci_hc_driver = {
 	.description		= hcd_name,
 	.product_desc		= "Tegra EHCI Host Controller",
 	.hcd_priv_size		= sizeof(struct ehci_hcd),
 	.flags			= HCD_USB2 | HCD_MEMORY,
 
+	.reset			= tegra_ehci_setup,
+	.irq			= tegra_ehci_irq,
+
 	/* standard ehci functions */
 	.start			= ehci_run,
 	.stop			= ehci_stop,
+	.shutdown		= tegra_ehci_shutdown,
 	.urb_enqueue		= ehci_urb_enqueue,
 	.urb_dequeue		= ehci_urb_dequeue,
-	.endpoint_disable	= ehci_endpoint_disable,
-	.endpoint_reset	= ehci_endpoint_reset,
-	.get_frame_number	= ehci_get_frame,
-	.hub_status_data	= ehci_hub_status_data,
-	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
-	.relinquish_port	= ehci_relinquish_port,
-	.port_handed_over	= ehci_port_handed_over,
-
-	/* modified ehci functions for tegra */
-	.reset			= tegra_ehci_setup,
-	.irq			= tegra_ehci_irq,
-	.shutdown		= tegra_ehci_shutdown,
 	.map_urb_for_dma	= tegra_ehci_map_urb_for_dma,
 	.unmap_urb_for_dma	= tegra_ehci_unmap_urb_for_dma,
+	.endpoint_disable	= ehci_endpoint_disable,
+	.endpoint_reset		= ehci_endpoint_reset,
+	.get_frame_number	= ehci_get_frame,
+	.hub_status_data	= ehci_hub_status_data,
 	.hub_control		= tegra_ehci_hub_control,
+	.clear_tt_buffer_complete = ehci_clear_tt_buffer_complete,
 #ifdef CONFIG_PM
-	.bus_suspend	= tegra_ehci_bus_suspend,
-	.bus_resume	= tegra_ehci_bus_resume,
+	.bus_suspend		= tegra_ehci_bus_suspend,
+	.bus_resume		= tegra_ehci_bus_resume,
 #endif
+	.relinquish_port	= ehci_relinquish_port,
+	.port_handed_over	= ehci_port_handed_over,
 };
 
 static int setup_vbus_gpio(struct platform_device *pdev)
@@ -632,14 +630,6 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		goto fail_io;
 	}
 
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0) {
-		dev_err(&pdev->dev, "failed to get IRQ\n");
-		err = -ENODEV;
-		goto fail_irq;
-	}
-	tegra->irq = irq;
-
 	/* This is pretty ugly and needs to be fixed when we do only
 	 * device-tree probing. Old code relies on the platform_device
 	 * numbering that we lack for device-tree-instantiated devices.
@@ -690,11 +680,14 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		goto fail_phy;
 	}
 
-	err = usb_add_hcd(hcd, irq, IRQF_SHARED | IRQF_TRIGGER_HIGH);
-	if (err) {
-		dev_err(&pdev->dev, "Failed to add USB HCD, error=%d\n", err);
-		goto fail_phy;
+
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
+		dev_err(&pdev->dev, "failed to get IRQ\n");
+		err = -ENODEV;
+		goto fail_irq;
 	}
+	tegra->irq = irq;
 
 	/*err = enable_irq_wake(tegra->irq);
 	if (err < 0) {
@@ -704,6 +697,12 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 		err = 0;
 		tegra->irq = 0;
 	}*/
+
+	err = usb_add_hcd(hcd, irq, IRQF_SHARED | IRQF_TRIGGER_HIGH);
+	if (err) {
+		dev_err(&pdev->dev, "Failed to add USB HCD, error=%d\n", err);
+		goto fail_phy;
+	}
 
 	tegra->ehci = hcd_to_ehci(hcd);
 
