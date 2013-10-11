@@ -42,6 +42,7 @@ enum wake_polarity {
 
 struct tegra_wake_info {
 	int irq;
+	int gpio;
 	enum wake_polarity polarity;
 };
 

@@ -19,7 +19,6 @@
 #include <linux/platform_device.h>
 #include <linux/wlan_plat.h>
 #include <linux/delay.h>
-#include <linux/gpio.h>
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/mmc/host.h>
@@ -27,6 +26,7 @@
 #include <asm/mach-types.h>
 #include <mach/irqs.h>
 #include <mach/iomap.h>
+#include <mach/gpio.h>
 #include <mach/sdhci.h>
 #include <mach/board-cardhu-misc.h>
 #include <mach/io_dpd.h>
@@ -60,8 +60,8 @@ static struct wifi_platform_data cardhu_wifi_control = {
 static struct resource wifi_resource[] = {
 	[0] = {
 		.name	= "bcm4329_wlan_irq",
-		.start	= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PO4),
-		.end	= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PO4),
+		//.start = gpio_to_irq(TEGRA_GPIO_PO4),
+		//.end = gpio_to_irq(TEGRA_GPIO_PO4), // set in cardhu_wifi_init()
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL | IORESOURCE_IRQ_SHAREABLE,
 	},
 };
@@ -294,6 +294,9 @@ static int __init cardhu_wifi_init(void)
 {
 	int rc;
 	int commchip_id = tegra_get_commchip_id();
+
+	wifi_resource[0].start = gpio_to_irq(TEGRA_GPIO_PO4);
+	wifi_resource[0].end = gpio_to_irq(TEGRA_GPIO_PO4);
 
 	rc = gpio_request(CARDHU_WLAN_PWR, "wlan_power");
 	if (rc)

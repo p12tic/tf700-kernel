@@ -31,7 +31,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
 #include <linux/i2c-tegra.h>
-#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/spi/spi.h>
@@ -55,10 +54,10 @@
 #include <media/tegra_camera.h>
 
 #include <mach/clk.h>
+#include <mach/gpio.h>
 #include <mach/iomap.h>
 #include <mach/irqs.h>
 #include <mach/pinmux.h>
-#include <mach/iomap.h>
 #include <mach/io_dpd.h>
 #include <mach/io.h>
 #include <mach/i2s.h>
@@ -206,8 +205,8 @@ static struct resource cardhu_bluesleep_resources[] = {
 	},
 	[2] = {
 		.name = "host_wake",
-			.start  = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PU6),
-			.end    = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PU6),
+			// .start = gpio_to_irq(TEGRA_GPIO_PU6),
+			// .end = gpio_to_irq(TEGRA_GPIO_PU6), set in cardhu_setup_bluesleep
 			.flags  = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
 	},
 };
@@ -221,8 +220,9 @@ static struct platform_device cardhu_bluesleep_device = {
 
 static noinline void __init cardhu_setup_bluesleep(void)
 {
+	cardhu_bluesleep_resources[2].start = gpio_to_irq(TEGRA_GPIO_PU6);
+	cardhu_bluesleep_resources[2].end = gpio_to_irq(TEGRA_GPIO_PU6);
 	platform_device_register(&cardhu_bluesleep_device);
-	return;
 }
 
 static __initdata struct tegra_clk_init_table cardhu_clk_init_table[] = {
@@ -258,14 +258,6 @@ static struct pn544_i2c_platform_data nfc_pdata = {
 	.ven_gpio = TEGRA_GPIO_PP3,
 	.firm_gpio = TEGRA_GPIO_PO7,
 	};
-
-static struct i2c_board_info __initdata cardhu_i2c_bus3_board_info[] = {
-	{
-		I2C_BOARD_INFO("pn544", 0x28),
-		.platform_data = &nfc_pdata,
-		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PX0),
-	},
-};
 #endif
 
 static struct tegra_i2c_platform_data cardhu_i2c1_platform_data = {
@@ -363,7 +355,7 @@ static struct i2c_board_info __initdata wm8903_board_info = {
 };
 static struct i2c_board_info __initdata rt5642_board_info = {
      I2C_BOARD_INFO("rt5640", 0x1c),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+	// .irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ),
 };
 
 /* Equalizer filter coefs generated from the MAXIM MAX98095
@@ -459,25 +451,18 @@ static struct max98095_pdata cardhu_max98095_pdata = {
 
 static struct i2c_board_info __initdata cardhu_codec_wm8903_info = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+	//.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ),
 	.platform_data = &cardhu_wm8903_pdata,
-};
-
-static struct i2c_board_info __initdata cardhu_codec_rt5640_info[] = {
-	{
-		 I2C_BOARD_INFO("rt5640", 0x1c),
-		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
-	},
 };
 
 static struct i2c_board_info __initdata cardhu_codec_aic326x_info = {
 	I2C_BOARD_INFO("aic3262-codec", 0x18),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+	// .irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ),
 };
 
 static struct i2c_board_info __initdata cardhu_codec_max98095_info = {
 	I2C_BOARD_INFO("max98095", 0x10),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
+	// .irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ),
 	.platform_data = &cardhu_max98095_pdata,
 };
 
@@ -517,25 +502,30 @@ static void cardhu_i2c_init(void)
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device1);
 
+
+	//cardhu_codec_wm8903_info.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ);
 	//i2c_register_board_info(4, &cardhu_codec_wm8903_info, 1);
+	//cardhu_codec_max98095_info.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ);
 	//i2c_register_board_info(4, &cardhu_codec_max98095_info, 1);
+	//cardhu_codec_aic326x_info.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ);
 	//i2c_register_board_info(4, &cardhu_codec_aic326x_info, 1);
 
-	if(project_info != TEGRA3_PROJECT_ME301T)
-	{
+	if (project_info != TEGRA3_PROJECT_ME301T) {
 		i2c_register_board_info(1, cardhu_i2c_asuspec_info, ARRAY_SIZE(cardhu_i2c_asuspec_info));
 	}
-	if(project_info == TEGRA3_PROJECT_TF201 || project_info == TEGRA3_PROJECT_TF300TG ||
-		project_info == TEGRA3_PROJECT_TF700T || project_info == TEGRA3_PROJECT_TF300TL)
+	if (project_info == TEGRA3_PROJECT_TF201 || project_info == TEGRA3_PROJECT_TF300TG ||
+		project_info == TEGRA3_PROJECT_TF700T || project_info == TEGRA3_PROJECT_TF300TL) {
 		i2c_register_board_info(4, &rt5631_board_info, 1);
-	else if(project_info == TEGRA3_PROJECT_TF300T)
+	} else if (project_info == TEGRA3_PROJECT_TF300T) {
 		i2c_register_board_info(4, &wm8903_board_info, 1);
-	else if(project_info == TEGRA3_PROJECT_TF500T || project_info == TEGRA3_PROJECT_P1801)
+	} else if (project_info == TEGRA3_PROJECT_TF500T || project_info == TEGRA3_PROJECT_P1801) {
+		rt5642_board_info.irq = gpio_to_irq(TEGRA_GPIO_CDC_IRQ);
 		i2c_register_board_info(4, &rt5642_board_info, 1);
-	else
+	} else {
 		i2c_register_board_info(4, &rt5631_board_info, 1);
+	}
 #ifdef CONFIG_DSP_FM34
-	if(project_info != TEGRA3_PROJECT_TF500T && project_info != TEGRA3_PROJECT_P1801)
+	if (project_info != TEGRA3_PROJECT_TF500T && project_info != TEGRA3_PROJECT_P1801)
 	i2c_register_board_info(0, cardhu_dsp_board_info, 1);
 #endif
 }
@@ -974,6 +964,7 @@ static const u8 e1506_config[] = {
 
 #if defined(CONFIG_TOUCHSCREEN_ATMEL_MXT)
 #define MXT_CONFIG_CRC  0x362575
+#define ATMEL_I2C_INFO_GPIO TEGRA_GPIO_PH4
 static const u8 config[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0xFF, 0xFF, 0x32, 0x0A, 0x00, 0x14, 0x14, 0x00,
@@ -1058,16 +1049,9 @@ static struct mxt_platform_data e1506_atmel_mxt_info = {
 static struct i2c_board_info __initdata atmel_i2c_info[] = {
 	{
 		I2C_BOARD_INFO("atmel_mxt_ts", 0x5A),
-		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PH4),
+		//.irq = gpio_to_irq(TEGRA_GPIO_PH4),
+		// or ATMEL_I2C_INFO_GPIO
 		.platform_data = &atmel_mxt_info,
-	}
-};
-
-static struct i2c_board_info __initdata e1506_atmel_i2c_info[] = {
-	{
-		I2C_BOARD_INFO("atmel_mxt_ts", 0x4A),
-		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PH4),
-		.platform_data = &e1506_atmel_mxt_info,
 	}
 };
 
@@ -1078,9 +1062,11 @@ static __initdata struct tegra_clk_init_table spi_clk_init_table[] = {
 	{ NULL,         NULL,           0,              0},
 };
 
-#define TOUCH_GPIO_IRQ_ATMEL_T9	TEGRA_GPIO_PH4
 #define TOUCH_BUS_ATMEL_T9	1
 #if defined (CONFIG_TOUCHSCREEN_ATMEL_MT_T9)
+#define TOUCH_GPIO_IRQ_ATMEL_T9	TEGRA_GPIO_PH4
+#define ATMEL_I2C_INFO_GPIO TOUCH_GPIO_IRQ_ATMEL_T9
+
 static u8 read_chg(void)
 {
 	return gpio_get_value(TOUCH_GPIO_IRQ_ATMEL_T9);
@@ -1106,7 +1092,8 @@ static struct mxt_platform_data atmel_mxt_info = {
 static struct i2c_board_info __initdata atmel_i2c_info[] = {
 	{
 		I2C_BOARD_INFO("maXTouch", MXT_I2C_ADDRESS),
-		.irq = TEGRA_GPIO_TO_IRQ(TOUCH_GPIO_IRQ_ATMEL_T9),
+		// .irq = gpio_to_irq(TOUCH_GPIO_IRQ_ATMEL_T9),
+		// or ATMEL_I2C_INFO_GPIO
 		.platform_data = &atmel_mxt_info,
 	}
 };
@@ -1134,7 +1121,7 @@ static struct i2c_board_info elan_i2c_devices[] = {
 	{
 		I2C_BOARD_INFO(ELAN_KTF3K_NAME, 0x10),
 		.platform_data = &ts_elan_ktf3k_data,
-		.irq = (INT_GPIO_BASE + TEGRA_GPIO_PH4),
+		//.irq = gpio_to_irq(TEGRA_GPIO_PH4),
 	},
 
 };
@@ -1166,12 +1153,14 @@ static int __init cardhu_touch_init(void)
 
 	switch(tegra3_get_project_id()) {
 	case TEGRA3_PROJECT_TF201:
+		atmel_i2c_info[0].irq = gpio_to_irq(ATMEL_I2C_INFO_GPIO);
 		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, atmel_i2c_info, 1);
 		break;
 	case TEGRA3_PROJECT_TF300T:
 	case TEGRA3_PROJECT_TF300TG:
 	case TEGRA3_PROJECT_TF300TL:
 #if defined(CONFIG_TOUCHSCREEN_ELAN_TF_3K)
+		elan_i2c_devices[0].irq = gpio_to_irq(TEGRA_GPIO_PH4);
 		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
 #endif
 		break;
@@ -1195,6 +1184,7 @@ static int __init cardhu_touch_init(void)
 		platform = (struct elan_ktf3k_i2c_platform_data *)elan_i2c_devices[0].platform_data;
 		platform->abs_x_max = ELAN_X_MAX_202T;
 		platform->abs_y_max = ELAN_Y_MAX_202T;
+		elan_i2c_devices[0].irq = gpio_to_irq(TEGRA_GPIO_PH4);
 		i2c_register_board_info(TOUCH_BUS_ATMEL_T9, elan_i2c_devices, 1);
 #endif
 		break;

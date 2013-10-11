@@ -15,7 +15,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/gpio.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
@@ -89,7 +88,7 @@ int tegra_irq_to_wake(unsigned int irq, int flow_type,
 	 * check for irq based on tegra_wake_event_data table
 	 */
 	for (i = 0; i < tegra_wake_event_data_size; i++) {
-		if (tegra_wake_event_data[i].irq == irq) {
+		if (tegra_wake_to_irq(i) == irq) {
 			err = update_wake_mask(i, flow_type, wake_msk);
 			if (err)
 				return err;
@@ -109,13 +108,19 @@ int tegra_irq_to_wake(unsigned int irq, int flow_type,
 
 int tegra_wake_to_irq(int wake)
 {
+	const struct tegra_wake_info* data;
+
 	if (wake < 0)
 		return -EINVAL;
 
 	if (wake >= tegra_wake_event_data_size)
 		return -EINVAL;
 
-	return tegra_wake_event_data[wake].irq;
+	data = &tegra_wake_event_data[wake];
+	if (data->gpio != -EINVAL) {
+		return gpio_to_irq(data->gpio);
+	}
+	return data->irq;
 }
 
 int tegra_disable_wake_source(int wake)
@@ -124,6 +129,7 @@ int tegra_disable_wake_source(int wake)
 		return -EINVAL;
 
 	tegra_wake_event_data[wake].irq = -EINVAL;
+	tegra_wake_event_data[wake].gpio = -EINVAL;
 
 	return 0;
 }
