@@ -38,7 +38,6 @@
 #include <asm/cp15.h>
 
 #include <mach/iomap.h>
-#include <mach/io.h>
 
 #include "asm_macros.h"
 #include "sleep.h"

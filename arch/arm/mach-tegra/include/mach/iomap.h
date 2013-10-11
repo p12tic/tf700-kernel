@@ -527,4 +527,99 @@
 # define TEGRA_DEBUG_UART_BASE TEGRA_UARTE_BASE
 #endif
 
+
+/* On TEGRA, many peripherals are very closely packed in
+ * two 256MB io windows (that actually only use about 64KB
+ * at the start of each).
+ *
+ * We will just map the first 1MB of each window (to minimize
+ * pt entries needed) and provide a macro to transform physical
+ * io addresses to an appropriate void __iomem *.
+ *
+ */
+
+#ifdef __ASSEMBLY__
+#define IOMEM(x)	(x)
+#else
+#define IOMEM(x)	((void __force __iomem *)(x))
+#endif
+
+#define IO_IRAM_PHYS	0x40000000
+#define IO_IRAM_VIRT	IOMEM(0xFE400000)
+#define IO_IRAM_SIZE	SZ_256K
+
+#define IO_CPU_PHYS	0x50000000
+#define IO_CPU_VIRT     IOMEM(0xFE000000)
+#define IO_CPU_SIZE	SZ_1M
+
+#define IO_PPSB_PHYS	0x60000000
+#define IO_PPSB_VIRT	IOMEM(0xFE200000)
+#define IO_PPSB_SIZE	SZ_1M
+
+#define IO_APB_PHYS	0x70000000
+#define IO_APB_VIRT	IOMEM(0xFE300000)
+#define IO_APB_SIZE	SZ_1M
+
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+#define IO_USB_PHYS	0xC5000000
+#else
+#define IO_USB_PHYS	0x7D000000
+#endif
+#define IO_USB_VIRT	IOMEM(0xFE500000)
+#define IO_USB_SIZE	SZ_1M
+
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+#define IO_SDMMC_PHYS	0xC8000000
+#else
+#define IO_SDMMC_PHYS	0x78000000
+#endif
+#define IO_SDMMC_VIRT	IOMEM(0xFE600000)
+#define IO_SDMMC_SIZE	SZ_1M
+
+#define IO_HOST1X_PHYS	0x54000000
+#define IO_HOST1X_VIRT	IOMEM(0xFE700000)
+#define IO_HOST1X_SIZE	SZ_8M
+
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+#define IO_PPCS_PHYS	0xC4000000
+#else
+#define IO_PPCS_PHYS	0x7C000000
+#endif
+#define IO_PPCS_VIRT	IOMEM(0xFE100000)
+#define IO_PPCS_SIZE	SZ_1M
+
+#ifdef CONFIG_ARCH_TEGRA_2x_SOC
+#define IO_PCIE_PHYS	0x80000000
+#else
+#define IO_PCIE_PHYS	0x00000000
+#endif
+#define IO_PCIE_VIRT	IOMEM(0xFB000000)
+#define IO_PCIE_SIZE	(SZ_16M * 3)
+
+#define IO_TO_VIRT_BETWEEN(p, st, sz)	((p) >= (st) && (p) < ((st) + (sz)))
+#define IO_TO_VIRT_XLATE(p, pst, vst)	(((p) - (pst) + (vst)))
+
+#define IO_TO_VIRT(n) ( \
+	IO_TO_VIRT_BETWEEN((n), IO_PPSB_PHYS, IO_PPSB_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_PPSB_PHYS, IO_PPSB_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_APB_PHYS, IO_APB_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_APB_PHYS, IO_APB_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_CPU_PHYS, IO_CPU_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_CPU_PHYS, IO_CPU_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_IRAM_PHYS, IO_IRAM_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_IRAM_PHYS, IO_IRAM_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_HOST1X_PHYS, IO_HOST1X_SIZE) ?	\
+		IO_TO_VIRT_XLATE((n), IO_HOST1X_PHYS, IO_HOST1X_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_USB_PHYS, IO_USB_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_USB_PHYS, IO_USB_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_SDMMC_PHYS, IO_SDMMC_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_SDMMC_PHYS, IO_SDMMC_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_PPCS_PHYS, IO_PPCS_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_PPCS_PHYS, IO_PPCS_VIRT) :	\
+	IO_TO_VIRT_BETWEEN((n), IO_PCIE_PHYS, IO_PCIE_SIZE) ?		\
+		IO_TO_VIRT_XLATE((n), IO_PCIE_PHYS, IO_PCIE_VIRT) :	\
+	NULL)
+
+#define IO_ADDRESS(n) (IO_TO_VIRT(n))
+
 #endif

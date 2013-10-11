@@ -26,9 +26,9 @@
 #include <linux/mm.h>
 #include <linux/io.h>
 
-#include <mach/iomap.h>
 #include <asm/page.h>
 #include <asm/mach/map.h>
+#include <mach/iomap.h>
 
 #include "board.h"
 

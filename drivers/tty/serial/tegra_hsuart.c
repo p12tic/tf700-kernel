@@ -43,6 +43,7 @@
 
 #include <mach/dma.h>
 #include <mach/clk.h>
+#include <mach/iomap.h>
 
 #define TEGRA_UART_TYPE "TEGRA_UART"
 
