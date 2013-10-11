@@ -19,37 +19,10 @@
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-<<<<<<< HEAD
 #include <linux/of.h>
 #include <linux/fs.h>
 #include <linux/reboot.h>
 
-||||||| merged common ancestors
-#include <linux/random.h>
-#include <linux/sysrq.h>
-#include <linux/bitops.h>
-
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/io.h>
-#include <asm/pgtable.h>
-#include <asm/irq.h>
-#include <asm/cache.h>
-#include <asm/prom.h>
-#include <asm/ptrace.h>
-=======
-#include <linux/random.h>
-#include <linux/sysrq.h>
-#include <linux/bitops.h>
-
-#include <asm/uaccess.h>
-#include <asm/io.h>
-#include <asm/pgtable.h>
-#include <asm/irq.h>
-#include <asm/cache.h>
-#include <asm/prom.h>
-#include <asm/ptrace.h>
->>>>>>> 34484277b1
 #include <asm/machdep.h>
 #include <asm/rtas.h>
 #include <asm/firmware.h>
